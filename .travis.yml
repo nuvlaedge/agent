@@ -2,7 +2,7 @@ language: java
 dist: trusty
 deploy:
   provider: script
-  script: cp .travis.settings.xml $HOME/.m2/settings.xml && mvn install && mvn dockerfile:push
+  script: cp .travis.settings.xml $HOME/.m2/settings.xml && mvn deploy
   skip_cleanup: true
   on:
     all_branches: true
