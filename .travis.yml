@@ -2,7 +2,7 @@ language: java
 dist: trusty
 deploy:
   provider: script
-  script: cp .travis.settings.xml $HOME/.m2/settings.xml && mvn deploy
+  script: cp .travis.settings.xml $HOME/.m2/settings.xml && mvn install && mvn dockerfile:push
   skip_cleanup: true
   on:
     all_branches: true
@@ -13,4 +13,4 @@ env:
 notifications:
   slack:
     rooms:
-      secure: 3PJK04S1l7cYtQGVStBBuAwXd2d+M3gem5lrO4jInAZOnaX+DesvhN3a89ggDFgGtnhYvlXpLdYKhSGFYT12kIpISeA5R6Bo2PfV/mushRep0JCMcXHmD3qvkb7zK29xUR7Rt1PvFOaBoYj/1HSA7Xm/ISGtzWB4AB2CzhpUtdvR9yaJaJl0Njuu230K3nz32msHK/TPhgZ+C2OS2q11kWrpOWCBpHqaGToQnkAjF5AeIlK+tEboiR4DtdnQ2OzX9Swod3VYOEp26v0lqU712vqhVG6e9b1pLR8p6sXdiU2BsI871V8cUhayjomojCQgOWgr4AxpfksdKGdIZKXeimwAZhy1301oO3MR5vxBt7wleJgVSUf1y3+nNQyyr9USSlv2KDftXltH99RGfv5NWtV6zvWebdXUTZJqMIQezhrhwub+d9It+qtbeiRRvSe1BkZE3xKiKGmjZCK2z9i6kheJQW/RF/mXGT4xfzMlJIJW0azbF+36gBELcswBO0VKDfH6EJgoTaz70W1La9LofmPLzhXf8kmJQ0jZwzd0FhJykFrsNYwLl4EFedw8YKed7CCEz9WhQECimdlanzs/euJWJDOuFfZc/L0HvQvw4Iq4R0zSL4kW+mYTYp2la9j8i+xzgDvu/MflCKg7+60nnD9QuDsOzEg1KelUZLRXjpc=
+      secure: So0GpA9BE421ZtAfkP2qW3qGBnwjk5lcGSMpTWn2PBgn/O5DFy9HyPsQGDAO9Mv8Vx/bgF7RBhKbrFEm1/EQwGFgFrx/dGRqWMfNsDmgxpX6rP1MjQ1+TKt6C7xZpYAzjTfTSyysrY1atf+claKLleONy6zi7lrgfODE802yTo1KfnfLzUaehgis54Rnma7g7Ae+pVJguvDuK9c2K2Y6mLPc01Zq6zDwiZu9255SP+5B8OWZRAAol+MbXqnPZZlgbl0DdPBxN7LuKV/aoMm4zIQm31g7+Seg0GcjiE3qWEkVPlfEk99KiOvmuwMrnoijlfve+fPtEpq0Q55K1NaJA2iUmB7q+ZQK5pKGwAACQoMEkT0jDmvOgBcCeI/3TNZIZRUzqmci/Jv+qyypwcCRuDSOsXNm+qvLB62ObiZAuNeDdnwK+8WQX5MfBrxTAcPJ3bJzGZEdY+fOXDsdd69B+HQAfQpr/zjhMzINis5LOdcGvkKskvALQWwonDJp90/Phtu7npbzIlHXu+tSv8/PstUtmSOzj5nkVyP6Xcu/93hKiePIM4aKOOL/8fgdajTxmg6tLLHLyo4NuBCT/fRrkrnzpIVmYtUD1UU2SqzohGsR+Ysoq9aB5hNWKlkh2K8ZT5H0m/rGUs4xC1QJ42CG1nS1MCOt6hUNbwZ2qi/WTDE=
