@@ -1,3 +1,4 @@
 FROM python:3-alpine
 
-CMD ["/bin/sh"]
+
+CMD ["echo", " ### WIP ### $(whoami) "]

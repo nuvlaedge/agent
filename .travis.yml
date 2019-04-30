@@ -1,12 +1,17 @@
 language: java
 dist: trusty
+install:
+  # Download hadolint binary and set it as executable
+  - curl -sL -o ${HADOLINT} "https://github.com/hadolint/hadolint/releases/download/v1.16.0/hadolint-$(uname -s)-$(uname -m)"
+    && chmod 700 ${HADOLINT}
 deploy:
   provider: script
-  script: cp .travis.settings.xml $HOME/.m2/settings.xml && mvn deploy
+  script: ${HADOLINT} Dockerfile && cp .travis.settings.xml $HOME/.m2/settings.xml && mvn deploy
   skip_cleanup: true
   on:
     all_branches: true
 env:
+  HADOLINT: "${HOME}/hadolint"
   global:
   - secure: Nu/Zp0Jt9QSyJP3luIUP8f4G00xvX7SfKUanE/mERlOhUlQnIzlZznLN9kVTNZJe5innRwAZi+nM4ig4P3qFE9HPh060JEI+1lT46CPXOydoaTF1sS2nUEgr7AnLV1GTsIANi4OZbO9CkEEfGFdqygyVZMMJ7fttoEXSdcnp++Sc5V+sLfVAdm+njZ/yN2FJ0GsyBYIk7IQv31BYom2cLQIQmCTvdv/MW8qzVuxIRCbgC9LvnPVvzc1aevHAEdvq2bgudwonZcbar05zhWU6M/IWVgi9tyc0a02Zopb01Zy3U/f/vKLYvfEMhocN/rHMylZoBx5enZkNLjNjOSurYgst9949Bl8ON1faLQ5nVO938psH5kAQTM8WD9knIolwJVL+INbveB5g+glBHymixQlM3bpC5hv2MQbrGZwaSlVqfzVHB0ejihy8rJFxm4I64/W+BLbmznlAj1T0eH2yKIMYvuLXtGTFAPVy89rVYg9XuWnON6MwbbT0a+OB1BCRyL2aX63qwNCy4cXnSPyAnIUGB1ArFuyhgGVe5yDi+DSiZ2M8URsUXMMQzSg3FHEUAl65HbQyRBtk07hPbRAMEYyeHNHRNRGrSNGXb8LYPda6hL65g0eJbHYAimAOkXEPzGJFyiHNSsPOWnpm1KD9j2fJEILPejyNyYLJcUfHy3I=
   - secure: MZeW3ls14XcN60ITfOnoewcj9GbBreKJN+Qffuic/oZiwO/lr50xULz/WIUMVVRTKKoy3etKVBd7d33sEEO4rgWnB7GDZuZoGgK8muR7eNi2MVzGwObonAII2rN8dH5ld6PDjI6oftkMhpqxuMiz3jXrzg3oRRqyIaKDVAN3nORcs0xEHrR5UmzgVuOv5Dq9VQlvK1GrIKNQqxkmGjcQ72Whu4bjZhxp6CFUAmdzchJD//TAM7m1vCBy2BC9kGJ/PBzqWmZnqdN2lrkvPFY1IRC4usA5jJU+KITYw6BXPuZ1uypViUkWeWT4fycaitVKVNcj8fLCHE7n0O7XBAsSjKoBFkqeGHP/AbZHcViR5wU9Yh3zuqFh/uvi7myGTdxdoZwvrQ5kZWMagYqKkTADUZVs7FUpzkJZDJ5o0PIiCDbio7xUgb6VKzMq9RE6FLs6tqctKiSnydLbrWbV1G4W8Zli3iS2dChf9+8pIWrBelDw216Sq1zKNPphTQIqopvRIYOQjasjNO3X/gDEjkY0OV1vA952ErWpzUKAgbM7GYSLLgEdTs5OcGmQ5lROR+aUO7PrC25JmBGpx4kmmOk13ElaXL87x82EDR2X5PSn6JECvUtTwOtk3QX78tb7LzhFhytRcycV5lG8XcRWphn+vqisPtj+VyDOROOXE8G2FTw=
