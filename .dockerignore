@@ -1,0 +1,6 @@
+target
+.travis?
+pom.xml
+*.md
+.gitignore
+.idea
