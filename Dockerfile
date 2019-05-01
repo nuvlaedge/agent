@@ -18,7 +18,7 @@ RUN apt update && apt install -y usbutils lsof procps
 
 RUN apt-get clean autoclean \
     && apt-get autoremove --yes \
-    && rm -rf /var/lib/{apt,dpkg,cache,log}/
+    && /bin/bash -c "rm -rf /var/lib/{apt,dpkg,cache,log}/"
 
 COPY code/* /opt/nuvlabox/agent/
 
