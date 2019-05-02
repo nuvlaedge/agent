@@ -14,7 +14,9 @@ import argparse
 # import subprocess
 import fcntl, socket, struct
 # import nuvlaboxdb
-from nuvla.api import Api
+# from nuvla.api import Api
+# Replace by the above once Nuvla 2.0 is up
+from slipstream.api import Api
 from subprocess import PIPE, Popen
 # from contextlib import contextmanager
 # from tinydb import TinyDB, Query
@@ -210,4 +212,4 @@ def authenticate(api, username, pwd):
 def get_nuvlabox_info(api):
     """ Retrieves the respective resource from Nuvla """
 
-    return api.get(NUVLABOX_RECORD_ID).json
+    return api.cimi_get(NUVLABOX_RECORD_ID).json

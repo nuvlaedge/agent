@@ -175,5 +175,5 @@ class Telemetry(object):
         updated_state['nuvlabox'] = {"href": nb.NUVLABOX_RECORD_ID}
         updated_state['id'] = nb.NUVLABOX_STATE_ID
         logging.info('Refresh state: %s' % updated_state)
-        self.api.edit(nb.NUVLABOX_STATE_ID, updated_state) # should also include ", select=delete_attributes)" but CIMI does not allow
+        self.api.cimi_edit(nb.NUVLABOX_STATE_ID, updated_state) # should also include ", select=delete_attributes)" but CIMI does not allow
         self.state = new_state
