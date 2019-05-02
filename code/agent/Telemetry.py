@@ -12,7 +12,7 @@ import logging
 import docker
 # import datetime
 # import os
-from .common import nuvlabox as nb
+from agent.common import nuvlabox as nb
 
 
 # LOG_FILE = '/var/log/nuvlabox-agent.log'

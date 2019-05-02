@@ -17,9 +17,9 @@ Arguments:
 
 import socket
 import datetime
-from .agent.common import nuvlabox as nb
-from .agent.Activate import Activate
-from .agent.Telemetry import Telemetry
+from agent.common import nuvlabox as nb
+from agent.Activate import Activate
+from agent.Telemetry import Telemetry
 from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
