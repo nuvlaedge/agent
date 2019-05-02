@@ -28,4 +28,4 @@ RUN pip install -r requirements.txt
 
 VOLUME /srv/nuvlabox/shared
 
-ENTRYPOINT ["app.py"]
+ENTRYPOINT ["./app.py"]
