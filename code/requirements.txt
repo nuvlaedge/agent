@@ -1,0 +1,4 @@
+requests
+docker
+nuvla-api
+slipstream-api

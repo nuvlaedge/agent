@@ -3,3 +3,11 @@ version: "3.7"
 services:
   agent:
     build: .
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - NUVLABOX_ID=<placeholder>
+    pid: "host"
+
+
