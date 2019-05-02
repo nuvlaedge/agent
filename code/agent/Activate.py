@@ -58,10 +58,10 @@ class Activate(object):
         logging.info('Activating "{}"'.format(nb.NUVLABOX_RECORD_ID))
 
         try:
-            self.user_info = self.api.add('{}/activate'.format(nb.NUVLABOX_RECORD_ID))
+            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RECORD_ID))
         except requests.exceptions.SSLError:
             nb.shell_execute(["timeout", "3s", "/lib/systemd/systemd-timesyncd"])
-            self.user_info = self.api.add('{}/activate'.format(nb.NUVLABOX_RECORD_ID))
+            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RECORD_ID))
 
         # Flags that the activation has been done
         with open(self.activation_flag, 'w') as a:
