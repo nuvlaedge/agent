@@ -85,7 +85,7 @@ def arguments(description, default_data_volume, default_log_file):
     parser.add_argument('-q', '--quiet', dest='quiet', default=False, action='store_true')
     parser.add_argument('-l', '--log-filepath', dest='log_file',
                         default="{}/{}".format(default_data_volume, default_log_file), metavar='FILE')
-    parser.add_argument('-v', '--data-volume', dest='data_volume', default=default_data_volume, action='store_true')
+    parser.add_argument('-v', '--data-volume', dest='data_volume', default=default_data_volume, metavar='PATH')
     return parser
 
 
@@ -210,4 +210,4 @@ def authenticate(api, username, pwd):
 def get_nuvlabox_info(api):
     """ Retrieves the respective resource from Nuvla """
 
-    return api.cimi_get(NUVLABOX_RECORD_ID).json
+    return api.get(NUVLABOX_RECORD_ID).json
