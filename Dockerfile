@@ -14,7 +14,7 @@ LABEL git.build.time=${GIT_BUILD_TIME}
 LABEL travis.build.number=${TRAVIS_BUILD_NUMBER}
 LABEL travis.build.web.url=${TRAVIS_BUILD_WEB_URL}
 
-RUN apt update && apt install -y usbutils lsof procps
+RUN apt update && apt install -y usbutils lsof procps vim
 
 RUN apt-get clean autoclean \
     && apt-get autoremove --yes \
@@ -23,6 +23,8 @@ RUN apt-get clean autoclean \
 COPY code/ /opt/nuvlabox/agent/
 
 WORKDIR /opt/nuvlabox/agent/
+
+RUN ls -l
 
 RUN pip install -r requirements.txt
 
