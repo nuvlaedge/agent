@@ -7,7 +7,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - NUVLABOX_ID=
+      - NUVLABOX_ID=<placeholder>
     pid: "host"
-    
+
 

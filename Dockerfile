@@ -24,10 +24,8 @@ COPY code/ /opt/nuvlabox/
 
 WORKDIR /opt/nuvlabox/
 
-RUN ls -l
-
 RUN pip install -r requirements.txt
 
 VOLUME /srv/nuvlabox/shared
 
-CMD ["echo", " ### WIP ### $(whoami) "]
+ENTRYPOINT ["app.py"]
