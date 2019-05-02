@@ -12,7 +12,8 @@ import json
 import logging
 import requests
 import docker
-from ..common import nuvlabox as nb
+from .common import nuvlabox as nb
+
 
 # LOG = '/var/log/nuvlabox-activate.log'
 

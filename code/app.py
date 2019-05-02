@@ -17,9 +17,9 @@ Arguments:
 
 import socket
 import datetime
-from .common import nuvlabox as nb
-from .activation import Activate
-from .telemetry import Telemetry
+from .agent.common import nuvlabox as nb
+from .agent.Activate import Activate
+from .agent.Telemetry import Telemetry
 from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     socket.setdefaulttimeout(NETWORK_TIMEOUT)
 
     # Try to activate the NuvlaBox
-    activation = Activate.Activate(args.data_volume)
+    activation = Activate(args.data_volume)
     user_info = activation.activation_is_possible()
     if not user_info:
         # this NuvlaBox hasn't been activated yet
@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     # start telemetry
     logging.info("Starting telemetry...")
-    telemetry = Telemetry.Telemetry(args.data_volume, api=activation.api)
+    telemetry = Telemetry(args.data_volume, api=activation.api)
 
     e = Event()
     nuvlabox_info_updated_date = ''

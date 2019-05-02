@@ -20,9 +20,9 @@ RUN apt-get clean autoclean \
     && apt-get autoremove --yes \
     && /bin/bash -c "rm -rf /var/lib/{apt,dpkg,cache,log}/"
 
-COPY code/ /opt/nuvlabox/agent/
+COPY code/ /opt/nuvlabox/
 
-WORKDIR /opt/nuvlabox/agent/
+WORKDIR /opt/nuvlabox/
 
 RUN ls -l
 
