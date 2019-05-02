@@ -51,7 +51,7 @@ def get_mac_address(ifname, separator=':'):
 # NUVLABOX_STATE_ID = 'nuvlabox-state/{}'.format(MAC_ADDRESS)
 
 
-NUVLABOX_ID = os.environ['ID'] if 'NUVLABOX_ID' in os.environ else get_mac_address('eth0', '')
+NUVLABOX_ID = os.environ['NUVLABOX_ID'] if 'NUVLABOX_ID' in os.environ else get_mac_address('eth0', '')
 NUVLABOX_RECORD_ID = 'nuvlabox-record/{}'.format(NUVLABOX_ID)
 NUVLABOX_STATE_ID = 'nuvlabox-state/{}'.format(NUVLABOX_ID)
 
