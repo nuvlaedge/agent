@@ -65,7 +65,7 @@ if __name__ == "__main__":
         nuvlabox_record = nb.get_nuvlabox_info(telemetry.api)
         if nuvlabox_info_updated_date != nuvlabox_record['updated']:
             refresh_interval = nuvlabox_record['refreshInterval']
-            logging.warn('NuvlaBox record updated. Refresh interval value: {}s'.format(refresh_interval))
+            logging.warning('NuvlaBox record updated. Refresh interval value: {}s'.format(refresh_interval))
             nuvlabox_info_updated_date = nuvlabox_record['updated']
             nb.create_context_file(nuvlabox_record, telemetry.data_volume)
 

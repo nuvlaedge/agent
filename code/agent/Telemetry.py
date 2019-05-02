@@ -89,8 +89,8 @@ class Telemetry(object):
         """ Individually looks up disk usage for partition """
 
         result = nb.shell_execute(['df', partition_path])['stdout'].splitlines()[1].split()
-        capacity = int(result[1]) / 1024
-        used = int(result[2]) / 1024
+        capacity = int(result[1]) // 1024
+        used = int(result[2]) // 1024
         return capacity, used
 
     def get_disks_usage(self):
@@ -109,7 +109,7 @@ class Telemetry(object):
     def get_usb_devices(self):
         """ Looks up list of USB devices """
 
-        usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].splitlines()
+        usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
         usb_devices = set([])
         for usb_device in usb_devices_line:
             usb_info = usb_device.split()

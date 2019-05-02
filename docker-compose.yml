@@ -8,4 +8,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - NUVLABOX_ID=
+    pid: "host"
+    
 
