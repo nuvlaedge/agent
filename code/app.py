@@ -73,7 +73,7 @@ if __name__ == "__main__":
     activation = Activate(args.data_volume)
     while True:
         can_activate, user_info = activation.activation_is_possible()
-        if can_activate:
+        if can_activate or user_info:
             break
 
         e.wait(timeout=3)

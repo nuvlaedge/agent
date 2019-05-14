@@ -42,7 +42,7 @@ class Activate(object):
         :return boolean and user info is available"""
 
         if nb.get_operational_state(self.data_volume) == "UNKNOWN":
-            return False
+            return False, self.user_info
 
         try:
             with open(self.activation_flag) as a:
