@@ -39,18 +39,20 @@ class Activate(object):
         or any other conditions that might influence the
         first time activation of the NuvlaBox
 
-        Returns None if no previous activation is found,
-        and user_info otherwise"""
+        :return boolean and user info is available"""
+
+        if nb.get_operational_state(self.data_volume) == "UNKNOWN":
+            return False
 
         try:
             with open(self.activation_flag) as a:
                 self.user_info = json.loads(a.read())
-        except IOError:
-            # file doesn't exist yet, so it was not activated in the past
-            return None
 
-        logging.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
-        return self.user_info
+            logging.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
+            return False, self.user_info
+        except FileNotFoundError:
+            # file doesn't exist yet, so it was not activated in the past
+            return True, self.user_info
 
     def activate(self):
         """ Makes the anonymous call to activate the NuvlaBox """

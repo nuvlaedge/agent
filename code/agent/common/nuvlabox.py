@@ -217,3 +217,23 @@ def get_nuvlabox_info(api):
     """ Retrieves the respective resource from Nuvla """
 
     return api.cimi_get(NUVLABOX_RECORD_ID).json
+
+
+def get_operational_state(base_dir):
+    """ Retrieves the operational state of the NuvlaBox from the .state file """
+
+    try:
+        operational_state = open("{}/.state".format(base_dir)).readlines()[0].replace('\n', '').upper()
+    except FileNotFoundError:
+        logging.warning("Operational state could not be found")
+        operational_state = "UNKNOWN"
+
+    return operational_state
+
+
+def set_local_operational_state(base_dir, state):
+    """ Write the operational state into the .state file """
+
+    with open("{}/.state".format(base_dir), 'w') as s:
+        s.write(state)
+

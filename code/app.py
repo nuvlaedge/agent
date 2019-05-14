@@ -67,9 +67,17 @@ if __name__ == "__main__":
 
     socket.setdefaulttimeout(network_timeout)
 
+    e = Event()
+
     # Try to activate the NuvlaBox
     activation = Activate(args.data_volume)
-    user_info = activation.activation_is_possible()
+    while True:
+        can_activate, user_info = activation.activation_is_possible()
+        if can_activate:
+            break
+
+        e.wait(timeout=3)
+
     if not user_info:
         # this NuvlaBox hasn't been activated yet
         user_info = activation.activate()
@@ -79,7 +87,6 @@ if __name__ == "__main__":
     logging.info("Starting telemetry...")
     telemetry = Telemetry(args.data_volume, api=activation.api)
 
-    e = Event()
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
 

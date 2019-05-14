@@ -34,6 +34,7 @@ class Telemetry(object):
                       'swarmNodeId': None,
                       'swarmManagerToken': None,
                       'swarmWorkerToken': None,
+                      'state': "ONLINE"
                       # 'swarmNode': None,
                       # 'swarmManagerId': None,
                       # 'leader?': None,
@@ -46,6 +47,7 @@ class Telemetry(object):
         """ Gets several types of information to populate the NuvlaBox state """
 
         docker_client = docker.from_env()
+
         return {'cpu': self.get_cpu(),
                 'ram': self.get_ram(),
                 'disks': self.get_disks_usage(),
@@ -55,6 +57,7 @@ class Telemetry(object):
                 # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
                 'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
                 'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
+                'state': nb.get_operational_state(self.data_volume),
                 # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
                 # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
                 # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
@@ -186,3 +189,5 @@ class Telemetry(object):
             new_operational_state["state-log"] = state_log
 
         self.api.cimi_edit(nb.NUVLABOX_STATE_ID, new_operational_state)
+
+        nb.set_local_operational_state(self.data_volume, state)
