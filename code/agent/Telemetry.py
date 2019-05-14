@@ -7,15 +7,10 @@ It takes care of updating the NuvlaBox state
 resource in Nuvla.
 """
 
-# import socket
 import logging
 import docker
-# import datetime
-# import os
 from agent.common import nuvlabox as nb
 
-
-# LOG_FILE = '/var/log/nuvlabox-agent.log'
 
 class Telemetry(object):
     """ The Telemetry class, which includes all methods and
@@ -166,7 +161,7 @@ class Telemetry(object):
                     minimal_update[key] = new_state[key]
         return minimal_update, delete_attributes
 
-    def udpate_state(self, next_check):
+    def update_state(self, next_check):
         """ Runs a cycle of the categorization, to update the NuvlaBox state """
 
         new_state = self.get_state()
@@ -177,3 +172,17 @@ class Telemetry(object):
         logging.info('Refresh state: %s' % updated_state)
         self.api.cimi_edit(nb.NUVLABOX_STATE_ID, updated_state) # should also include ", select=delete_attributes)" but CIMI does not allow
         self.state = new_state
+
+    def set_operational_state(self, state="RUNNING", state_log=None):
+        """ Update the NuvlaBox state with the current operational state
+
+        :param state: state, according to the allowed set defined in the api server nuvlabox-state schema
+        :param state_log: reason for the specified state
+        :return:
+        """
+
+        new_operational_state = {'state': state}
+        if state_log:
+            new_operational_state["state-log"] = state_log
+
+        self.api.cimi_edit(nb.NUVLABOX_STATE_ID, new_operational_state)

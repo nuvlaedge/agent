@@ -3,7 +3,9 @@ version: "3.7"
 services:
   agent:
     build: .
-#    privileged: true
+    user: root
+    expose:
+      - 5000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:

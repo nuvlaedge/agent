@@ -2,3 +2,4 @@ requests
 docker
 nuvla-api
 slipstream-api
+Flask==0.10.1

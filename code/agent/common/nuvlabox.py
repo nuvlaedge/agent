@@ -39,9 +39,13 @@ def get_mac_address(ifname, separator=':'):
     """ Gets the MAC address for interface ifname """
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', ifname[:15]))
-    mac = separator.join(['%02x' % ord(char) for char in info[18:24]])
-    return mac
+    try:
+        info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', ifname[:15]))
+        mac = separator.join(['%02x' % ord(char) for char in info[18:24]])
+        return mac
+    except struct.error:
+        logging.error("Could not find the device's MAC address from the network interface {} in {}".format(ifname, s))
+        raise
 
 # try:
 #     MAC_ADDRESS = get_mac_address('eth0', '')
