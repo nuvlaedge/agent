@@ -9,6 +9,7 @@ resource in Nuvla.
 
 import logging
 import docker
+import multiprocessing
 from agent.common import nuvlabox as nb
 
 
@@ -21,20 +22,19 @@ class Telemetry(object):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, api=None):
+    def __init__(self, data_volume, nuvlabox_state_id, api=None):
         """ Constructs an Telemetry object, with a state placeholder """
 
         self.data_volume = data_volume
         self.api = nb.ss_api() if not api else api
-        self.state = {'cpu': -1,
-                      'ram': (0, 0),
-                      'disks': set([]),
-                      'usb': set([]),
+        self.nb_state_id = nuvlabox_state_id
+        self.state = {'resources': None,
+                      'peripherals': None,
                       # 'mutableWifiPassword': None,
-                      'swarmNodeId': None,
-                      'swarmManagerToken': None,
-                      'swarmWorkerToken': None,
-                      'state': "ONLINE"
+                      # 'swarmNodeId': None,
+                      # 'swarmManagerToken': None,
+                      # 'swarmWorkerToken': None,
+                      'state': None
                       # 'swarmNode': None,
                       # 'swarmManagerId': None,
                       # 'leader?': None,
@@ -47,31 +47,46 @@ class Telemetry(object):
         """ Gets several types of information to populate the NuvlaBox state """
 
         docker_client = docker.from_env()
-
-        return {'cpu': self.get_cpu(),
-                'ram': self.get_ram(),
-                'disks': self.get_disks_usage(),
-                'usb': self.get_usb_devices(),
-                # 'mutableWifiPassword': nb.nuvlaboxdb.read("psk", db = db_obj),
-                'swarmNodeId': docker_client.info()['Swarm']['NodeID'],
-                # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
-                'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
-                'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
-                'state': nb.get_operational_state(self.data_volume),
-                # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
-                # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
-                # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
-                # 'tlsCert': nb.nuvlaboxdb.read("tlsCert", db = db_obj),
-                # 'tlsKey': nb.nuvlaboxdb.read("tlsKey", db = db_obj)
-                }
+        cpu_info = self.get_cpu()
+        ram_info = self.get_ram()
+        return {
+            'resources': {
+                'cpu': {
+                    'capacity': cpu_info[0],
+                    'load': cpu_info[1]
+                },
+                'ram': {
+                    'capacity': ram_info[0] ,
+                    'used': ram_info[1]
+                },
+                'disks': self.get_disks_usage()
+            },
+            'peripherals': {
+                'usb': self.get_usb_devices()
+            },
+            # 'mutableWifiPassword': nb.nuvlaboxdb.read("psk", db = db_obj),
+            # 'swarmNodeId': docker_client.info()['Swarm']['NodeID'],
+            # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
+            # 'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
+            # 'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
+            'state': nb.get_operational_state(self.data_volume),
+            # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
+            # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
+            # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
+            # 'tlsCert': nb.nuvlaboxdb.read("tlsCert", db = db_obj),
+            # 'tlsKey': nb.nuvlaboxdb.read("tlsKey", db = db_obj)
+        }
 
     @staticmethod
     def get_cpu():
-        """ Looks up the CPU percentage in use """
+        """ Looks up the CPU percentage in use
 
-        idle = float(str(nb.shell_execute(['top', '-p 0', '-bn1'])['stdout'].splitlines()[2]).split(',')[3].split()[0])
-        cpu_percentage = int(round(100 - idle))
-        return cpu_percentage
+        :returns Total count of CPUs
+        :returns 1-min average load
+        """
+
+        load_average = float(str(nb.shell_execute(['top', '-p 0', '-bn1'])['stdout'].splitlines()[0]).split(',')[2].split()[-1])
+        return int(multiprocessing.cpu_count()), float(load_average)
 
     @staticmethod
     def get_ram():
@@ -94,7 +109,11 @@ class Telemetry(object):
     def get_disks_usage(self):
         """ Gets disk usage for N partitions """
 
-        return {('overlay',) + self.get_disk_part_usage('/')}
+        disk_usage = self.get_disk_part_usage('/')
+        return [{'device': 'overlay',
+                 'capacity': disk_usage[0],
+                 'used': disk_usage[1]
+                 }]
 
     @staticmethod
     def is_usb_busy(bus_id, device_id):
@@ -108,7 +127,7 @@ class Telemetry(object):
         """ Looks up list of USB devices """
 
         usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
-        usb_devices = set([])
+        usb_devices = []
         for usb_device in usb_devices_line:
             usb_info = usb_device.split()
             bus_id = usb_info[1]
@@ -116,8 +135,15 @@ class Telemetry(object):
             vendor_id = usb_info[5][:4]
             product_id = usb_info[5][5:9]
             description = usb_device[33:]
-            usb_devices.add((bus_id, device_id, vendor_id, product_id, description,
-                             self.is_usb_busy(bus_id, device_id)))
+            usb_devices.append({
+                'busy': self.is_usb_busy(bus_id, device_id),
+                'vendor-id': vendor_id,
+                'device-id': device_id,
+                'bus-id': bus_id,
+                'product-id': product_id,
+                'description': description
+            })
+
         return usb_devices
 
     @staticmethod
@@ -154,14 +180,7 @@ class Telemetry(object):
                 delete_attributes.append(key)
                 continue
             if old_state[key] != new_state[key]:
-                if key == "ram":
-                    minimal_update['ram'] = {'capacity': new_state['ram'][0], 'used': new_state['ram'][1]}
-                elif key == "disks":
-                    minimal_update['disks'] = self.to_json_disks(new_state['disks'])
-                elif key == "usb":
-                    minimal_update['usb'] = self.to_json_usb(new_state['usb'])
-                else:
-                    minimal_update[key] = new_state[key]
+                minimal_update[key] = new_state[key]
         return minimal_update, delete_attributes
 
     def update_state(self, next_check):
@@ -169,11 +188,10 @@ class Telemetry(object):
 
         new_state = self.get_state()
         updated_state, delete_attributes = self.diff(self.state, new_state)
-        updated_state['nextCheck'] = next_check.isoformat() + 'Z'
-        updated_state['nuvlabox'] = {"href": nb.NUVLABOX_RECORD_ID}
-        updated_state['id'] = nb.NUVLABOX_STATE_ID
+        updated_state['next-heartbeat'] = next_check.isoformat().split('.')[0] + 'Z'
+        updated_state['id'] = self.nb_state_id
         logging.info('Refresh state: %s' % updated_state)
-        self.api.cimi_edit(nb.NUVLABOX_STATE_ID, updated_state) # should also include ", select=delete_attributes)" but CIMI does not allow
+        self.api._cimi_put(self.nb_state_id, json=updated_state) # should also include ", select=delete_attributes)" but CIMI does not allow
         self.state = new_state
 
     def set_operational_state(self, state="RUNNING", state_log=None):
@@ -188,6 +206,6 @@ class Telemetry(object):
         if state_log:
             new_operational_state["state-log"] = state_log
 
-        self.api.cimi_edit(nb.NUVLABOX_STATE_ID, new_operational_state)
+        self.api._cimi_put(self.nb_state_id, json=new_operational_state)
 
         nb.set_local_operational_state(self.data_volume, state)

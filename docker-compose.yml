@@ -9,11 +9,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - NUVLABOX_ID=<placeholder>
-      - NUVLA_ENDPOINT=https://nuv.la
+      - NUVLABOX_UUID=<uuid>
+      - NUVLA_ENDPOINT=<endpoint>
+      - NUVLA_ENDPOINT_INSECURE=<True|False>
     labels:
       - nuvlabox.component=True
-
-
-
-
