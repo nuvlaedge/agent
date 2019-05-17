@@ -87,7 +87,7 @@ update_changelog() {
     changelog_file="CHANGELOG.md"
     text="$1"
     sed -i.bck "2i\\
-$text
+${text}
 " ${changelog_file}
 }
 
