@@ -106,7 +106,7 @@ do_changelog() {
             then
                 break
             else
-                added="${added}\n  - ${newline}"
+                added="${added}\\n  - ${newline}"
             fi
         done
 
@@ -118,11 +118,11 @@ do_changelog() {
             then
                 break
             else
-                changed="${changed}\n  - ${newline}"
+                changed="${changed}\\n  - ${newline}"
             fi
         done
 
-        full_changelog="${release_headline}\n${added}\n${changed}"
+        full_changelog="${release_headline}\\n${added}\\n${changed}"
         printf "Your new CHANGELOG entry is:\n\n${full_changelog}\n\n"
         read -p "continue? (y/n): " changelog_ready
     done
