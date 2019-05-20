@@ -1,4 +1,9 @@
 # Changelog
+## [0.1.2] - 2019-05-20
+### Added
+### Changed
+- renamed nuvlabox-state to nuvlabox-status
+- renamed state to status
 ## [0.1.1] - 2019-05-17
 ### Added
 ### Changed
