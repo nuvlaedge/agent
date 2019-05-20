@@ -14,15 +14,14 @@ import argparse
 # import subprocess
 import fcntl, socket, struct
 # import nuvlaboxdb
-# from nuvla.api import Api
-# Replace by the above once Nuvla 2.0 is up
-from slipstream.api import Api
+from nuvla.api import Api
 from subprocess import PIPE, Popen
 # from contextlib import contextmanager
 # from tinydb import TinyDB, Query
 
 # REMOTES_FILE = '%%NB_REMOTES_FILE%%'
-NUVLA_ENDPOINT="nuv.la"
+NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuv.la"
+NUVLA_ENDPOINT_INSECURE = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
 
 USER_FILE = '/boot/nuvlabox.user'
 VPN_FOLDER = '%%NB_VPN_FOLDER%%'
@@ -39,9 +38,13 @@ def get_mac_address(ifname, separator=':'):
     """ Gets the MAC address for interface ifname """
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', ifname[:15]))
-    mac = separator.join(['%02x' % ord(char) for char in info[18:24]])
-    return mac
+    try:
+        info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', ifname[:15]))
+        mac = separator.join(['%02x' % ord(char) for char in info[18:24]])
+        return mac
+    except struct.error:
+        logging.error("Could not find the device's MAC address from the network interface {} in {}".format(ifname, s))
+        raise
 
 # try:
 #     MAC_ADDRESS = get_mac_address('eth0', '')
@@ -53,7 +56,7 @@ def get_mac_address(ifname, separator=':'):
 # NUVLABOX_STATE_ID = 'nuvlabox-state/{}'.format(MAC_ADDRESS)
 
 
-NUVLABOX_ID = os.environ['NUVLABOX_ID'] if 'NUVLABOX_ID' in os.environ else get_mac_address('eth0', '')
+NUVLABOX_ID = os.environ['NUVLABOX_UUID'] if 'NUVLABOX_UUID' in os.environ else get_mac_address('eth0', '')
 NUVLABOX_RECORD_ID = 'nuvlabox-record/{}'.format(NUVLABOX_ID)
 NUVLABOX_STATE_ID = 'nuvlabox-state/{}'.format(NUVLABOX_ID)
 
@@ -67,8 +70,8 @@ def logger(log_level, log_file):
     file_handler = logging.FileHandler(log_file)
     root_logger.addHandler(file_handler)
 
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    root_logger.addHandler(stdout_handler)
+    # stdout_handler = logging.StreamHandler(sys.stdout)
+    # root_logger.addHandler(stdout_handler)
 
     return root_logger
 
@@ -191,7 +194,7 @@ def create_context_file(nuvlabox_info, data_volume):
 def ss_api():
     """ Returns an Api object """
 
-    return Api(endpoint='https://{}'.format(NUVLA_ENDPOINT), reauthenticate=True)
+    return Api(endpoint='https://{}'.format(NUVLA_ENDPOINT), insecure=NUVLA_ENDPOINT_INSECURE, reauthenticate=True)
 
 
 # def authenticate(api):
@@ -201,15 +204,39 @@ def ss_api():
 #     api.login_internal(username, user_info['password'])
 #     return api
 
-def authenticate(api, username, pwd):
+def authenticate(api, api_key, secret_key):
     """ Creates a user session """
 
-    logging.info('Authenticate with username "{}"'.format(username))
-    api.login_internal(username, pwd)
+    logging.info('Authenticate with "{}"'.format(api_key))
+    logging.info(api.login_apikey(api_key, secret_key))
     return api
 
 
 def get_nuvlabox_info(api):
     """ Retrieves the respective resource from Nuvla """
 
-    return api.cimi_get(NUVLABOX_RECORD_ID).json
+    return api._cimi_get(NUVLABOX_RECORD_ID)
+
+
+def get_operational_state(base_dir):
+    """ Retrieves the operational state of the NuvlaBox from the .state file """
+
+    try:
+        operational_state = open("{}/.state".format(base_dir)).readlines()[0].replace('\n', '').upper()
+    except FileNotFoundError:
+        logging.warning("Operational state could not be found")
+        operational_state = "UNKNOWN"
+    except IndexError:
+        logging.warning("Operational state has not been correctly set")
+        operational_state = "UNKNOWN"
+        set_local_operational_state(base_dir, operational_state)
+
+    return operational_state
+
+
+def set_local_operational_state(base_dir, state):
+    """ Write the operational state into the .state file """
+
+    with open("{}/.state".format(base_dir), 'w') as s:
+        s.write(state)
+

@@ -3,14 +3,14 @@ version: "3.7"
 services:
   agent:
     build: .
-#    privileged: true
+    user: root
+    expose:
+      - 5000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - NUVLABOX_ID=<placeholder>
+      - NUVLABOX_UUID=<uuid>
+      - NUVLA_ENDPOINT=<endpoint>
+      - NUVLA_ENDPOINT_INSECURE=<True|False>
     labels:
       - nuvlabox.component=True
-
-
-
-
