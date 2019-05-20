@@ -44,21 +44,21 @@ def init():
     return logger, params
 
 
-@app.route('/api/state')
-def set_state():
-    """ API endpoint to let other components set the NuvlaBox state """
+@app.route('/api/status')
+def set_status():
+    """ API endpoint to let other components set the NuvlaBox status """
 
     value = request.args.get('value')
     log = str(request.args.get('log'))
 
     if not value:
-        logging.warning("Received state request with no value. Nothing to do")
+        logging.warning("Received status request with no value. Nothing to do")
     else:
-        logging.info("Setting NuvlaBox state to {}".format(value))
+        logging.info("Setting NuvlaBox status to {}".format(value))
         if log:
             print(app.config["telemetry"], dir(app.config["telemetry"]))
 
-    logging.warning('NuvlaBo')
+    logging.warning('to be implemented')
     return "Hello World!"
 
 
@@ -82,11 +82,11 @@ if __name__ == "__main__":
         # this NuvlaBox hasn't been activated yet
         user_info = activation.activate()
 
-    nuvlabox_state_id = activation.update_nuvlabox_record()
+    nuvlabox_status_id = activation.update_nuvlabox_record()
 
     # start telemetry
     logging.info("Starting telemetry...")
-    telemetry = Telemetry(args.data_volume, nuvlabox_state_id, api=activation.api)
+    telemetry = Telemetry(args.data_volume, nuvlabox_status_id, api=activation.api)
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
@@ -106,7 +106,7 @@ if __name__ == "__main__":
             nb.create_context_file(nuvlabox_record, telemetry.data_volume)
 
         next_check = datetime.datetime.utcnow() + datetime.timedelta(seconds=refresh_interval)
-        telemetry.update_state(next_check)
+        telemetry.update_status(next_check)
 
         e.wait(timeout=refresh_interval)
 

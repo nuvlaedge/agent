@@ -53,12 +53,11 @@ def get_mac_address(ifname, separator=':'):
 #         MAC_ADDRESS = cmdline.read().splitlines()[0].split("smsc95xx.macaddr=")[1].split()[0].replace(":", "")
 
 # NUVLABOX_ID = 'nuvlabox-record/{}'.format(MAC_ADDRESS)
-# NUVLABOX_STATE_ID = 'nuvlabox-state/{}'.format(MAC_ADDRESS)
 
 
 NUVLABOX_ID = os.environ['NUVLABOX_UUID'] if 'NUVLABOX_UUID' in os.environ else get_mac_address('eth0', '')
 NUVLABOX_RECORD_ID = 'nuvlabox-record/{}'.format(NUVLABOX_ID)
-NUVLABOX_STATE_ID = 'nuvlabox-state/{}'.format(NUVLABOX_ID)
+NUVLABOX_STATUS_ID = 'nuvlabox-status/{}'.format(NUVLABOX_ID)
 
 
 def logger(log_level, log_file):
@@ -218,25 +217,25 @@ def get_nuvlabox_info(api):
     return api._cimi_get(NUVLABOX_RECORD_ID)
 
 
-def get_operational_state(base_dir):
-    """ Retrieves the operational state of the NuvlaBox from the .state file """
+def get_operational_status(base_dir):
+    """ Retrieves the operational status of the NuvlaBox from the .status file """
 
     try:
-        operational_state = open("{}/.state".format(base_dir)).readlines()[0].replace('\n', '').upper()
+        operational_status = open("{}/.status".format(base_dir)).readlines()[0].replace('\n', '').upper()
     except FileNotFoundError:
-        logging.warning("Operational state could not be found")
-        operational_state = "UNKNOWN"
+        logging.warning("Operational status could not be found")
+        operational_status = "UNKNOWN"
     except IndexError:
-        logging.warning("Operational state has not been correctly set")
-        operational_state = "UNKNOWN"
-        set_local_operational_state(base_dir, operational_state)
+        logging.warning("Operational status has not been correctly set")
+        operational_status = "UNKNOWN"
+        set_local_operational_status(base_dir, operational_status)
 
-    return operational_state
+    return operational_status
 
 
-def set_local_operational_state(base_dir, state):
-    """ Write the operational state into the .state file """
+def set_local_operational_status(base_dir, status):
+    """ Write the operational status into the .status file """
 
-    with open("{}/.state".format(base_dir), 'w') as s:
-        s.write(state)
+    with open("{}/.status".format(base_dir), 'w') as s:
+        s.write(status)
 

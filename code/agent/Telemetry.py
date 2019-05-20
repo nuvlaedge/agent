@@ -3,7 +3,7 @@
 
 """ NuvlaBox Telemetry
 
-It takes care of updating the NuvlaBox state
+It takes care of updating the NuvlaBox status
 resource in Nuvla.
 """
 
@@ -16,25 +16,25 @@ from agent.common import nuvlabox as nb
 class Telemetry(object):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaBox and send all
-    data into the respective NuvlaBox state at Nuvla
+    data into the respective NuvlaBox status at Nuvla
 
     Attributes:
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, nuvlabox_state_id, api=None):
-        """ Constructs an Telemetry object, with a state placeholder """
+    def __init__(self, data_volume, nuvlabox_status_id, api=None):
+        """ Constructs an Telemetry object, with a status placeholder """
 
         self.data_volume = data_volume
         self.api = nb.ss_api() if not api else api
-        self.nb_state_id = nuvlabox_state_id
-        self.state = {'resources': None,
+        self.nb_status_id = nuvlabox_status_id
+        self.status = {'resources': None,
                       'peripherals': None,
                       # 'mutableWifiPassword': None,
                       # 'swarmNodeId': None,
                       # 'swarmManagerToken': None,
                       # 'swarmWorkerToken': None,
-                      'state': None
+                      'status': None
                       # 'swarmNode': None,
                       # 'swarmManagerId': None,
                       # 'leader?': None,
@@ -43,8 +43,8 @@ class Telemetry(object):
                       # 'tlsKey': None
                       }
 
-    def get_state(self):
-        """ Gets several types of information to populate the NuvlaBox state """
+    def get_status(self):
+        """ Gets several types of information to populate the NuvlaBox status """
 
         docker_client = docker.from_env()
         cpu_info = self.get_cpu()
@@ -69,7 +69,7 @@ class Telemetry(object):
             # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
             # 'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
             # 'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
-            'state': nb.get_operational_state(self.data_volume),
+            'status': nb.get_operational_status(self.data_volume),
             # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
             # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
             # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
@@ -170,42 +170,42 @@ class Telemetry(object):
             usb_devices_json.append(usb_json)
         return usb_devices_json
 
-    def diff(self, old_state, new_state):
-        """ Compares the previous state with the new one and discover the minimal changes """
+    def diff(self, old_status, new_status):
+        """ Compares the previous status with the new one and discover the minimal changes """
 
         minimal_update = {}
         delete_attributes = []
-        for key in self.state.keys():
-            if new_state[key] is None:
+        for key in self.status.keys():
+            if new_status[key] is None:
                 delete_attributes.append(key)
                 continue
-            if old_state[key] != new_state[key]:
-                minimal_update[key] = new_state[key]
+            if old_status[key] != new_status[key]:
+                minimal_update[key] = new_status[key]
         return minimal_update, delete_attributes
 
-    def update_state(self, next_check):
-        """ Runs a cycle of the categorization, to update the NuvlaBox state """
+    def update_status(self, next_check):
+        """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
-        new_state = self.get_state()
-        updated_state, delete_attributes = self.diff(self.state, new_state)
-        updated_state['next-heartbeat'] = next_check.isoformat().split('.')[0] + 'Z'
-        updated_state['id'] = self.nb_state_id
-        logging.info('Refresh state: %s' % updated_state)
-        self.api._cimi_put(self.nb_state_id, json=updated_state) # should also include ", select=delete_attributes)" but CIMI does not allow
-        self.state = new_state
+        new_status = self.get_status()
+        updated_status, delete_attributes = self.diff(self.status, new_status)
+        updated_status['next-heartbeat'] = next_check.isoformat().split('.')[0] + 'Z'
+        updated_status['id'] = self.nb_status_id
+        logging.info('Refresh status: %s' % updated_status)
+        self.api._cimi_put(self.nb_status_id, json=updated_status) # should also include ", select=delete_attributes)" but CIMI does not allow
+        self.status = new_status
 
-    def set_operational_state(self, state="RUNNING", state_log=None):
-        """ Update the NuvlaBox state with the current operational state
+    def update_operational_status(self, status="RUNNING", status_log=None):
+        """ Update the NuvlaBox status with the current operational status
 
-        :param state: state, according to the allowed set defined in the api server nuvlabox-state schema
-        :param state_log: reason for the specified state
+        :param status: status, according to the allowed set defined in the api server nuvlabox-status schema
+        :param status_log: reason for the specified status
         :return:
         """
 
-        new_operational_state = {'state': state}
-        if state_log:
-            new_operational_state["state-log"] = state_log
+        new_operational_status = {'status': status}
+        if status_log:
+            new_operational_status["status-log"] = status_log
 
-        self.api._cimi_put(self.nb_state_id, json=new_operational_state)
+        self.api._cimi_put(self.nb_status_id, json=new_operational_status)
 
-        nb.set_local_operational_state(self.data_volume, state)
+        nb.set_local_operational_status(self.data_volume, status)

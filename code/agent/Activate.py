@@ -36,7 +36,7 @@ class Activate(object):
 
         :return boolean and user info is available"""
 
-        if nb.get_operational_state(self.data_volume) == "UNKNOWN":
+        if nb.get_operational_status(self.data_volume) == "UNKNOWN":
             return False, self.user_info
 
         try:
@@ -73,7 +73,7 @@ class Activate(object):
     def update_nuvlabox_record(self):
         """ Updates the static information about the NuvlaBox
 
-        :return: nuvlabox-state ID
+        :return: nuvlabox-status ID
         """
 
         nb.authenticate(self.api, self.user_info["api-key"], self.user_info["secret-key"])
@@ -83,7 +83,7 @@ class Activate(object):
         self.api._cimi_put(nb.NUVLABOX_RECORD_ID, json=nuvlabox_record)
         nb.create_context_file(nuvlabox_record, data_volume=self.data_volume)
 
-        return nuvlabox_record["nuvlabox-state"]
+        return nuvlabox_record["nuvlabox-status"]
 
 
     def update_nuvlabox_info(self, nuvlabox_record):
