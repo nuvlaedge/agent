@@ -3,6 +3,7 @@
 ### Added
 ### Changed
 - renamed nuvlabox-record to nuvlabox
+- renamed nuv.la to nuvla.io
 ## [0.1.2] - 2019-05-20
 ### Added
 ### Changed
