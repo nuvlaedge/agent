@@ -53,13 +53,13 @@ class Activate(object):
     def activate(self):
         """ Makes the anonymous call to activate the NuvlaBox """
 
-        logging.info('Activating "{}"'.format(nb.NUVLABOX_RECORD_ID))
+        logging.info('Activating "{}"'.format(nb.NUVLABOX_RESOURCE_ID))
 
         try:
-            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RECORD_ID))
+            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RESOURCE_ID))
         except requests.exceptions.SSLError:
             nb.shell_execute(["timeout", "3s", "/lib/systemd/systemd-timesyncd"])
-            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RECORD_ID))
+            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RESOURCE_ID))
         except requests.exceptions.ConnectionError as conn_err:
             logging.error("Can not reach out to Nuvla at {}. Error: {}".format(nb.NUVLA_ENDPOINT, conn_err))
             raise
@@ -70,31 +70,31 @@ class Activate(object):
 
         return self.user_info
 
-    def update_nuvlabox_record(self):
+    def update_nuvlabox_resource(self):
         """ Updates the static information about the NuvlaBox
 
         :return: nuvlabox-status ID
         """
 
         nb.authenticate(self.api, self.user_info["api-key"], self.user_info["secret-key"])
-        nuvlabox_record = nb.get_nuvlabox_info(self.api)
-        self.update_nuvlabox_info(nuvlabox_record)
-        logging.info("Updating {} with {}".format(nb.NUVLABOX_RECORD_ID, nuvlabox_record))
-        self.api._cimi_put(nb.NUVLABOX_RECORD_ID, json=nuvlabox_record)
-        nb.create_context_file(nuvlabox_record, data_volume=self.data_volume)
+        nuvlabox_resource = nb.get_nuvlabox_info(self.api)
+        self.update_nuvlabox_info(nuvlabox_resource)
+        logging.info("Updating {} with {}".format(nb.NUVLABOX_RESOURCE_ID, nuvlabox_resource))
+        self.api._cimi_put(nb.NUVLABOX_RESOURCE_ID, json=nuvlabox_resource)
+        nb.create_context_file(nuvlabox_resource, data_volume=self.data_volume)
 
-        return nuvlabox_record["nuvlabox-status"]
+        return nuvlabox_resource["nuvlabox-status"]
 
 
-    def update_nuvlabox_info(self, nuvlabox_record):
-        """ Takes the nuvlabox_record resource and updates it with static and
+    def update_nuvlabox_info(self, nuvlabox_resource):
+        """ Takes the nuvlabox_resource and updates it with static and
         device specific information """
 
         cpuinfo = self.get_cpuinfo()
-        # nuvlabox_record.setdefault('hwRevisionCode', cpuinfo["Revision"])
-        nuvlabox_record.setdefault('os-version', self.get_os())
-        # nuvlabox_record.setdefault('manufacturerSerialNumber', cpuinfo["Serial"])
-        return nuvlabox_record
+        # nuvlabox_resource.setdefault('hwRevisionCode', cpuinfo["Revision"])
+        nuvlabox_resource.setdefault('os-version', self.get_os())
+        # nuvlabox_resource.setdefault('manufacturerSerialNumber', cpuinfo["Serial"])
+        return nuvlabox_resource
 
     @staticmethod
     def get_cpuinfo():

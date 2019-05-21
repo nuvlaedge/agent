@@ -20,7 +20,7 @@ from subprocess import PIPE, Popen
 # from tinydb import TinyDB, Query
 
 # REMOTES_FILE = '%%NB_REMOTES_FILE%%'
-NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuv.la"
+NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
 NUVLA_ENDPOINT_INSECURE = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
 
 USER_FILE = '/boot/nuvlabox.user'
@@ -46,17 +46,9 @@ def get_mac_address(ifname, separator=':'):
         logging.error("Could not find the device's MAC address from the network interface {} in {}".format(ifname, s))
         raise
 
-# try:
-#     MAC_ADDRESS = get_mac_address('eth0', '')
-# except IOError:
-#     with open("/boot/cmdline.txt" , "r") as cmdline:
-#         MAC_ADDRESS = cmdline.read().splitlines()[0].split("smsc95xx.macaddr=")[1].split()[0].replace(":", "")
-
-# NUVLABOX_ID = 'nuvlabox-record/{}'.format(MAC_ADDRESS)
-
 
 NUVLABOX_ID = os.environ['NUVLABOX_UUID'] if 'NUVLABOX_UUID' in os.environ else get_mac_address('eth0', '')
-NUVLABOX_RECORD_ID = 'nuvlabox-record/{}'.format(NUVLABOX_ID)
+NUVLABOX_RESOURCE_ID = 'nuvlabox/{}'.format(NUVLABOX_ID)
 NUVLABOX_STATUS_ID = 'nuvlabox-status/{}'.format(NUVLABOX_ID)
 
 
@@ -177,9 +169,9 @@ def shell_execute(cmd):
 
 
 def create_context_file(nuvlabox_info, data_volume):
-    """ Writes contextualization file with nuvlabox_record content
+    """ Writes contextualization file with nuvlabox resource content
 
-    :param nuvlabox_info: nuvlabox record data
+    :param nuvlabox_info: nuvlabox resource data
     :param data_volume: where to store it
     """
 
@@ -214,7 +206,7 @@ def authenticate(api, api_key, secret_key):
 def get_nuvlabox_info(api):
     """ Retrieves the respective resource from Nuvla """
 
-    return api._cimi_get(NUVLABOX_RECORD_ID)
+    return api._cimi_get(NUVLABOX_RESOURCE_ID)
 
 
 def get_operational_status(base_dir):

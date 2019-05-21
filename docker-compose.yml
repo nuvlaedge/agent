@@ -9,8 +9,15 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - NUVLABOX_UUID=<uuid>
-      - NUVLA_ENDPOINT=<endpoint>
+      - NUVLABOX_UUID=${NUVLABOX_UUID}
+      - NUVLA_ENDPOINT=${NUVLA_ENDPOINT}
       - NUVLA_ENDPOINT_INSECURE=<True|False>
     labels:
       - nuvlabox.component=True
+    networks:
+      - default
+
+networks:
+  default:
+    external:
+      name: cris

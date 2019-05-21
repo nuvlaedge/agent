@@ -82,7 +82,7 @@ if __name__ == "__main__":
         # this NuvlaBox hasn't been activated yet
         user_info = activation.activate()
 
-    nuvlabox_status_id = activation.update_nuvlabox_record()
+    nuvlabox_status_id = activation.update_nuvlabox_resource()
 
     # start telemetry
     logging.info("Starting telemetry...")
@@ -98,12 +98,12 @@ if __name__ == "__main__":
     monitoring_thread.start()
 
     while True:
-        nuvlabox_record = nb.get_nuvlabox_info(telemetry.api)
-        if nuvlabox_info_updated_date != nuvlabox_record['updated']:
-            refresh_interval = nuvlabox_record['refresh-interval']
-            logging.warning('NuvlaBox record updated. Refresh interval value: {}s'.format(refresh_interval))
-            nuvlabox_info_updated_date = nuvlabox_record['updated']
-            nb.create_context_file(nuvlabox_record, telemetry.data_volume)
+        nuvlabox_resource = nb.get_nuvlabox_info(telemetry.api)
+        if nuvlabox_info_updated_date != nuvlabox_resource['updated']:
+            refresh_interval = nuvlabox_resource['refresh-interval']
+            logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
+            nuvlabox_info_updated_date = nuvlabox_resource['updated']
+            nb.create_context_file(nuvlabox_resource, telemetry.data_volume)
 
         next_check = datetime.datetime.utcnow() + datetime.timedelta(seconds=refresh_interval)
         telemetry.update_status(next_check)
