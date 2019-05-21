@@ -1,4 +1,8 @@
 # Changelog
+## [0.1.3] - 2019-05-21
+### Added
+### Changed
+- renamed nuvlabox-record to nuvlabox
 ## [0.1.2] - 2019-05-20
 ### Added
 ### Changed
