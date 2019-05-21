@@ -22,6 +22,7 @@ from flask import Flask, request
 from agent.common import nuvlabox as nb
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
+from agent.Infrastructure import Infrastructure
 from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
@@ -87,6 +88,7 @@ if __name__ == "__main__":
     # start telemetry
     logging.info("Starting telemetry...")
     telemetry = Telemetry(args.data_volume, nuvlabox_status_id, api=activation.api)
+    infra = Infrastructure(args.data_volume, api=activation.api)
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
@@ -108,5 +110,5 @@ if __name__ == "__main__":
         next_check = datetime.datetime.utcnow() + datetime.timedelta(seconds=refresh_interval)
         telemetry.update_status(next_check)
 
+        infra.try_recommission()
         e.wait(timeout=refresh_interval)
-
