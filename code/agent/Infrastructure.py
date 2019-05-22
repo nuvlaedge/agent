@@ -9,7 +9,9 @@ and respective credentials in Nuvla
 
 import logging
 import docker
+import json
 from agent.common import nuvlabox as nb
+from agent.Telemetry import Telemetry
 
 
 class Infrastructure(object):
@@ -28,12 +30,15 @@ class Infrastructure(object):
         :param api: api object"""
 
         self.data_volume = data_volume
-        self.swarm_manager_token_file = ".swarm-manager-token"
-        self.swarm_worker_token_file = ".swarm-worker-token"
+        self.swarm_manager_token_file = "swarm-manager-token"
+        self.swarm_worker_token_file = "swarm-worker-token"
+        self.recommissioning_file = ".recommission"
+        self.ip_file = ".ip"
         self.api = nb.ss_api() if not api else api
         self.ca = "ca.pem"
         self.cert = "cert.pem"
         self.key = "key.pem"
+        self.telemetry_instance = Telemetry(data_volume, None)
 
     @staticmethod
     def get_swarm_tokens():
@@ -42,11 +47,16 @@ class Infrastructure(object):
         return docker.from_env().swarm.attrs['JoinTokens']['Manager'], docker.from_env().swarm.attrs['JoinTokens']['Worker']
 
     @staticmethod
-    def write_file(file, content):
+    def write_file(file, content, is_json=False):
         """ Static method to write to file
 
         :param file: full path to file
-        :param content: content of the file """
+        :param content: content of the file
+        :param is_json: tells if the content is to be processed as JSON
+        """
+
+        if is_json:
+            content = json.dumps(content)
 
         with open(file, 'w') as f:
             f.write(content)
@@ -90,10 +100,50 @@ class Infrastructure(object):
 
         return swarm_client_ca, swarm_client_cert, swarm_client_key
 
+    def has_ip_changed(self, ip):
+        """ Compare the current IP with the one previously registered
+
+        :param ip: current device IP
+        :return bool
+        """
+
+        try:
+            with open("{}/{}".format(self.data_volume, self.ip_file)) as i:
+                if ip == i.read():
+                    return False
+        except FileNotFoundError:
+            logging.info("Registering the device IP for the first time")
+
+        self.write_file("{}/{}".format(self.data_volume, self.ip_file), ip)
+        return True
+
     def do_recommission(self, payload):
         """ Perform the operation """
 
-        self.api._cimi_post(nb.NUVLABOX_ID+"/recommission", json=payload)
+        try:
+            self.api._cimi_post(nb.NUVLABOX_RESOURCE_ID+"/recommission", json=payload)
+        except:
+            raise
+
+        self.write_file("{}/{}".format(self.data_volume, self.recommissioning_file), payload, is_json=True)
+
+    def needs_recommission(self, current_conf):
+        """ Check whether the current recommission data structure
+        has changed wrt to the previous one
+
+        :param current_conf: current recommissioning data
+        :return bool
+        """
+
+        try:
+            with open("{}/{}".format(self.data_volume, self.recommissioning_file)) as r:
+                if current_conf == json.loads(r.read()):
+                    return False
+                else:
+                    return True
+        except FileNotFoundError:
+            logging.info("Commissioning the NuvlaBox for the first time...")
+            return True
 
     def try_recommission(self):
         """ Checks whether any of the system configurations have changed
@@ -101,9 +151,9 @@ class Infrastructure(object):
 
         recommission_payload = {}
         swarm_tokens = self.get_swarm_tokens()
-        if self.token_diff(swarm_tokens[0], swarm_tokens[1]):
-            recommission_payload['swarm-token-manager'] = swarm_tokens[0]
-            recommission_payload['swarm-token-worker'] = swarm_tokens[1]
+        self.token_diff(swarm_tokens[0], swarm_tokens[1])
+        recommission_payload['swarm-token-manager'] = swarm_tokens[0]
+        recommission_payload['swarm-token-worker'] = swarm_tokens[1]
 
         tls_keys = self.get_tls_keys()
         if tls_keys:
@@ -111,6 +161,9 @@ class Infrastructure(object):
             recommission_payload["swarm-client-cert"] = tls_keys[1]
             recommission_payload["swarm-client-key"] = tls_keys[2]
 
-        if recommission_payload:
-            logging.info("Recommissioning the NuvlaBox...")
+        my_ip = self.telemetry_instance.get_ip()
+        recommission_payload["swarm-endpoint"] = my_ip
+
+        if self.needs_recommission(recommission_payload):
+            logging.info("Recommissioning the NuvlaBox...{}".format(recommission_payload))
             self.do_recommission(recommission_payload)

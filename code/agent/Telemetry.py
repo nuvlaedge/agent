@@ -28,6 +28,7 @@ class Telemetry(object):
         self.data_volume = data_volume
         self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
+        self.docker_client = docker.from_env()
         self.status = {'resources': None,
                       'peripherals': None,
                       # 'mutableWifiPassword': None,
@@ -46,7 +47,6 @@ class Telemetry(object):
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
-        docker_client = docker.from_env()
         cpu_info = self.get_cpu()
         ram_info = self.get_ram()
         return {
@@ -209,3 +209,32 @@ class Telemetry(object):
         self.api._cimi_put(self.nb_status_id, json=new_operational_status)
 
         nb.set_local_operational_status(self.data_volume, status)
+
+    def get_ip(self):
+        """ Discovers the NuvlaBox IP (aka endpoint) """
+
+        with open("/proc/self/cgroup", 'r') as f:
+            docker_id = f.readlines()[0].replace('\n', '').split("/")[-1]
+
+        deployment_scenario = self.docker_client.containers.get(docker_id).labels["nuvlabox.deployment"]
+
+        if deployment_scenario == "localhost":
+            # Get the Docker IP within the shared Docker network
+            ip = "0.0.0.0"  # TODO
+        elif deployment_scenario == "onpremise":
+            # Get the local network IP
+            # Hint: look at the local Nuvla IP, and scan the host network interfaces for an IP within the same subnet
+            # You might need to launch a new container from here, in host mode, just to run `ifconfig`, something like:
+            #       docker run --rm --net host alpine ip addr
+            ip = "0.0.0.1"  # TODO
+        elif deployment_scenario == "production":
+            # Get either the public IP (via an online service) or use the VPN IP
+            ip = "0.0.0.2"  # TODO
+        else:
+            logging.warning("Cannot infer the NuvlaBox IP!")
+            return None
+
+        return ip
+
+
+
