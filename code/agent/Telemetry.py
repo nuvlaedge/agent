@@ -11,7 +11,6 @@ import logging
 import docker
 import multiprocessing
 from agent.common import nuvlabox as nb
-import requests_unixsocket
 
 
 class Telemetry(object):
@@ -221,21 +220,23 @@ class Telemetry(object):
 
         if deployment_scenario == "localhost":
             # Get the Docker IP within the shared Docker network
-            session = requests_unixsocket.Session()
-            r = session.get('http+unix://%2Fvar%2Frun%2Fdocker.sock/nodes')
-            if r.status_code == 200:
-                ip = r.json()[0]['ManagerStatus']['Addr'].split(':')[0]
-            else:
-                ip = None
+            node = self.docker_client.nodes.list()[0]
+            ip = node.attrs.get('ManagerStatus').get('Addr').split(':')[0]
         elif deployment_scenario == "onpremise":
             # Get the local network IP
             # Hint: look at the local Nuvla IP, and scan the host network interfaces for an IP within the same subnet
             # You might need to launch a new container from here, in host mode, just to run `ifconfig`, something like:
             #       docker run --rm --net host alpine ip addr
-            ip = "0.0.0.1"  # TODO
+
+            # FIXME: Review whether this is the correct impl. for this case.
+            node = self.docker_client.nodes.list()[0]
+            ip = node.attrs.get('ManagerStatus').get('Addr').split(':')[0]
         elif deployment_scenario == "production":
             # Get either the public IP (via an online service) or use the VPN IP
-            ip = "0.0.0.2"  # TODO
+
+            # FIXME: Review whether this is the correct impl. for this case.
+            node = self.docker_client.nodes.list()[0]
+            ip = node.attrs.get('ManagerStatus').get('Addr').split(':')[0]
         else:
             logging.warning("Cannot infer the NuvlaBox IP!")
             return None
