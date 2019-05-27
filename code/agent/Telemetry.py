@@ -11,6 +11,7 @@ import logging
 import docker
 import multiprocessing
 from agent.common import nuvlabox as nb
+import requests_unixsocket
 
 
 class Telemetry(object):
@@ -220,7 +221,12 @@ class Telemetry(object):
 
         if deployment_scenario == "localhost":
             # Get the Docker IP within the shared Docker network
-            ip = "0.0.0.0"  # TODO
+            session = requests_unixsocket.Session()
+            r = session.get('http+unix://%2Fvar%2Frun%2Fdocker.sock/nodes')
+            if r.status_code == 200:
+                ip = r.json()[0]['ManagerStatus']['Addr'].split(':')[0]
+            else:
+                ip = None
         elif deployment_scenario == "onpremise":
             # Get the local network IP
             # Hint: look at the local Nuvla IP, and scan the host network interfaces for an IP within the same subnet
