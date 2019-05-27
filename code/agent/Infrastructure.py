@@ -162,7 +162,7 @@ class Infrastructure(object):
             recommission_payload["swarm-client-key"] = tls_keys[2]
 
         my_ip = self.telemetry_instance.get_ip()
-        recommission_payload["swarm-endpoint"] = "https://{}:2376".format(my_ip)
+        recommission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
         if self.needs_recommission(recommission_payload):
             logging.info("Recommissioning the NuvlaBox...{}".format(recommission_payload))
