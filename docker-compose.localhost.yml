@@ -10,7 +10,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - NUVLABOX_UUID=${NUVLABOX_UUID}
-      - NUVLA_ENDPOINT=nuvla.io
+      - NUVLA_ENDPOINT=local-nuvla-endpoint
+      - NUVLA_ENDPOINT_INSECURE=True
     labels:
       - nuvlabox.component=True
-      - nuvlabox.deployment=production
+      - nuvlabox.deployment=localhost
+    networks:
+      - default
+
+networks:
+  default:
+    external:
+      name: localhost_nuvlabox

@@ -1,5 +1,4 @@
 requests
 docker
 nuvla-api
-slipstream-api
 Flask==0.12.3
