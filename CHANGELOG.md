@@ -2,6 +2,8 @@
 ## unreleased
 ### Added
 - use recommission action to initialize NuvlaBox resources
+### Changed
+- recommission action has been renamed to commission
 ## [0.1.3] - 2019-05-21
 ### Added
 ### Changed

@@ -32,7 +32,7 @@ class Infrastructure(object):
         self.data_volume = data_volume
         self.swarm_manager_token_file = "swarm-manager-token"
         self.swarm_worker_token_file = "swarm-worker-token"
-        self.recommissioning_file = ".recommission"
+        self.commissioning_file = ".commission"
         self.ip_file = ".ip"
         self.api = nb.ss_api() if not api else api
         self.ca = "ca.pem"
@@ -117,26 +117,26 @@ class Infrastructure(object):
         self.write_file("{}/{}".format(self.data_volume, self.ip_file), ip)
         return True
 
-    def do_recommission(self, payload):
+    def do_commission(self, payload):
         """ Perform the operation """
 
         try:
-            self.api._cimi_post(nb.NUVLABOX_RESOURCE_ID+"/recommission", json=payload)
+            self.api._cimi_post(nb.NUVLABOX_RESOURCE_ID+"/commission", json=payload)
         except:
             raise
 
-        self.write_file("{}/{}".format(self.data_volume, self.recommissioning_file), payload, is_json=True)
+        self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), payload, is_json=True)
 
-    def needs_recommission(self, current_conf):
-        """ Check whether the current recommission data structure
+    def needs_commission(self, current_conf):
+        """ Check whether the current commission data structure
         has changed wrt to the previous one
 
-        :param current_conf: current recommissioning data
+        :param current_conf: current commissioning data
         :return bool
         """
 
         try:
-            with open("{}/{}".format(self.data_volume, self.recommissioning_file)) as r:
+            with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
                 if current_conf == json.loads(r.read()):
                     return False
                 else:
@@ -145,25 +145,25 @@ class Infrastructure(object):
             logging.info("Commissioning the NuvlaBox for the first time...")
             return True
 
-    def try_recommission(self):
+    def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
 
-        recommission_payload = {}
+        commission_payload = {}
         swarm_tokens = self.get_swarm_tokens()
         self.token_diff(swarm_tokens[0], swarm_tokens[1])
-        recommission_payload['swarm-token-manager'] = swarm_tokens[0]
-        recommission_payload['swarm-token-worker'] = swarm_tokens[1]
+        commission_payload['swarm-token-manager'] = swarm_tokens[0]
+        commission_payload['swarm-token-worker'] = swarm_tokens[1]
 
         tls_keys = self.get_tls_keys()
         if tls_keys:
-            recommission_payload["swarm-client-ca"] = tls_keys[0]
-            recommission_payload["swarm-client-cert"] = tls_keys[1]
-            recommission_payload["swarm-client-key"] = tls_keys[2]
+            commission_payload["swarm-client-ca"] = tls_keys[0]
+            commission_payload["swarm-client-cert"] = tls_keys[1]
+            commission_payload["swarm-client-key"] = tls_keys[2]
 
         my_ip = self.telemetry_instance.get_ip()
-        recommission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
+        commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
-        if self.needs_recommission(recommission_payload):
-            logging.info("Recommissioning the NuvlaBox...{}".format(recommission_payload))
-            self.do_recommission(recommission_payload)
+        if self.needs_commission(commission_payload):
+            logging.info("Commissioning the NuvlaBox...{}".format(commission_payload))
+            self.do_commission(commission_payload)
