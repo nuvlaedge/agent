@@ -110,5 +110,5 @@ if __name__ == "__main__":
         next_check = datetime.datetime.utcnow() + datetime.timedelta(seconds=refresh_interval)
         telemetry.update_status(next_check)
 
-        infra.try_recommission()
+        infra.try_commission()
         e.wait(timeout=refresh_interval)
