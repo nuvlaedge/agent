@@ -10,6 +10,7 @@ resource in Nuvla.
 import logging
 import docker
 import multiprocessing
+import socket
 from agent.common import nuvlabox as nb
 
 
@@ -213,8 +214,13 @@ class Telemetry(object):
     def get_ip(self):
         """ Discovers the NuvlaBox IP (aka endpoint) """
 
-        with open("/proc/self/cgroup", 'r') as f:
-            docker_id = f.readlines()[0].replace('\n', '').split("/")[-1]
+        # NOTE: This code does not work on Ubuntu 18.04.
+        # with open("/proc/self/cgroup", 'r') as f:
+        #    docker_id = f.readlines()[0].replace('\n', '').split("/")[-1]
+
+        # Docker sets the hostname to be the short version of the container id.
+        # This method of getting the container id works on both Ubuntu 16 and 18.
+        docker_id = socket.gethostname()
 
         deployment_scenario = self.docker_client.containers.get(docker_id).labels["nuvlabox.deployment"]
 
