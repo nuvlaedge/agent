@@ -8,8 +8,10 @@ It takes care of activating a new NuvlaBox
 
 import json
 import logging
-import requests
+
 import docker
+import requests
+
 from agent.common import nuvlabox as nb
 
 
@@ -78,13 +80,14 @@ class Activate(object):
 
         nb.authenticate(self.api, self.user_info["api-key"], self.user_info["secret-key"])
         nuvlabox_resource = nb.get_nuvlabox_info(self.api)
-        self.update_nuvlabox_info(nuvlabox_resource)
-        logging.info("Updating {} with {}".format(nb.NUVLABOX_RESOURCE_ID, nuvlabox_resource))
-        self.api._cimi_put(nb.NUVLABOX_RESOURCE_ID, json=nuvlabox_resource)
+        # FIXME: This should be moved to the nuvlabox-status resource.
+        # FIXME: NuvlaBox does not have edit access to the nuvlabox resource.
+        # self.update_nuvlabox_info(nuvlabox_resource)
+        # logging.info("Updating {} with {}".format(nb.NUVLABOX_RESOURCE_ID, nuvlabox_resource))
+        # self.api._cimi_put(nb.NUVLABOX_RESOURCE_ID, json=nuvlabox_resource)
         nb.create_context_file(nuvlabox_resource, data_volume=self.data_volume)
 
         return nuvlabox_resource["nuvlabox-status"]
-
 
     def update_nuvlabox_info(self, nuvlabox_resource):
         """ Takes the nuvlabox_resource and updates it with static and
@@ -105,9 +108,9 @@ class Activate(object):
             lines = cpui.read().splitlines()
             for l in lines:
                 if l.startswith("Revision"):
-                    cpuinfo["Revision"] = l.split(":")[-1].replace(" ","")
+                    cpuinfo["Revision"] = l.split(":")[-1].replace(" ", "")
                 if l.startswith("Serial"):
-                    cpuinfo["Serial"] = l.split(":")[-1].replace(" ","")
+                    cpuinfo["Serial"] = l.split(":")[-1].replace(" ", "")
         return cpuinfo
 
     @staticmethod
@@ -116,4 +119,3 @@ class Activate(object):
 
         client = docker.from_env()
         return "{} {}".format(client.info()["OperatingSystem"], client.info()["KernelVersion"])
-
