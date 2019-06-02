@@ -1,8 +1,8 @@
-language: java
-dist: trusty
+language: minimal
+dist: xenial
+before_install: ./.travis.before_install.sh 
 install:
-- curl -sL -o ${HADOLINT} "https://github.com/hadolint/hadolint/releases/download/v1.16.0/hadolint-$(uname
-  -s)-$(uname -m)" && chmod 700 ${HADOLINT}
+- curl -sL -o ${HADOLINT} "https://github.com/hadolint/hadolint/releases/download/v1.16.0/hadolint-$(uname -s)-$(uname -m)" && chmod 700 ${HADOLINT}
 deploy:
   provider: script
   script: "${HADOLINT} Dockerfile && mvn deploy"
