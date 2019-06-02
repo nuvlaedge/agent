@@ -15,6 +15,7 @@ war/*
 logs/
 *.logs
 *.log
+*.bck
 
 pom.xml.next
 pom.xml.releaseBackup

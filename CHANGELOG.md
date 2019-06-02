@@ -1,6 +1,7 @@
 # Changelog
 ## unreleased
 ### Added
+- build creates images for amd64 and arm64
 - use recommission action to initialize NuvlaBox resources
 ### Changed
 - recommission action has been renamed to commission
