@@ -1,4 +1,4 @@
-language: minimal
+language: java
 dist: xenial
 before_install: ./.travis.before_install.sh 
 install:
