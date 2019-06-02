@@ -1,20 +1,19 @@
 language: java
 dist: trusty
 install:
-  # Download hadolint binary and set it as executable
-  - curl -sL -o ${HADOLINT} "https://github.com/hadolint/hadolint/releases/download/v1.16.0/hadolint-$(uname -s)-$(uname -m)"
-    && chmod 700 ${HADOLINT}
+- curl -sL -o ${HADOLINT} "https://github.com/hadolint/hadolint/releases/download/v1.16.0/hadolint-$(uname
+  -s)-$(uname -m)" && chmod 700 ${HADOLINT}
 deploy:
   provider: script
-  script: ${HADOLINT} Dockerfile && cp .travis.settings.xml $HOME/.m2/settings.xml && mvn deploy
+  script: "${HADOLINT} Dockerfile && mvn deploy"
   skip_cleanup: true
   on:
     all_branches: true
 env:
   global:
-    - HADOLINT: "${HOME}/hadolint"
-    - secure: Nu/Zp0Jt9QSyJP3luIUP8f4G00xvX7SfKUanE/mERlOhUlQnIzlZznLN9kVTNZJe5innRwAZi+nM4ig4P3qFE9HPh060JEI+1lT46CPXOydoaTF1sS2nUEgr7AnLV1GTsIANi4OZbO9CkEEfGFdqygyVZMMJ7fttoEXSdcnp++Sc5V+sLfVAdm+njZ/yN2FJ0GsyBYIk7IQv31BYom2cLQIQmCTvdv/MW8qzVuxIRCbgC9LvnPVvzc1aevHAEdvq2bgudwonZcbar05zhWU6M/IWVgi9tyc0a02Zopb01Zy3U/f/vKLYvfEMhocN/rHMylZoBx5enZkNLjNjOSurYgst9949Bl8ON1faLQ5nVO938psH5kAQTM8WD9knIolwJVL+INbveB5g+glBHymixQlM3bpC5hv2MQbrGZwaSlVqfzVHB0ejihy8rJFxm4I64/W+BLbmznlAj1T0eH2yKIMYvuLXtGTFAPVy89rVYg9XuWnON6MwbbT0a+OB1BCRyL2aX63qwNCy4cXnSPyAnIUGB1ArFuyhgGVe5yDi+DSiZ2M8URsUXMMQzSg3FHEUAl65HbQyRBtk07hPbRAMEYyeHNHRNRGrSNGXb8LYPda6hL65g0eJbHYAimAOkXEPzGJFyiHNSsPOWnpm1KD9j2fJEILPejyNyYLJcUfHy3I=
-    - secure: MZeW3ls14XcN60ITfOnoewcj9GbBreKJN+Qffuic/oZiwO/lr50xULz/WIUMVVRTKKoy3etKVBd7d33sEEO4rgWnB7GDZuZoGgK8muR7eNi2MVzGwObonAII2rN8dH5ld6PDjI6oftkMhpqxuMiz3jXrzg3oRRqyIaKDVAN3nORcs0xEHrR5UmzgVuOv5Dq9VQlvK1GrIKNQqxkmGjcQ72Whu4bjZhxp6CFUAmdzchJD//TAM7m1vCBy2BC9kGJ/PBzqWmZnqdN2lrkvPFY1IRC4usA5jJU+KITYw6BXPuZ1uypViUkWeWT4fycaitVKVNcj8fLCHE7n0O7XBAsSjKoBFkqeGHP/AbZHcViR5wU9Yh3zuqFh/uvi7myGTdxdoZwvrQ5kZWMagYqKkTADUZVs7FUpzkJZDJ5o0PIiCDbio7xUgb6VKzMq9RE6FLs6tqctKiSnydLbrWbV1G4W8Zli3iS2dChf9+8pIWrBelDw216Sq1zKNPphTQIqopvRIYOQjasjNO3X/gDEjkY0OV1vA952ErWpzUKAgbM7GYSLLgEdTs5OcGmQ5lROR+aUO7PrC25JmBGpx4kmmOk13ElaXL87x82EDR2X5PSn6JECvUtTwOtk3QX78tb7LzhFhytRcycV5lG8XcRWphn+vqisPtj+VyDOROOXE8G2FTw=
+  - HADOLINT: "${HOME}/hadolint"
+  - secure: krbGvmxnXnsMpShpEqddE48bmPxa90IUUku1OBy+4EpL1ir2bCoam5lfHHuC9T6PeGrFjsPh3XTOHE3eT2UlZLkozUojATFKZIrvc1DyH29Rygx0bj/g6wuFatmfi7upX9JH+v1MyQO0SK7VwFi6JjwmN5XyP2SSfJyTDUhpD5bZExQ7NIHD4eqZSVr/TzkH3dR2Ko5PteWAnw6Tq8dP2fQ+VFDxWg02ac9SbcB4+1Az1VfjlH2XX3ZOXFIC7QP4B8tCeIJLBIJSQQwRXwn0qRwVM9KFnXIvE+LkAYhnsT5BXjb6FkfiYU5Nifzcl1xEFBJrtbyC6OTMSuzEcXUufcqZDygii1wpG/01RHBxRVVu0QbAGr4nOJwxTpeyhCqMk0QZEzVP5c/UILNA/UrLJHlfRmiDrT5Rg1qR7Y4LYuMoa87NvC2ZwW/9COWtS3T1zmXBpPCDatldnTsH6iNqmivnC4drA22oh35kswkWVpKR5C4btS1w7P1h0JXuFJJJy0i72279AVas1tNtFZPWUT3HUnQB4Q3wqGqcJc01S4zcm1YuG1q2+mVd0lTWlbxx4x1UTbgWxd2YRRyDNuFVPsJB0XaRERbDCF9BMTYz0C3oO/sqPDsfgL65HuAqg6Ob7CeNaW0yHY0/6TW3SiMzvKdWXZ1FGfqUeV2CoBefd4Q=
+  - secure: j3VTC3urLcZeUnpzcDft0AMy5uag9hHMRnX5Zw4K1sTw98NR+qg/MMCWZJJZ2exprj4n9+D+JDxOksaejKgDm9MCLbAc9MqdevUsIN3+fgwygy60otDnqlQvpiTKnKvVxJowmVv1bRGej6oF3l050NLsxadBFWnQ4TX/tpqDKcrUa9LA3PlPocCkNPBGlyIGue87Q7s1N57buuuxewbCV6/TCXZnLNAWOn8KK/hM5xskIFnmBKdn6zOZx1Qe6xyCHVqPgIToOnS6XH11ZB5R/TKkLOqlbSULT2eHmfoPQHKxw4DyzJ7INeFIpMksN5XDxCZ4enmgUWw+VHRZGADE2hjoLfY6KtP12F5XZgL5fQklJphxoC86hOIghhYeqTw2c3m40dnvTaFQ9CidAaDNUq/MY8IPKJbxiMSKNk/MrXk07nCK6xqA2896uUa481hMJoKpfpFuKoky3jTu+rt5kdhwEhdpthU9f9G7QjysKWnbzpbaR0lmPgpAXhRpjMfVYOk+3h/kKAG/4VIpDo9gRI+ZoJM0q8kwFCG3S9fBwKObrvZivEA5nyXCGByLh2BaZfspVahNrm0I5wdp5/+djm5yRPR0JL1kJWg3DXsf35PUKBQtNTejwoULdin15uRxEfy008nH16oNNcsunxW7BKVRo+DSA4qnaGZ2pM9jl24=
 notifications:
   slack:
     rooms:
