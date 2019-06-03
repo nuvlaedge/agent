@@ -6,6 +6,8 @@ VERSION=$2
 
 PUSH_CHANGES=${1:-false}
 
+SKIP_CHANGELOG=$3
+
 BRANCH=master
 
 if [ "${PUSH_CHANGES}" == "true" ]; then
@@ -32,11 +34,20 @@ do_push_tag() {
     fi
 }
 
+create_tag() {
+    if [ "${PUSH_CHANGES}" == "true" ]; then
+        echo "INFO: CREATING tag ${TAG_VERSION}."
+        git tag ${TAG_VERSION}
+    else
+        echo "INFO: not creating tag."
+    fi
+}
+
 # update pom.xml files for tag and next development version
 tag_release() {
 
   # make the release tag
-  (git add . ; git commit -m "release ${TAG_VERSION}"; do_push; git tag ${TAG_VERSION}; do_push_tag)
+  (git add . ; git commit -m "release ${TAG_VERSION}"; do_push; create_tag; do_push_tag)
 
 }
 
@@ -183,7 +194,9 @@ echo ${NEXT_VERSION}
 # add entries to CHANGELOG.md
 #
 
-# do_changelog
+if [ -z "SKIP_CHANGELOG" ]; then
+    do_changelog
+fi
 
 #
 # update to release version
