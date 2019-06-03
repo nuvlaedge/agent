@@ -183,7 +183,7 @@ echo ${NEXT_VERSION}
 # add entries to CHANGELOG.md
 #
 
-do_changelog
+# do_changelog
 
 #
 # update to release version
