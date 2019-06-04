@@ -7,10 +7,11 @@ It takes care of updating the NuvlaBox status
 resource in Nuvla.
 """
 
-import logging
 import docker
+import logging
 import multiprocessing
 import socket
+
 from agent.common import nuvlabox as nb
 
 
@@ -31,19 +32,19 @@ class Telemetry(object):
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
         self.status = {'resources': None,
-                      'peripherals': None,
-                      # 'mutableWifiPassword': None,
-                      # 'swarmNodeId': None,
-                      # 'swarmManagerToken': None,
-                      # 'swarmWorkerToken': None,
-                      'status': None
-                      # 'swarmNode': None,
-                      # 'swarmManagerId': None,
-                      # 'leader?': None,
-                      # 'tlsCA': None,
-                      # 'tlsCert': None,
-                      # 'tlsKey': None
-                      }
+                       'peripherals': None,
+                       # 'mutableWifiPassword': None,
+                       # 'swarmNodeId': None,
+                       # 'swarmManagerToken': None,
+                       # 'swarmWorkerToken': None,
+                       'status': None
+                       # 'swarmNode': None,
+                       # 'swarmManagerId': None,
+                       # 'leader?': None,
+                       # 'tlsCA': None,
+                       # 'tlsCert': None,
+                       # 'tlsKey': None
+                       }
 
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
@@ -57,7 +58,7 @@ class Telemetry(object):
                     'load': cpu_info[1]
                 },
                 'ram': {
-                    'capacity': ram_info[0] ,
+                    'capacity': ram_info[0],
                     'used': ram_info[1]
                 },
                 'disks': self.get_disks_usage()
@@ -86,8 +87,14 @@ class Telemetry(object):
         :returns 1-min average load
         """
 
-        load_average = float(str(nb.shell_execute(['top', '-p 0', '-bn1'])['stdout'].splitlines()[0]).split(',')[2].split()[-1])
-        return int(multiprocessing.cpu_count()), float(load_average)
+        try:
+            with open("/proc/loadavg", "r") as f:
+                averages = f.readline()
+                load_average = float(averages.split(' ')[2])
+        except:
+            load_average = 0.0
+
+        return int(multiprocessing.cpu_count()), load_average
 
     @staticmethod
     def get_ram():
@@ -192,7 +199,8 @@ class Telemetry(object):
         updated_status['next-heartbeat'] = next_check.isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
-        self.api._cimi_put(self.nb_status_id, json=updated_status) # should also include ", select=delete_attributes)" but CIMI does not allow
+        self.api._cimi_put(self.nb_status_id,
+                           json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         self.status = new_status
 
     def update_operational_status(self, status="RUNNING", status_log=None):
@@ -248,6 +256,3 @@ class Telemetry(object):
             return None
 
         return ip
-
-
-
