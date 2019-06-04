@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] - 2019-06-04
+### Changed
+  - using /proc/loadavg instead of top for a simpler,
+    more portable implementation
+
 ## [0.2.0] - 2019-06-03
 ### Added
   - build creates images for amd64 and arm64
