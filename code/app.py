@@ -111,4 +111,4 @@ if __name__ == "__main__":
         telemetry.update_status(next_check)
 
         infra.try_commission()
-        e.wait(timeout=refresh_interval)
+        e.wait(timeout=refresh_interval/2)
