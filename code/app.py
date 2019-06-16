@@ -107,8 +107,8 @@ if __name__ == "__main__":
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
             nb.create_context_file(nuvlabox_resource, telemetry.data_volume)
 
-        next_check = datetime.datetime.utcnow() + datetime.timedelta(seconds=refresh_interval)
-        telemetry.update_status(next_check)
+        current_time = datetime.datetime.utcnow()
+        telemetry.update_status(current_time)
 
         infra.try_commission()
         e.wait(timeout=refresh_interval/2)

@@ -191,12 +191,12 @@ class Telemetry(object):
                 minimal_update[key] = new_status[key]
         return minimal_update, delete_attributes
 
-    def update_status(self, next_check):
+    def update_status(self, current_time):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
         new_status = self.get_status()
         updated_status, delete_attributes = self.diff(self.status, new_status)
-        updated_status['next-heartbeat'] = next_check.isoformat().split('.')[0] + 'Z'
+        updated_status['current-time'] = current_time.isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         self.api._cimi_put(self.nb_status_id,
