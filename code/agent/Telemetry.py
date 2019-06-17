@@ -7,6 +7,7 @@ It takes care of updating the NuvlaBox status
 resource in Nuvla.
 """
 
+import datetime
 import docker
 import logging
 import multiprocessing
@@ -51,6 +52,10 @@ class Telemetry(object):
 
         cpu_info = self.get_cpu()
         ram_info = self.get_ram()
+        disk_usage = self.get_disks_usage()
+        usb_devices = self.get_usb_devices()
+        operational_status = nb.get_operational_status(self.data_volume)
+
         return {
             'resources': {
                 'cpu': {
@@ -61,17 +66,17 @@ class Telemetry(object):
                     'capacity': ram_info[0],
                     'used': ram_info[1]
                 },
-                'disks': self.get_disks_usage()
+                'disks': disk_usage
             },
             'peripherals': {
-                'usb': self.get_usb_devices()
+                'usb': usb_devices
             },
             # 'mutableWifiPassword': nb.nuvlaboxdb.read("psk", db = db_obj),
             # 'swarmNodeId': docker_client.info()['Swarm']['NodeID'],
             # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
             # 'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
             # 'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
-            'status': nb.get_operational_status(self.data_volume),
+            'status': operational_status,
             # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
             # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
             # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
@@ -191,12 +196,12 @@ class Telemetry(object):
                 minimal_update[key] = new_status[key]
         return minimal_update, delete_attributes
 
-    def update_status(self, next_check):
+    def update_status(self):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
         new_status = self.get_status()
         updated_status, delete_attributes = self.diff(self.status, new_status)
-        updated_status['next-heartbeat'] = next_check.isoformat().split('.')[0] + 'Z'
+        updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         self.api._cimi_put(self.nb_status_id,
