@@ -49,17 +49,11 @@ class Telemetry(object):
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
-        logging.info('get_status')
         cpu_info = self.get_cpu()
-        logging.info('after get_cpu')
         ram_info = self.get_ram()
-        logging.info('after get_ram')
         disk_usage = self.get_disks_usage()
-        logging.info('after get_disks_usage')
         usb_devices = self.get_usb_devices()
-        logging.info('after get_usb_devices')
         operational_status = nb.get_operational_status(self.data_volume)
-        logging.info('after get_operational_status')
 
         return {
             'resources': {
@@ -145,7 +139,6 @@ class Telemetry(object):
         """ Looks up list of USB devices """
 
         usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
-        logging.info('after lsusb')
         usb_devices = []
         for usb_device in usb_devices_line:
             usb_info = usb_device.split()
