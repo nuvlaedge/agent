@@ -49,8 +49,18 @@ class Telemetry(object):
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
+        logging.info('get_status')
         cpu_info = self.get_cpu()
+        logging.info('after get_cpu')
         ram_info = self.get_ram()
+        logging.info('after get_ram')
+        disk_usage = self.get_disks_usage()
+        logging.info('after get_disks_usage')
+        usb_devices = self.get_usb_devices()
+        logging.info('after get_usb_devices')
+        operational_status = nb.get_operational_status(self.data_volume)
+        logging.info('after get_operational_status')
+
         return {
             'resources': {
                 'cpu': {
@@ -61,17 +71,17 @@ class Telemetry(object):
                     'capacity': ram_info[0],
                     'used': ram_info[1]
                 },
-                'disks': self.get_disks_usage()
+                'disks': disk_usage
             },
             'peripherals': {
-                'usb': self.get_usb_devices()
+                'usb': usb_devices
             },
             # 'mutableWifiPassword': nb.nuvlaboxdb.read("psk", db = db_obj),
             # 'swarmNodeId': docker_client.info()['Swarm']['NodeID'],
             # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
             # 'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
             # 'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
-            'status': nb.get_operational_status(self.data_volume),
+            'status': operational_status,
             # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
             # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
             # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
@@ -194,13 +204,18 @@ class Telemetry(object):
     def update_status(self, current_time):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
+        logging.info('telemetry before status')
         new_status = self.get_status()
+        logging.info('telemetry after status')
         updated_status, delete_attributes = self.diff(self.status, new_status)
+        logging.info('telemetry after diff')
         updated_status['current-time'] = current_time.isoformat().split('.')[0] + 'Z'
+        logging.info('telemetry after time')
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         self.api._cimi_put(self.nb_status_id,
                            json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
+        logging.info('telemetry status update')
         self.status = new_status
 
     def update_operational_status(self, status="RUNNING", status_log=None):
