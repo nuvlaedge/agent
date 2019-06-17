@@ -138,13 +138,16 @@ class Telemetry(object):
         """ Checks if USB device is busy """
 
         usb_path = '/dev/bus/usb/{0}/{1}'.format(bus_id, device_id)
+        logging.info('start usb busy: {}'.format(usb_path))
         return_code = nb.shell_execute(['/usr/bin/lsof', usb_path])['returncode']
+        logging.info('end usb busy: {} {}'.format(usb_path, return_code))
         return return_code == 0
 
     def get_usb_devices(self):
         """ Looks up list of USB devices """
 
         usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
+        logging.info('after lsusb')
         usb_devices = []
         for usb_device in usb_devices_line:
             usb_info = usb_device.split()
