@@ -138,9 +138,7 @@ class Telemetry(object):
         """ Checks if USB device is busy """
 
         usb_path = '/dev/bus/usb/{0}/{1}'.format(bus_id, device_id)
-        logging.info('start usb busy: {}'.format(usb_path))
         return_code = nb.shell_execute(['/usr/bin/lsof', usb_path])['returncode']
-        logging.info('end usb busy: {} {}'.format(usb_path, return_code))
         return return_code == 0
 
     def get_usb_devices(self):
@@ -207,18 +205,13 @@ class Telemetry(object):
     def update_status(self, current_time):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
-        logging.info('telemetry before status')
         new_status = self.get_status()
-        logging.info('telemetry after status')
         updated_status, delete_attributes = self.diff(self.status, new_status)
-        logging.info('telemetry after diff')
         updated_status['current-time'] = current_time.isoformat().split('.')[0] + 'Z'
-        logging.info('telemetry after time')
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         self.api._cimi_put(self.nb_status_id,
                            json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
-        logging.info('telemetry status update')
         self.status = new_status
 
     def update_operational_status(self, status="RUNNING", status_log=None):

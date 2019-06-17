@@ -100,23 +100,15 @@ if __name__ == "__main__":
     monitoring_thread.start()
 
     while True:
-        logging.info('beginning of agent loop')
         nuvlabox_resource = nb.get_nuvlabox_info(telemetry.api)
-        logging.info('got nuvlabox resource')
         if nuvlabox_info_updated_date != nuvlabox_resource['updated']:
-            logging.info('nuvlabox resource update')
             refresh_interval = nuvlabox_resource['refresh-interval']
             logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
             nb.create_context_file(nuvlabox_resource, telemetry.data_volume)
-            logging.info('end nuvlabox resource update')
 
         current_time = datetime.datetime.utcnow()
-        logging.info('before status')
         telemetry.update_status(current_time)
-        logging.info('after status')
 
-        logging.info('before commission')
         infra.try_commission()
-        logging.info('after commission')
         e.wait(timeout=refresh_interval/2)
