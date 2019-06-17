@@ -16,7 +16,6 @@ Arguments:
 """
 
 import socket
-import datetime
 import threading
 from flask import Flask, request
 from agent.common import nuvlabox as nb
@@ -107,8 +106,7 @@ if __name__ == "__main__":
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
             nb.create_context_file(nuvlabox_resource, telemetry.data_volume)
 
-        current_time = datetime.datetime.utcnow()
-        telemetry.update_status(current_time)
+        telemetry.update_status()
 
         infra.try_commission()
         e.wait(timeout=refresh_interval/2)
