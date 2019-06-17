@@ -194,7 +194,7 @@ echo ${NEXT_VERSION}
 # add entries to CHANGELOG.md
 #
 
-if [ -z "SKIP_CHANGELOG" ]; then
+if [ -z $SKIP_CHANGELOG ]; then
     do_changelog
 fi
 
