@@ -1,4 +1,8 @@
 # Changelog
+## [0.2.3] - 2019-06-21
+### Added
+### Changed
+- removed the busy attribute from the usb discovery
 
 ## [0.2.2] - 2019-06-12
 ### Added
