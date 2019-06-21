@@ -128,13 +128,13 @@ class Telemetry(object):
                  'used': disk_usage[1]
                  }]
 
-    @staticmethod
-    def is_usb_busy(bus_id, device_id):
-        """ Checks if USB device is busy """
-
-        usb_path = '/dev/bus/usb/{0}/{1}'.format(bus_id, device_id)
-        return_code = nb.shell_execute(['/usr/bin/lsof', usb_path])['returncode']
-        return return_code == 0
+    # @staticmethod
+    # def is_usb_busy(bus_id, device_id):
+    #     """ Checks if USB device is busy """
+    #
+    #     usb_path = '/dev/bus/usb/{0}/{1}'.format(bus_id, device_id)
+    #     return_code = nb.shell_execute(['/usr/bin/lsof', usb_path])['returncode']
+    #     return return_code == 0
 
     def get_usb_devices(self):
         """ Looks up list of USB devices """
@@ -149,7 +149,7 @@ class Telemetry(object):
             product_id = usb_info[5][5:9]
             description = usb_device[33:]
             usb_devices.append({
-                'busy': self.is_usb_busy(bus_id, device_id),
+                # 'busy': self.is_usb_busy(bus_id, device_id),
                 'vendor-id': vendor_id,
                 'device-id': device_id,
                 'bus-id': bus_id,
