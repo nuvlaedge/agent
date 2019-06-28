@@ -42,7 +42,10 @@ def get_mac_address(ifname, separator=':'):
         raise
 
 NUVLABOX_ID = os.environ['NUVLABOX_UUID'] if 'NUVLABOX_UUID' in os.environ else get_mac_address('eth0', '')
-NUVLABOX_RESOURCE_ID = 'nuvlabox/{}'.format(NUVLABOX_ID)
+if "nuvlabox/" in NUVLABOX_ID:
+    NUVLABOX_RESOURCE_ID = NUVLABOX_ID
+else:
+    NUVLABOX_RESOURCE_ID = 'nuvlabox/{}'.format(NUVLABOX_ID)
 
 
 def logger(log_level, log_file):
