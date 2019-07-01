@@ -33,7 +33,7 @@ class Telemetry(object):
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
         self.status = {'resources': None,
-                       'peripherals': None,
+                       # 'peripherals': None,
                        # 'mutableWifiPassword': None,
                        # 'swarmNodeId': None,
                        # 'swarmManagerToken': None,
@@ -53,7 +53,7 @@ class Telemetry(object):
         cpu_info = self.get_cpu()
         ram_info = self.get_ram()
         disk_usage = self.get_disks_usage()
-        usb_devices = self.get_usb_devices()
+        # usb_devices = self.get_usb_devices()
         operational_status = nb.get_operational_status(self.data_volume)
 
         return {
@@ -68,9 +68,9 @@ class Telemetry(object):
                 },
                 'disks': disk_usage
             },
-            'peripherals': {
-                'usb': usb_devices
-            },
+            # 'peripherals': {
+            #     'usb': usb_devices
+            # },
             # 'mutableWifiPassword': nb.nuvlaboxdb.read("psk", db = db_obj),
             # 'swarmNodeId': docker_client.info()['Swarm']['NodeID'],
             # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
@@ -136,28 +136,28 @@ class Telemetry(object):
     #     return_code = nb.shell_execute(['/usr/bin/lsof', usb_path])['returncode']
     #     return return_code == 0
 
-    def get_usb_devices(self):
-        """ Looks up list of USB devices """
-
-        usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
-        usb_devices = []
-        for usb_device in usb_devices_line:
-            usb_info = usb_device.split()
-            bus_id = usb_info[1]
-            device_id = usb_info[3][:3]
-            vendor_id = usb_info[5][:4]
-            product_id = usb_info[5][5:9]
-            description = usb_device[33:]
-            usb_devices.append({
-                # 'busy': self.is_usb_busy(bus_id, device_id),
-                'vendor-id': vendor_id,
-                'device-id': device_id,
-                'bus-id': bus_id,
-                'product-id': product_id,
-                'description': description
-            })
-
-        return usb_devices
+    # def get_usb_devices(self):
+    #     """ Looks up list of USB devices """
+    #
+    #     usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
+    #     usb_devices = []
+    #     for usb_device in usb_devices_line:
+    #         usb_info = usb_device.split()
+    #         bus_id = usb_info[1]
+    #         device_id = usb_info[3][:3]
+    #         vendor_id = usb_info[5][:4]
+    #         product_id = usb_info[5][5:9]
+    #         description = usb_device[33:]
+    #         usb_devices.append({
+    #             # 'busy': self.is_usb_busy(bus_id, device_id),
+    #             'vendor-id': vendor_id,
+    #             'device-id': device_id,
+    #             'bus-id': bus_id,
+    #             'product-id': product_id,
+    #             'description': description
+    #         })
+    #
+    #     return usb_devices
 
     @staticmethod
     def to_json_disks(disks):
