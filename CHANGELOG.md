@@ -1,4 +1,9 @@
 # Changelog
+## [1.0.0] - 2019-07-03
+### Added 
+- added resilience to the handling of environment variables
+### Changed
+- removed usb peripherals from telemetry
 ## [0.2.3] - 2019-06-21
 ### Added
 ### Changed
