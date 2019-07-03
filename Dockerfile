@@ -14,11 +14,11 @@ LABEL git.build.time=${GIT_BUILD_TIME}
 LABEL travis.build.number=${TRAVIS_BUILD_NUMBER}
 LABEL travis.build.web.url=${TRAVIS_BUILD_WEB_URL}
 
-RUN apt update && apt install -y usbutils lsof procps vim curl
+RUN apt update && apt install -y procps curl=7.52.1-5+deb9u9
 
 RUN apt-get clean autoclean \
     && apt-get autoremove --yes \
-    && /bin/bash -c "rm -rf /var/lib/{apt,dpkg,cache,log}/"
+    && /bin/bash -c "rm -rf /var/lib/{apt,dpkg,cache,log}/"debian:stretch-slim
 
 COPY code/ /opt/nuvlabox/
 

@@ -6,18 +6,12 @@ Common set of methods for the NuvlaBox agent
 """
 
 import os
-import sys
 import json
-# import shutil
 import logging
 import argparse
-# import subprocess
 import fcntl, socket, struct
-# import nuvlaboxdb
 from nuvla.api import Api
 from subprocess import PIPE, Popen
-# from contextlib import contextmanager
-# from tinydb import TinyDB, Query
 
 # REMOTES_FILE = '%%NB_REMOTES_FILE%%'
 NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
@@ -31,24 +25,27 @@ VPN_FILES = {
     "sslKey": "nuvlabox.key"
 }
 
-# DB, DB_PATH = nuvlaboxdb.init_db()
-
 
 def get_mac_address(ifname, separator=':'):
     """ Gets the MAC address for interface ifname """
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', ifname[:15]))
-        mac = separator.join(['%02x' % ord(char) for char in info[18:24]])
+        info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', bytes(ifname, 'utf-8')[:15]))
+        mac = ':'.join('%02x' % b for b in info[18:24])
         return mac
     except struct.error:
         logging.error("Could not find the device's MAC address from the network interface {} in {}".format(ifname, s))
         raise
-
+    except TypeError:
+        logging.error("The MAC address could not be parsed")
+        raise
 
 NUVLABOX_ID = os.environ['NUVLABOX_UUID'] if 'NUVLABOX_UUID' in os.environ else get_mac_address('eth0', '')
-NUVLABOX_RESOURCE_ID = 'nuvlabox/{}'.format(NUVLABOX_ID)
+if "nuvlabox/" in NUVLABOX_ID:
+    NUVLABOX_RESOURCE_ID = NUVLABOX_ID
+else:
+    NUVLABOX_RESOURCE_ID = 'nuvlabox/{}'.format(NUVLABOX_ID)
 
 
 def logger(log_level, log_file):
