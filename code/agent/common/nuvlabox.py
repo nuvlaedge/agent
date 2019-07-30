@@ -16,6 +16,7 @@ from subprocess import PIPE, Popen
 # REMOTES_FILE = '%%NB_REMOTES_FILE%%'
 NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
 NUVLA_ENDPOINT_INSECURE = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
+CONTEXT = ".context"
 
 USER_FILE = '/boot/nuvlabox.user'
 VPN_FOLDER = '%%NB_VPN_FOLDER%%'
@@ -41,12 +42,29 @@ def get_mac_address(ifname, separator=':'):
         logging.error("The MAC address could not be parsed")
         raise
 
-NUVLABOX_ID = os.environ['NUVLABOX_UUID'] if 'NUVLABOX_UUID' in os.environ else get_mac_address('eth0', '')
+
+def get_id_from_context(data_volume):
+    """ Reads NUVLABOX ID from previous run """
+
+    with open("{}/{}".format(data_volume, CONTEXT)) as cont:
+        id = json.loads(cont.read())['id']
+
+    return id
+
+
+if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
+    NUVLABOX_ID = os.environ['NUVLABOX_UUID']
+elif os.path.exists("/srv/nuvlabox/shared/{}".format(CONTEXT)):
+    NUVLABOX_ID = get_id_from_context("/srv/nuvlabox/shared")
+else:
+    NUVLABOX_ID = get_mac_address('eth0', '')
+
 if "nuvlabox/" in NUVLABOX_ID:
     NUVLABOX_RESOURCE_ID = NUVLABOX_ID
 else:
     NUVLABOX_RESOURCE_ID = 'nuvlabox/{}'.format(NUVLABOX_ID)
 
+logging.info(NUVLABOX_RESOURCE_ID)
 
 def logger(log_level, log_file):
     """ Configures logging """
@@ -171,7 +189,7 @@ def create_context_file(nuvlabox_info, data_volume):
     :param data_volume: where to store it
     """
 
-    context_file = "{}/.context".format(data_volume)
+    context_file = "{}/{}".format(data_volume, CONTEXT)
     logging.info('Generating context file {}'.format(context_file))
 
     with open(context_file, 'w') as c:
