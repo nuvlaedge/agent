@@ -1,4 +1,8 @@
 # Changelog
+## [1.0.2] - 2019-08-06
+### Added
+### Changed
+- default IP address is now retrieved from node itself and not from list of Swarm nodes
 ## [1.0.1] - 2019-07-30
 ### Added 
 - persistence for the env variable NUVLABOX_UUID upon service restarts and updates
