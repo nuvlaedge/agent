@@ -239,8 +239,9 @@ class Telemetry(object):
 
         if deployment_scenario == "localhost":
             # Get the Docker IP within the shared Docker network
-            node = self.docker_client.nodes.list()[0]
-            ip = node.attrs.get('ManagerStatus').get('Addr').split(':')[0]
+
+            # FIXME: Review whether this is the correct impl. for this case. FIX THIS when the VPN client is in place
+            ip = self.docker_client.info()["Swarm"]["NodeAddr"]
         elif deployment_scenario == "onpremise":
             # Get the local network IP
             # Hint: look at the local Nuvla IP, and scan the host network interfaces for an IP within the same subnet
@@ -248,14 +249,12 @@ class Telemetry(object):
             #       docker run --rm --net host alpine ip addr
 
             # FIXME: Review whether this is the correct impl. for this case.
-            node = self.docker_client.nodes.list()[0]
-            ip = node.attrs.get('ManagerStatus').get('Addr').split(':')[0]
+            ip = self.docker_client.info()["Swarm"]["NodeAddr"]
         elif deployment_scenario == "production":
             # Get either the public IP (via an online service) or use the VPN IP
 
             # FIXME: Review whether this is the correct impl. for this case.
-            node = self.docker_client.nodes.list()[0]
-            ip = node.attrs.get('ManagerStatus').get('Addr').split(':')[0]
+            ip = self.docker_client.info()["Swarm"]["NodeAddr"]
         else:
             logging.warning("Cannot infer the NuvlaBox IP!")
             return None
