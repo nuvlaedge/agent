@@ -11,7 +11,7 @@
 ![logo](https://uc977612ad25e6fb53ac9275cd4c.previews.dropboxusercontent.com/p/thumb/AAhLDh0-m61kGliju2bmLxVEc36VssSKVjGd9r6JnxmpdVExwfKsZWXtVtc2gz0IR1PN7tviqaJJY3YSXHZhxTwO1x_8bHHt3W49SZDgrMqPW84Jw9vg-Dmv_2J4siLp44GvufcOPr8Rw96xIGfG1JIm_xrADjdl0tpgW8LrJnojoMl5l7hCs0cNLMQm54P_QH8hhg5cc8Nkvk2M5F5YBp4MM5M62AMQXZRihBz4QsbvHeVNIj3Z8lI-gbcY9rYjiQmLYeAdP_REq2eEYcrADrMHHI6oJRuFQAAzrEPcyc6_3KQzMENiGflpKZAE2BcAJAJ956KodJjixpH8PPC_3sGlhijEZ2LTE_jwb00-znmVRV-BYNr8MO16HCZIBQeRgSc/p.png?fv_content=true&size_mode=5)
 
 
-**This repository contains the source code for the NuvlaBox Agent - the microservice which is responsible for the [NuvlaBox](https://sixsq.com/products-and-services/nuvlabox/overview) activation, categorization and telemetry. **
+**This repository contains the source code for the NuvlaBox Agent - the microservice which is responsible for the [NuvlaBox](https://sixsq.com/products-and-services/nuvlabox/overview) activation, categorization and telemetry.**
 
 This microservice is an integral component of the NuvlaBox Engine.
 
