@@ -63,7 +63,7 @@ This microservice is completely automated, meaning that as long as all the prope
 
 ## Contributing
 
-This is an open-source project, so all community contributions are more than welcome. Please read [Contributing.md](Contributing.md)
+This is an open-source project, so all community contributions are more than welcome. Please read [CONTRIBUTING.md](Contributing.md)
  
 ## Copyright
 
