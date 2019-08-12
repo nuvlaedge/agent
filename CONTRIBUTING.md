@@ -1,14 +1,14 @@
-## Contributing
+# Contributing
 
-### Reporting issues & Request features
+## Reporting issues & Request features
 
 To report any issues and/or request new features, create a new GitHub issue. 
 
 Please make sure that you create **one issue per topic** you're addressing, following the reporting template provided in the GitHub issues section.
 
-### Source Code Changes
+## Source Code Changes
 
-#### You are a team member/collaborator of this project 
+### You are a team member/collaborator of this project 
 
 1. Create a branch from master with a descriptive, kebab-cased name
   to hold all your changes.
@@ -33,7 +33,7 @@ When the reviewer is happy with the pull request, he/she will "squash
 & merge" the pull request and delete the corresponding branch.
 
 
-#### You are an external collaborator of this project
+### You are an external collaborator of this project
 
 1. Fork this repository and clone it.
 
