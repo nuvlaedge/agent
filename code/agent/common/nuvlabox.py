@@ -66,14 +66,14 @@ else:
 
 logging.info(NUVLABOX_RESOURCE_ID)
 
+
 def logger(log_level, log_file):
     """ Configures logging """
 
-    logging.basicConfig(level=log_level)
-    root_logger = logging.getLogger()
+    logging.basicConfig(filename=log_file)
 
-    file_handler = logging.FileHandler(log_file)
-    root_logger.addHandler(file_handler)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
 
     # stdout_handler = logging.StreamHandler(sys.stdout)
     # root_logger.addHandler(stdout_handler)

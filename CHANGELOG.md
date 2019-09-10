@@ -1,4 +1,8 @@
 # Changelog
+## [1.0.3] - 2019-09-10
+### Added
+### Changed
+- fixed logging level to INFO
 ## [1.0.2] - 2019-08-06
 ### Added
 ### Changed
