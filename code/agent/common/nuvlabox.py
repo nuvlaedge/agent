@@ -190,10 +190,25 @@ def create_context_file(nuvlabox_info, data_volume):
     """
 
     context_file = "{}/{}".format(data_volume, CONTEXT)
+
+    vpn_is_file = "{}/{}".format(data_volume, "vpn/vpn-is")
+
     logging.info('Generating context file {}'.format(context_file))
 
-    with open(context_file, 'w') as c:
+    with open(context_file, 'a+') as c:
+        try:
+            current_context = json.loads(c.read())
+        except ValueError:
+            logging.warning("Writing {} for the first time".format(context_file))
+            current_context = {}
+
+        current_vpn_is_id = current_context.get("vpn-server-id")
+
         c.write(json.dumps(nuvlabox_info))
+
+        if nuvlabox_info.get("vpn-server-id") != current_vpn_is_id:
+            with open(vpn_is_file, 'w') as v:
+                v.write(nuvlabox_info.get("vpn-server-id"))
 
 
 def ss_api():

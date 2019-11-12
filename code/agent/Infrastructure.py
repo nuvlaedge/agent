@@ -164,6 +164,8 @@ class Infrastructure(object):
         my_ip = self.telemetry_instance.get_ip()
         commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
+        ## TODO: check VPN CSR
+
         if self.needs_commission(commission_payload):
             logging.info("Commissioning the NuvlaBox...{}".format(commission_payload))
             self.do_commission(commission_payload)
