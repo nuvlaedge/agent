@@ -38,6 +38,7 @@ class Infrastructure(object):
         self.ca = "ca.pem"
         self.cert = "cert.pem"
         self.key = "key.pem"
+        self.context = ".context"
         self.telemetry_instance = Telemetry(data_volume, None)
 
     @staticmethod
@@ -118,14 +119,32 @@ class Infrastructure(object):
         return True
 
     def do_commission(self, payload):
-        """ Perform the operation """
+        """ Perform the operation
+
+        :param payload: commissioning payload
+        :return
+        """
 
         try:
             self.api._cimi_post(nb.NUVLABOX_RESOURCE_ID+"/commission", json=payload)
-        except:
-            raise
+        except Exception as e:
+            logging.error("Could not commission with payload {}: {}".format(payload, e))
+            return False
 
-        self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), payload, is_json=True)
+        if "vpn-csr" in payload:
+            # get the respective VPN credential that was just created
+            vpn_server_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())["vpn-server-id"]
+            searcher_filter = 'method="create-credential-vpn-nuvlabox" and vpn-common-name="{}" and parent="{}"'.format(
+                nb.NUVLABOX_RESOURCE_ID,
+                vpn_server_id
+            )
+
+            credential_id = self.api.search("credential", filter=searcher_filter, last=1).resources[0].id
+
+            return self.api._cimi_get(credential_id)
+
+        return None
+
 
     def needs_commission(self, current_conf):
         """ Check whether the current commission data structure
@@ -164,8 +183,8 @@ class Infrastructure(object):
         my_ip = self.telemetry_instance.get_ip()
         commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
-        ## TODO: check VPN CSR
-
         if self.needs_commission(commission_payload):
             logging.info("Commissioning the NuvlaBox...{}".format(commission_payload))
             self.do_commission(commission_payload)
+
+        self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), commission_payload, is_json=True)

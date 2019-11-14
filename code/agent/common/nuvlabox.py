@@ -19,12 +19,12 @@ NUVLA_ENDPOINT_INSECURE = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOI
 CONTEXT = ".context"
 
 USER_FILE = '/boot/nuvlabox.user'
-VPN_FOLDER = '%%NB_VPN_FOLDER%%'
-VPN_FILES = {
-    "sslCA": "intermediates.crt",
-    "sslCert": "nuvlabox.crt",
-    "sslKey": "nuvlabox.key"
-}
+# VPN_FOLDER = '%%NB_VPN_FOLDER%%'
+# VPN_FILES = {
+#     "sslCA": "intermediates.crt",
+#     "sslCert": "nuvlabox.crt",
+#     "sslKey": "nuvlabox.key"
+# }
 
 
 def get_mac_address(ifname, separator=':'):
