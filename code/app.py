@@ -77,7 +77,6 @@ def trigger_commission():
     return jsonify(app.config["infra"].do_commission(payload))
 
 
-
 if __name__ == "__main__":
     logging, args = init()
 
