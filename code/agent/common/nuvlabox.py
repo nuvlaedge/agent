@@ -14,7 +14,9 @@ from nuvla.api import Api
 from subprocess import PIPE, Popen
 
 # REMOTES_FILE = '%%NB_REMOTES_FILE%%'
-NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
+
+# TODO: sanitize url, including removing end slash if there's one
+NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"].replace("https://", "") if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
 NUVLA_ENDPOINT_INSECURE = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
 CONTEXT = ".context"
 
@@ -195,7 +197,7 @@ def create_context_file(nuvlabox_info, data_volume):
 
     logging.info('Generating context file {}'.format(context_file))
 
-    with open(context_file, 'a+') as c:
+    with open(context_file, 'w+') as c:
         try:
             current_context = json.loads(c.read())
         except ValueError:
