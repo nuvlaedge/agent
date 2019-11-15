@@ -101,22 +101,24 @@ class Infrastructure(object):
 
         return swarm_client_ca, swarm_client_cert, swarm_client_key
 
-    def has_ip_changed(self, ip):
-        """ Compare the current IP with the one previously registered
-
-        :param ip: current device IP
-        :return bool
-        """
-
-        try:
-            with open("{}/{}".format(self.data_volume, self.ip_file)) as i:
-                if ip == i.read():
-                    return False
-        except FileNotFoundError:
-            logging.info("Registering the device IP for the first time")
-
-        self.write_file("{}/{}".format(self.data_volume, self.ip_file), ip)
-        return True
+    # def has_ip_changed(self, ip):
+    #     """ Compare the current IP with the one previously registered
+    #
+    #     :param ip: current device IP
+    #     :return bool
+    #     """
+    #
+    #     try:
+    #         with open("{}/{}".format(self.data_volume, self.ip_file)) as i:
+    #             if ip == i.read():
+    #                 return False
+    #             else:
+    #                 logging.info("NB IP has changed. Commissioning...")
+    #     except FileNotFoundError:
+    #         logging.info("Registering the device IP for the first time")
+    #
+    #     self.write_file("{}/{}".format(self.data_volume, self.ip_file), ip)
+    #     return True
 
     def do_commission(self, payload):
         """ Perform the operation
@@ -140,11 +142,30 @@ class Infrastructure(object):
             )
 
             credential_id = self.api.search("credential", filter=searcher_filter, last=1).resources[0].id
+            vpn_credential = self.api._cimi_get(credential_id)
+            vpn_server = self.api._cimi_get(vpn_server_id)
 
-            return self.api._cimi_get(credential_id)
+            vpn_conf_endpoints = ''
+            for connection in vpn_server["vpn_endpoints"]:
+                vpn_conf_endpoints += "\n<connection>\nremote {} {} {}\n</connection>\n".format(
+                    connection["endpoint"],
+                    connection["port"],
+                    connection["protocol"]
+                )
+
+            vpn_fields = {
+                "vpn-intermediate-ca": "\n".join(vpn_credential["vpn-intermediate-ca"]),
+                "vpn-certificate": vpn_credential["vpn-certificate"],
+                "vpn-ca-certificate": vpn_server["vpn-ca-certificate"],
+                "vpn-intermediate-ca-is": "\n".join(vpn_server["vpn-intermediate-ca"]),
+                "vpn-shared-key": vpn_server["vpn-shared-key"],
+                "vpn-common-name-prefix": vpn_server["vpn-common-name-prefix"],
+                "vpn-endpoints-mapped": vpn_conf_endpoints
+            }
+
+            return vpn_fields
 
         return None
-
 
     def needs_commission(self, current_conf):
         """ Check whether the current commission data structure
