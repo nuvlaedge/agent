@@ -146,7 +146,7 @@ class Infrastructure(object):
             vpn_server = self.api._cimi_get(vpn_server_id)
 
             vpn_conf_endpoints = ''
-            for connection in vpn_server["vpn_endpoints"]:
+            for connection in vpn_server["vpn-endpoints"]:
                 vpn_conf_endpoints += "\n<connection>\nremote {} {} {}\n</connection>\n".format(
                     connection["endpoint"],
                     connection["port"],

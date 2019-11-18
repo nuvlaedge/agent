@@ -74,7 +74,9 @@ def trigger_commission():
 
     logging.info('Commission triggered via the API with payload: %s ' % payload)
 
-    return jsonify(app.config["infra"].do_commission(payload))
+    commissioning_response = app.config["infra"].do_commission(payload)
+
+    return jsonify(commissioning_response)
 
 
 if __name__ == "__main__":
