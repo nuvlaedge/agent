@@ -14,17 +14,19 @@ from nuvla.api import Api
 from subprocess import PIPE, Popen
 
 # REMOTES_FILE = '%%NB_REMOTES_FILE%%'
-NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
+
+# TODO: sanitize url, including removing end slash if there's one
+NUVLA_ENDPOINT = os.environ["NUVLA_ENDPOINT"].replace("https://", "") if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
 NUVLA_ENDPOINT_INSECURE = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
 CONTEXT = ".context"
 
 USER_FILE = '/boot/nuvlabox.user'
-VPN_FOLDER = '%%NB_VPN_FOLDER%%'
-VPN_FILES = {
-    "sslCA": "intermediates.crt",
-    "sslCert": "nuvlabox.crt",
-    "sslKey": "nuvlabox.key"
-}
+# VPN_FOLDER = '%%NB_VPN_FOLDER%%'
+# VPN_FILES = {
+#     "sslCA": "intermediates.crt",
+#     "sslCert": "nuvlabox.crt",
+#     "sslKey": "nuvlabox.key"
+# }
 
 
 def get_mac_address(ifname, separator=':'):
@@ -190,10 +192,25 @@ def create_context_file(nuvlabox_info, data_volume):
     """
 
     context_file = "{}/{}".format(data_volume, CONTEXT)
+
+    vpn_is_file = "{}/{}".format(data_volume, "vpn/vpn-is")
+
     logging.info('Generating context file {}'.format(context_file))
 
-    with open(context_file, 'w') as c:
+    with open(context_file, 'w+') as c:
+        try:
+            current_context = json.loads(c.read())
+        except ValueError:
+            logging.warning("Writing {} for the first time".format(context_file))
+            current_context = {}
+
+        current_vpn_is_id = current_context.get("vpn-server-id")
+
         c.write(json.dumps(nuvlabox_info))
+
+        if nuvlabox_info.get("vpn-server-id") != current_vpn_is_id:
+            with open(vpn_is_file, 'w') as v:
+                v.write(nuvlabox_info.get("vpn-server-id"))
 
 
 def ss_api():

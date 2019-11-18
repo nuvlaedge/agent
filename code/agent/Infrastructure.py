@@ -38,6 +38,7 @@ class Infrastructure(object):
         self.ca = "ca.pem"
         self.cert = "cert.pem"
         self.key = "key.pem"
+        self.context = ".context"
         self.telemetry_instance = Telemetry(data_volume, None)
 
     @staticmethod
@@ -100,32 +101,71 @@ class Infrastructure(object):
 
         return swarm_client_ca, swarm_client_cert, swarm_client_key
 
-    def has_ip_changed(self, ip):
-        """ Compare the current IP with the one previously registered
+    # def has_ip_changed(self, ip):
+    #     """ Compare the current IP with the one previously registered
+    #
+    #     :param ip: current device IP
+    #     :return bool
+    #     """
+    #
+    #     try:
+    #         with open("{}/{}".format(self.data_volume, self.ip_file)) as i:
+    #             if ip == i.read():
+    #                 return False
+    #             else:
+    #                 logging.info("NB IP has changed. Commissioning...")
+    #     except FileNotFoundError:
+    #         logging.info("Registering the device IP for the first time")
+    #
+    #     self.write_file("{}/{}".format(self.data_volume, self.ip_file), ip)
+    #     return True
 
-        :param ip: current device IP
-        :return bool
+    def do_commission(self, payload):
+        """ Perform the operation
+
+        :param payload: commissioning payload
+        :return
         """
 
         try:
-            with open("{}/{}".format(self.data_volume, self.ip_file)) as i:
-                if ip == i.read():
-                    return False
-        except FileNotFoundError:
-            logging.info("Registering the device IP for the first time")
-
-        self.write_file("{}/{}".format(self.data_volume, self.ip_file), ip)
-        return True
-
-    def do_commission(self, payload):
-        """ Perform the operation """
-
-        try:
             self.api._cimi_post(nb.NUVLABOX_RESOURCE_ID+"/commission", json=payload)
-        except:
-            raise
+        except Exception as e:
+            logging.error("Could not commission with payload {}: {}".format(payload, e))
+            return False
 
-        self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), payload, is_json=True)
+        if "vpn-csr" in payload:
+            # get the respective VPN credential that was just created
+            vpn_server_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())["vpn-server-id"]
+            searcher_filter = 'method="create-credential-vpn-nuvlabox" and vpn-common-name="{}" and parent="{}"'.format(
+                nb.NUVLABOX_RESOURCE_ID,
+                vpn_server_id
+            )
+
+            credential_id = self.api.search("credential", filter=searcher_filter, last=1).resources[0].id
+            vpn_credential = self.api._cimi_get(credential_id)
+            vpn_server = self.api._cimi_get(vpn_server_id)
+
+            vpn_conf_endpoints = ''
+            for connection in vpn_server["vpn-endpoints"]:
+                vpn_conf_endpoints += "\n<connection>\nremote {} {} {}\n</connection>\n".format(
+                    connection["endpoint"],
+                    connection["port"],
+                    connection["protocol"]
+                )
+
+            vpn_fields = {
+                "vpn-intermediate-ca": "\n".join(vpn_credential["vpn-intermediate-ca"]),
+                "vpn-certificate": vpn_credential["vpn-certificate"],
+                "vpn-ca-certificate": vpn_server["vpn-ca-certificate"],
+                "vpn-intermediate-ca-is": "\n".join(vpn_server["vpn-intermediate-ca"]),
+                "vpn-shared-key": vpn_server["vpn-shared-key"],
+                "vpn-common-name-prefix": vpn_server["vpn-common-name-prefix"],
+                "vpn-endpoints-mapped": vpn_conf_endpoints
+            }
+
+            return vpn_fields
+
+        return None
 
     def needs_commission(self, current_conf):
         """ Check whether the current commission data structure
@@ -167,3 +207,5 @@ class Infrastructure(object):
         if self.needs_commission(commission_payload):
             logging.info("Commissioning the NuvlaBox...{}".format(commission_payload))
             self.do_commission(commission_payload)
+
+        self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), commission_payload, is_json=True)

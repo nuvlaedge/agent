@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3.7
+#!/usr/local/bin/python
 # -*- coding: utf-8 -*-
 
 """NuvlaBox Agent service
@@ -17,7 +17,8 @@ Arguments:
 
 import socket
 import threading
-from flask import Flask, request
+import json
+from flask import Flask, request, jsonify
 from agent.common import nuvlabox as nb
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
@@ -62,6 +63,21 @@ def set_status():
     return "Hello World!"
 
 
+@app.route('/api/commission', methods=['POST'])
+def trigger_commission():
+    """ API endpoint to let other components trigger a commissioning
+
+    The request.data is the payload
+    """
+
+    payload = json.loads(request.data)
+
+    logging.info('Commission triggered via the API with payload: %s ' % payload)
+
+    commissioning_response = app.config["infra"].do_commission(payload)
+    return jsonify(commissioning_response)
+
+
 if __name__ == "__main__":
     logging, args = init()
 
@@ -93,8 +109,9 @@ if __name__ == "__main__":
     refresh_interval = 5
 
     app.config["telemetry"] = telemetry
+    app.config["infra"] = infra
 
-    monitoring_thread = threading.Thread(target=app.run)
+    monitoring_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0"})
     monitoring_thread.daemon = True
     monitoring_thread.start()
 

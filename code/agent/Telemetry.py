@@ -14,6 +14,7 @@ import multiprocessing
 import socket
 
 from agent.common import nuvlabox as nb
+from os import path, stat
 
 
 class Telemetry(object):
@@ -29,6 +30,7 @@ class Telemetry(object):
         """ Constructs an Telemetry object, with a status placeholder """
 
         self.data_volume = data_volume
+        self.vpn_folder = "{}/vpn".format(data_volume)
         self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
@@ -240,8 +242,9 @@ class Telemetry(object):
         if deployment_scenario == "localhost":
             # Get the Docker IP within the shared Docker network
 
-            # FIXME: Review whether this is the correct impl. for this case. FIX THIS when the VPN client is in place
-            ip = self.docker_client.info()["Swarm"]["NodeAddr"]
+            # ip = self.docker_client.info()["Swarm"]["NodeAddr"]
+
+            ip = socket.gethostbyname(socket.gethostname())
         elif deployment_scenario == "onpremise":
             # Get the local network IP
             # Hint: look at the local Nuvla IP, and scan the host network interfaces for an IP within the same subnet
@@ -253,8 +256,12 @@ class Telemetry(object):
         elif deployment_scenario == "production":
             # Get either the public IP (via an online service) or use the VPN IP
 
-            # FIXME: Review whether this is the correct impl. for this case.
-            ip = self.docker_client.info()["Swarm"]["NodeAddr"]
+            vpn_ip_file = "{}/ip".format(self.vpn_folder)
+
+            if path.exists(vpn_ip_file) and stat(vpn_ip_file).st_size != 0:
+                ip = str(open(vpn_ip_file).read().splitlines()[0])
+            else:
+                ip = self.docker_client.info()["Swarm"]["NodeAddr"]
         else:
             logging.warning("Cannot infer the NuvlaBox IP!")
             return None
