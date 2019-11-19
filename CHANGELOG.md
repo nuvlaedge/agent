@@ -1,4 +1,11 @@
 # Changelog
+## [1.1.0] - 2019-11-19
+### Added 
+- added VPN commissioning
+### Changed
+- changed source of IP retrieval
+- minor bug fixes and code optimization
+- fix Python version
 ## [1.0.3] - 2019-09-10
 ### Added
 ### Changed
