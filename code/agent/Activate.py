@@ -8,14 +8,13 @@ It takes care of activating a new NuvlaBox
 
 import json
 import logging
-
 import docker
 import requests
 
-from agent.common import nuvlabox as nb
+from agent.common import NuvlaBoxCommon
 
 
-class Activate(object):
+class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Activate class, which includes all methods and
     properties necessary to activate a NuvlaBox
 
@@ -23,12 +22,14 @@ class Activate(object):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, api=None):
+    def __init__(self, data_volume):
         """ Constructs an Activation object """
 
-        self.data_volume = data_volume
-        self.activation_flag = "{}/.activated".format(self.data_volume)
-        self.api = nb.ss_api() if not api else api
+        # self.data_volume = data_volume
+        # self.activation_flag = "{}/.activated".format(self.data_volume)
+        super().__init__(shared_data_volume=data_volume)
+
+        # self.api = nb.ss_api() if not api else api
         self.user_info = {}
 
     def activation_is_possible(self):
@@ -38,7 +39,7 @@ class Activate(object):
 
         :return boolean and user info is available"""
 
-        if nb.get_operational_status(self.data_volume) == "UNKNOWN":
+        if self.get_operational_status() == "UNKNOWN":
             return False, self.user_info
 
         try:
@@ -55,15 +56,15 @@ class Activate(object):
     def activate(self):
         """ Makes the anonymous call to activate the NuvlaBox """
 
-        logging.info('Activating "{}"'.format(nb.NUVLABOX_RESOURCE_ID))
+        logging.info('Activating "{}"'.format(self.nuvlabox_id))
 
         try:
-            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RESOURCE_ID))
+            self.user_info = self.api._cimi_post('{}/activate'.format(self.nuvlabox_id))
         except requests.exceptions.SSLError:
-            nb.shell_execute(["timeout", "3s", "/lib/systemd/systemd-timesyncd"])
-            self.user_info = self.api._cimi_post('{}/activate'.format(nb.NUVLABOX_RESOURCE_ID))
+            self.shell_execute(["timeout", "3s", "/lib/systemd/systemd-timesyncd"])
+            self.user_info = self.api._cimi_post('{}/activate'.format(self.nuvlabox_id))
         except requests.exceptions.ConnectionError as conn_err:
-            logging.error("Can not reach out to Nuvla at {}. Error: {}".format(nb.NUVLA_ENDPOINT, conn_err))
+            logging.error("Can not reach out to Nuvla at {}. Error: {}".format(self.nuvla_endpoint, conn_err))
             raise
 
         # Flags that the activation has been done
@@ -72,20 +73,47 @@ class Activate(object):
 
         return self.user_info
 
+    def create_nb_document_file(self, nuvlabox_resource):
+        """ Writes contextualization file with NB resource content
+
+        :param nuvlabox_resource: nuvlabox resource data
+        """
+
+        context_file = "{}/{}".format(self.data_volume, self.context)
+
+        logging.info('Generating context file {}'.format(context_file))
+
+        with open(context_file, 'w+') as c:
+            try:
+                current_context = json.loads(c.read())
+            except ValueError:
+                logging.warning("Writing {} for the first time".format(context_file))
+                current_context = {}
+
+            current_vpn_is_id = current_context.get("vpn-server-id")
+
+            c.write(json.dumps(nuvlabox_resource))
+
+            if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
+                logging.info('VPN Server ID has been changed in Nuvla: {}. Triggering Network Manager...'.format(context_file))
+                with open(self.vpn_infra_file, 'w') as v:
+                    v.write(nuvlabox_resource.get("vpn-server-id"))
+
+    def get_nuvlabox_info(self):
+        """ Retrieves the respective resource from Nuvla """
+
+        return self.api._cimi_get(self.nuvlabox_id)
+
     def update_nuvlabox_resource(self):
         """ Updates the static information about the NuvlaBox
 
         :return: nuvlabox-status ID
         """
 
-        nb.authenticate(self.api, self.user_info["api-key"], self.user_info["secret-key"])
-        nuvlabox_resource = nb.get_nuvlabox_info(self.api)
-        # FIXME: This should be moved to the nuvlabox-status resource.
-        # FIXME: NuvlaBox does not have edit access to the nuvlabox resource.
-        # self.update_nuvlabox_info(nuvlabox_resource)
-        # logging.info("Updating {} with {}".format(nb.NUVLABOX_RESOURCE_ID, nuvlabox_resource))
-        # self.api._cimi_put(nb.NUVLABOX_RESOURCE_ID, json=nuvlabox_resource)
-        nb.create_context_file(nuvlabox_resource, data_volume=self.data_volume)
+        self.authenticate(self.api, self.user_info["api-key"], self.user_info["secret-key"])
+        nuvlabox_resource = self.get_nuvlabox_info()
+
+        self.create_nb_document_file(nuvlabox_resource)
 
         return nuvlabox_resource["nuvlabox-status"]
 
@@ -119,3 +147,4 @@ class Activate(object):
 
         client = docker.from_env()
         return "{} {}".format(client.info()["OperatingSystem"], client.info()["KernelVersion"])
+

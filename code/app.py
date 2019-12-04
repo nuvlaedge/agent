@@ -19,7 +19,7 @@ import socket
 import threading
 import json
 from flask import Flask, request, jsonify
-from agent.common import nuvlabox as nb
+from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
 from agent.Infrastructure import Infrastructure
@@ -30,17 +30,18 @@ __email__ = "support@sixsq.com"
 
 app = Flask(__name__)
 data_volume = "/srv/nuvlabox/shared"
-log_filename = "agent.log"
+default_log_filename = "agent.log"
 network_timeout = 10
 
 
 def init():
     """ Initialize the application, including argparsing """
 
-    description = 'NuvlaBox Agent'
-    params = nb.arguments(description, data_volume, log_filename).parse_args()
+    params = NuvlaBoxCommon.arguments().parse_args()
 
-    logger = nb.logger(nb.get_log_level(params), params.log_file)
+    final_log_file = params.log_file if params.log_file else default_log_filename
+
+    logger = NuvlaBoxCommon.logger(NuvlaBoxCommon.get_log_level(params), final_log_file)
 
     return logger, params
 
@@ -102,8 +103,8 @@ if __name__ == "__main__":
 
     # start telemetry
     logging.info("Starting telemetry...")
-    telemetry = Telemetry(args.data_volume, nuvlabox_status_id, api=activation.api)
-    infra = Infrastructure(args.data_volume, api=activation.api)
+    telemetry = Telemetry(args.data_volume, nuvlabox_status_id)
+    infra = Infrastructure(args.data_volume)
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
@@ -116,12 +117,16 @@ if __name__ == "__main__":
     monitoring_thread.start()
 
     while True:
-        nuvlabox_resource = nb.get_nuvlabox_info(telemetry.api)
+        nuvlabox_resource = activation.get_nuvlabox_info()
         if nuvlabox_info_updated_date != nuvlabox_resource['updated']:
             refresh_interval = nuvlabox_resource['refresh-interval']
             logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
-            nb.create_context_file(nuvlabox_resource, telemetry.data_volume)
+            activation.create_nb_document_file(nuvlabox_resource)
+
+            # if there's a mention to the VPN server, then watch the VPN credential
+            if nuvlabox_resource.get("vpn-server-id"):
+                infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
 
         telemetry.update_status()
 
