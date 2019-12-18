@@ -1,4 +1,9 @@
 # Changelog
+## [1.2.0] - 2019-12-18
+### Added 
+- watchdog for VPN credential
+### Changed
+- re-structured common libraries
 ## [1.1.0] - 2019-11-19
 ### Added 
 - added VPN commissioning
