@@ -13,11 +13,11 @@ import logging
 import multiprocessing
 import socket
 
-from agent.common import nuvlabox as nb
+from agent.common import NuvlaBoxCommon
 from os import path, stat
 
 
-class Telemetry(object):
+class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaBox and send all
     data into the respective NuvlaBox status at Nuvla
@@ -26,27 +26,18 @@ class Telemetry(object):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, nuvlabox_status_id, api=None):
+    def __init__(self, data_volume, nuvlabox_status_id):
         """ Constructs an Telemetry object, with a status placeholder """
 
-        self.data_volume = data_volume
-        self.vpn_folder = "{}/vpn".format(data_volume)
-        self.api = nb.ss_api() if not api else api
+        # self.data_volume = data_volume
+        # self.vpn_folder = "{}/vpn".format(data_volume)
+        super().__init__(shared_data_volume=data_volume)
+
+        # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
         self.status = {'resources': None,
-                       # 'peripherals': None,
-                       # 'mutableWifiPassword': None,
-                       # 'swarmNodeId': None,
-                       # 'swarmManagerToken': None,
-                       # 'swarmWorkerToken': None,
                        'status': None
-                       # 'swarmNode': None,
-                       # 'swarmManagerId': None,
-                       # 'leader?': None,
-                       # 'tlsCA': None,
-                       # 'tlsCert': None,
-                       # 'tlsKey': None
                        }
 
     def get_status(self):
@@ -56,7 +47,7 @@ class Telemetry(object):
         ram_info = self.get_ram()
         disk_usage = self.get_disks_usage()
         # usb_devices = self.get_usb_devices()
-        operational_status = nb.get_operational_status(self.data_volume)
+        operational_status = self.get_operational_status()
 
         return {
             'resources': {
@@ -70,20 +61,7 @@ class Telemetry(object):
                 },
                 'disks': disk_usage
             },
-            # 'peripherals': {
-            #     'usb': usb_devices
-            # },
-            # 'mutableWifiPassword': nb.nuvlaboxdb.read("psk", db = db_obj),
-            # 'swarmNodeId': docker_client.info()['Swarm']['NodeID'],
-            # 'swarmManagerId': docker_client.info()['Swarm']['NodeID'],
-            # 'swarmManagerToken': docker_client.swarm.attrs['JoinTokens']['Manager'],
-            # 'swarmWorkerToken': docker_client.swarm.attrs['JoinTokens']['Worker'],
-            'status': operational_status,
-            # 'swarmNode': nb.nuvlaboxdb.read("swarm-node", db = db_obj),
-            # 'leader?': str(nb.nuvlaboxdb.read("leader", db = db_obj)).lower() == 'true',
-            # 'tlsCA': nb.nuvlaboxdb.read("tlsCA", db = db_obj),
-            # 'tlsCert': nb.nuvlaboxdb.read("tlsCert", db = db_obj),
-            # 'tlsKey': nb.nuvlaboxdb.read("tlsKey", db = db_obj)
+            'status': operational_status
         }
 
     @staticmethod
@@ -103,20 +81,18 @@ class Telemetry(object):
 
         return int(multiprocessing.cpu_count()), load_average
 
-    @staticmethod
-    def get_ram():
+    def get_ram(self):
         """ Looks up the total and used memory available """
 
-        result = nb.shell_execute(['/usr/bin/free', '-m'])['stdout'].splitlines()[1].split()
+        result = self.shell_execute(['/usr/bin/free', '-m'])['stdout'].splitlines()[1].split()
         capacity = int(result[1])
         used = int(result[2])
         return capacity, used
 
-    @staticmethod
-    def get_disk_part_usage(partition_path):
+    def get_disk_part_usage(self, partition_path):
         """ Individually looks up disk usage for partition """
 
-        result = nb.shell_execute(['df', partition_path])['stdout'].splitlines()[1].split()
+        result = self.shell_execute(['df', partition_path])['stdout'].splitlines()[1].split()
         capacity = int(result[1]) // 1024
         used = int(result[2]) // 1024
         return capacity, used
@@ -129,37 +105,6 @@ class Telemetry(object):
                  'capacity': disk_usage[0],
                  'used': disk_usage[1]
                  }]
-
-    # @staticmethod
-    # def is_usb_busy(bus_id, device_id):
-    #     """ Checks if USB device is busy """
-    #
-    #     usb_path = '/dev/bus/usb/{0}/{1}'.format(bus_id, device_id)
-    #     return_code = nb.shell_execute(['/usr/bin/lsof', usb_path])['returncode']
-    #     return return_code == 0
-
-    # def get_usb_devices(self):
-    #     """ Looks up list of USB devices """
-    #
-    #     usb_devices_line = nb.shell_execute(['/usr/bin/lsusb'])['stdout'].decode("utf-8").splitlines()
-    #     usb_devices = []
-    #     for usb_device in usb_devices_line:
-    #         usb_info = usb_device.split()
-    #         bus_id = usb_info[1]
-    #         device_id = usb_info[3][:3]
-    #         vendor_id = usb_info[5][:4]
-    #         product_id = usb_info[5][5:9]
-    #         description = usb_device[33:]
-    #         usb_devices.append({
-    #             # 'busy': self.is_usb_busy(bus_id, device_id),
-    #             'vendor-id': vendor_id,
-    #             'device-id': device_id,
-    #             'bus-id': bus_id,
-    #             'product-id': product_id,
-    #             'description': description
-    #         })
-    #
-    #     return usb_devices
 
     @staticmethod
     def to_json_disks(disks):
@@ -206,7 +151,7 @@ class Telemetry(object):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
-        self.api._cimi_put(self.nb_status_id,
+        self.api()._cimi_put(self.nb_status_id,
                            json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         self.status = new_status
 
@@ -222,9 +167,9 @@ class Telemetry(object):
         if status_log:
             new_operational_status["status-log"] = status_log
 
-        self.api._cimi_put(self.nb_status_id, json=new_operational_status)
+        self.api()._cimi_put(self.nb_status_id, json=new_operational_status)
 
-        nb.set_local_operational_status(self.data_volume, status)
+        self.set_local_operational_status(status)
 
     def get_ip(self):
         """ Discovers the NuvlaBox IP (aka endpoint) """
@@ -256,10 +201,8 @@ class Telemetry(object):
         elif deployment_scenario == "production":
             # Get either the public IP (via an online service) or use the VPN IP
 
-            vpn_ip_file = "{}/ip".format(self.vpn_folder)
-
-            if path.exists(vpn_ip_file) and stat(vpn_ip_file).st_size != 0:
-                ip = str(open(vpn_ip_file).read().splitlines()[0])
+            if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
+                ip = str(open(self.vpn_ip_file).read().splitlines()[0])
             else:
                 ip = self.docker_client.info()["Swarm"]["NodeAddr"]
         else:
