@@ -151,7 +151,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
-        self.api._cimi_put(self.nb_status_id,
+        self.api()._cimi_put(self.nb_status_id,
                            json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         self.status = new_status
 
@@ -167,7 +167,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if status_log:
             new_operational_status["status-log"] = status_log
 
-        self.api._cimi_put(self.nb_status_id, json=new_operational_status)
+        self.api()._cimi_put(self.nb_status_id, json=new_operational_status)
 
         self.set_local_operational_status(status)
 

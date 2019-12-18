@@ -13,6 +13,7 @@ import socket
 import struct
 import logging
 import argparse
+import sys
 from nuvla.api import Api
 from subprocess import PIPE, Popen
 
@@ -51,8 +52,8 @@ def logger(log_level, log_file):
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
 
-    # stdout_handler = logging.StreamHandler(sys.stdout)
-    # root_logger.addHandler(stdout_handler)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    root_logger.addHandler(stdout_handler)
 
     return root_logger
 
@@ -108,10 +109,8 @@ class NuvlaBoxCommon():
                 nuvla_endpoint_insecure_raw = False
             else:
                 nuvla_endpoint_insecure_raw = True
-        elif isinstance(nuvla_endpoint_insecure_raw, int):
-            nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
         else:
-            nuvla_endpoint_insecure_raw = False
+            nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
 
         self.nuvla_endpoint_insecure = nuvla_endpoint_insecure_raw
 

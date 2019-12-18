@@ -13,7 +13,7 @@ import json
 import time
 from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
-from os import path, stat
+from os import path, stat, remove
 
 class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Infrastructure class includes all methods and
@@ -111,7 +111,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         try:
-            self.api._cimi_post(self.nuvlabox_id+"/commission", json=payload)
+            self.api()._cimi_post(self.nuvlabox_id+"/commission", json=payload)
         except Exception as e:
             logging.error("Could not commission with payload {}: {}".format(payload, e))
             return False
@@ -124,19 +124,27 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             attempts = 0
             credential_id = None
             while attempts <= 20:
+                logging.info("Getting VPN credential from Nuvla...")
                 try:
-                    credential_id = self.api.search("credential", filter=searcher_filter, last=1).resources[0].id
+                    credential_id = self.api().search("credential", filter=searcher_filter, last=1).resources[0].id
                     break
                 except IndexError:
+                    logging.info("*****************")
+
                     logging.exception("Cannot find VPN credential in Nuvla after commissioning")
-                    logging.warning("Failing to provide necessary values for NuvlaBox VPN client")
-                    time.sleep(1)
+                    time.sleep(2)
+                except Exception as e:
+                    logging.info("something %s" % e)
+
+                attempts += 1
 
             if not credential_id:
+                logging.warning("Failing to provide necessary values for NuvlaBox VPN client")
                 return None
 
-            vpn_credential = self.api._cimi_get(credential_id)
-            vpn_server = self.api._cimi_get(vpn_server_id)
+            vpn_credential = self.api()._cimi_get(credential_id)
+            # save_vpn_credential
+            vpn_server = self.api()._cimi_get(vpn_server_id)
 
             vpn_conf_endpoints = ''
             for connection in vpn_server["vpn-endpoints"]:
@@ -175,7 +183,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 else:
                     return True
         except FileNotFoundError:
-            logging.info("Commissioning the NuvlaBox for the first time...")
+            logging.info("Auto-commissioning the NuvlaBox for the first time...")
             return True
 
     def try_commission(self):
@@ -225,20 +233,62 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             return None
 
         search_filter = self.build_vpn_credential_search_filter(vpn_is_id)
-        credential_id = self.api.search("credential", filter=search_filter, last=1).resources[0].id
+        logging.info("Watching VPN credential in Nuvla...")
+        try:
+            credential_id = self.api().search("credential", filter=search_filter, last=1).resources[0].id
+        except IndexError:
+            credential_id = None
 
         if not credential_id:
             # If cannot find a VPN credential in Nuvla, then it is either in the process of being created
             # or it has been removed from Nuvla
             logging.warning("VPN server is set but cannot find VPN credential in Nuvla")
-            # Was it ever in Nuvla - meaning that we have a copy of it locally
+
+            # IF there isn't yet a VPN credential stored locally, then maybe the NB is still commissioning for
+            # the 1st time
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
-                logging.info("VPN credential exists locally")
+                logging.warning("VPN credential exists locally, so it was removed from Nuvla. Recommissioning...")
+            else:
+                logging.info("NuvlaBox is in the process of commissioning, so VPN credential should get here soon")
+                return None
 
-
-
-
+            self.write_file(self.vpn_infra_file, vpn_is_id)
         else:
-            vpn_credential = self.api._cimi_get(credential_id)
+            vpn_credential_nuvla = self.api()._cimi_get(credential_id)
 
+            # IF there is a VPN credential in Nuvla:
+            #  - if we also have one locally, BUT is different, then recommission
+            if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
+                with open(self.vpn_credential) as vpn_local:
+                    local_vpn_credential = json.loads(vpn_local.read())
 
+                if vpn_credential_nuvla['updated'] != local_vpn_credential['updated']:
+                    logging.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
+                                    .format(vpn_credential_nuvla['updated']))
+                    # Recommission
+                    self.write_file(self.vpn_infra_file, vpn_is_id)
+                    remove(self.vpn_credential)
+                    return None
+                    # else, do nothing cause nothing has changed
+            else:
+                # - IF we don't have it locally, but there's one in Nuvla, then:
+                #     - IF the vpn-client is already running, then all is good, just save the VPN credential locally
+                logging.warning("VPN credential exists in Nuvla, but not locally")
+
+                dc = docker.from_env()
+                try:
+                    vpn_client_running = True if dc.containers.get("vpn-client").status == 'running' else False
+                except docker.errors.NotFound as e:
+                    vpn_client_running = False
+                    logging.info("VPN client is not running")
+
+                if vpn_client_running:
+                    # just save a copy of the VPN credential locally
+                    self.write_file(self.vpn_credential, vpn_credential_nuvla, is_json=True)
+                    logging.info("VPN client is now running. Saving VPN credential locally at {}"
+                                    .format(self.vpn_credential))
+                else:
+                    # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
+                    # maybe something went wrong, just recommission
+                    logging.error("Trying to fix local VPN client by recommissioning...")
+                    self.write_file(self.vpn_infra_file, vpn_is_id)

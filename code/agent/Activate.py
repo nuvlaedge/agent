@@ -59,10 +59,10 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         logging.info('Activating "{}"'.format(self.nuvlabox_id))
 
         try:
-            self.user_info = self.api._cimi_post('{}/activate'.format(self.nuvlabox_id))
+            self.user_info = self.api()._cimi_post('{}/activate'.format(self.nuvlabox_id))
         except requests.exceptions.SSLError:
             self.shell_execute(["timeout", "3s", "/lib/systemd/systemd-timesyncd"])
-            self.user_info = self.api._cimi_post('{}/activate'.format(self.nuvlabox_id))
+            self.user_info = self.api()._cimi_post('{}/activate'.format(self.nuvlabox_id))
         except requests.exceptions.ConnectionError as conn_err:
             logging.error("Can not reach out to Nuvla at {}. Error: {}".format(self.nuvla_endpoint, conn_err))
             raise
@@ -95,14 +95,15 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             c.write(json.dumps(nuvlabox_resource))
 
             if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
-                logging.info('VPN Server ID has been changed in Nuvla: {}. Triggering Network Manager...'.format(context_file))
+                logging.info('VPN Server ID has been added/changed in Nuvla: {}. Triggering Network Manager...'
+                             .format(nuvlabox_resource.get("vpn-server-id")))
                 with open(self.vpn_infra_file, 'w') as v:
                     v.write(nuvlabox_resource.get("vpn-server-id"))
 
     def get_nuvlabox_info(self):
         """ Retrieves the respective resource from Nuvla """
 
-        return self.api._cimi_get(self.nuvlabox_id)
+        return self.api()._cimi_get(self.nuvlabox_id)
 
     def update_nuvlabox_resource(self):
         """ Updates the static information about the NuvlaBox
@@ -110,7 +111,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         :return: nuvlabox-status ID
         """
 
-        self.authenticate(self.api, self.user_info["api-key"], self.user_info["secret-key"])
+        self.authenticate(self.api(), self.user_info["api-key"], self.user_info["secret-key"])
         nuvlabox_resource = self.get_nuvlabox_info()
 
         self.create_nb_document_file(nuvlabox_resource)

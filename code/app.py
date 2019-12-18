@@ -85,9 +85,8 @@ if __name__ == "__main__":
     socket.setdefaulttimeout(network_timeout)
 
     e = Event()
-
     # Try to activate the NuvlaBox
-    activation = Activate(args.data_volume)
+    activation = Activate(data_volume)
     while True:
         can_activate, user_info = activation.activation_is_possible()
         if can_activate or user_info:
@@ -103,8 +102,8 @@ if __name__ == "__main__":
 
     # start telemetry
     logging.info("Starting telemetry...")
-    telemetry = Telemetry(args.data_volume, nuvlabox_status_id)
-    infra = Infrastructure(args.data_volume)
+    telemetry = Telemetry(data_volume, nuvlabox_status_id)
+    infra = Infrastructure(data_volume)
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
@@ -124,9 +123,9 @@ if __name__ == "__main__":
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
             activation.create_nb_document_file(nuvlabox_resource)
 
-            # if there's a mention to the VPN server, then watch the VPN credential
-            if nuvlabox_resource.get("vpn-server-id"):
-                infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
+        # if there's a mention to the VPN server, then watch the VPN credential
+        if nuvlabox_resource.get("vpn-server-id"):
+            infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
 
         telemetry.update_status()
 
