@@ -2,3 +2,4 @@ requests
 docker
 nuvla-api
 Flask==1.0.0
+paho-mqtt

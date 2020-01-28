@@ -30,17 +30,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         :param api: api object
         """
 
-        # self.data_volume = data_volume
-        # self.swarm_manager_token_file = "swarm-manager-token"
-        # self.swarm_worker_token_file = "swarm-worker-token"
-        # self.commissioning_file = ".commission"
-        # self.ip_file = ".ip"
         super().__init__(shared_data_volume=data_volume)
-        # self.api = nb.ss_api() if not api else api
-        # self.ca = "ca.pem"
-        # self.cert = "cert.pem"
-        # self.key = "key.pem"
-        # self.context = ".context"
         self.telemetry_instance = Telemetry(data_volume, None)
 
     @staticmethod
@@ -118,7 +108,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if "vpn-csr" in payload:
             # get the respective VPN credential that was just created
-            vpn_server_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())["vpn-server-id"]
+            with open("{}/{}".format(self.data_volume, self.context)) as vsi:
+                vpn_server_id = json.loads(vsi.read()).get("vpn-server-id")
+            # vpn_server_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())["vpn-server-id"]
+
             searcher_filter = self.build_vpn_credential_search_filter(vpn_server_id)
 
             attempts = 0
@@ -236,6 +229,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         logging.info("Watching VPN credential in Nuvla...")
         try:
             credential_id = self.api().search("credential", filter=search_filter, last=1).resources[0].id
+            logging.info("Found VPN credential ID %s" % credential_id)
         except IndexError:
             credential_id = None
 

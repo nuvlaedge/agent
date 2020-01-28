@@ -12,6 +12,9 @@ import docker
 import logging
 import multiprocessing
 import socket
+import json
+import os
+import paho.mqtt.client as mqtt
 
 from agent.common import NuvlaBoxCommon
 from os import path, stat
@@ -40,14 +43,73 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'status': None
                        }
 
+        self.mqtt_telemetry = mqtt.Client()
+
+    def send_mqtt(self, cpu=None, ram=None, disks=None):
+        """ Gets the telemetry data and send the stats into the MQTT broker
+
+        :param cpu: tuple (capacity, load)
+        :param ram: tuple (capacity, used)
+        :param disk: list of {device: partition_name, capacity: value, used: value}
+        """
+
+        try:
+            self.mqtt_telemetry.connect(self.mqtt_broker_host, self.mqtt_broker_port, self.mqtt_broker_keep_alive)
+        except ConnectionRefusedError:
+            logging.exception("Connection to NuvlaBox MQTT broker refused")
+            self.mqtt_telemetry.disconnect()
+            return
+        except socket.gaierror:
+            logging.exception("The NuvlaBox MQTT broker is not reachable...trying again later")
+            self.mqtt_telemetry.disconnect()
+            return
+
+        msgs = []
+        if cpu:
+            # e1 = self.mqtt_telemetry.publish("cpu/capacity", payload=str(cpu[0]))
+            # e2 = self.mqtt_telemetry.publish("cpu/load", payload=str(cpu[1]))
+            # ISSUE: for some reason, the connection is lost after publishing with paho-mqtt
+
+            # using os.system for now
+            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
+                                                               "cpu/capacity",
+                                                               str(cpu[0])))
+
+            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
+                                                               "cpu/load",
+                                                               str(cpu[1])))
+
+        if ram:
+            # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
+            # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
+            # same issue as above
+            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
+                                                               "ram/capacity",
+                                                               str(ram[0])))
+
+            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
+                                                               "ram/used",
+                                                               str(ram[1])))
+
+        if disks:
+            for dsk in disks:
+                # self.mqtt_telemetry.publish("disks", payload=json.dumps(dsk))
+                # same issue as above
+                os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                   "disks",
+                                                                   json.dumps(dsk)))
+
+        # self.mqtt_telemetry.disconnect()
+
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
         cpu_info = self.get_cpu()
         ram_info = self.get_ram()
         disk_usage = self.get_disks_usage()
-        # usb_devices = self.get_usb_devices()
         operational_status = self.get_operational_status()
+
+        self.send_mqtt(cpu_info, ram_info, disk_usage)
 
         return {
             'resources': {

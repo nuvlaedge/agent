@@ -81,24 +81,25 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
 
         context_file = "{}/{}".format(self.data_volume, self.context)
 
-        logging.info('Generating context file {}'.format(context_file))
+        logging.info('Managing NB context file {}'.format(context_file))
 
-        with open(context_file, 'w+') as c:
-            try:
+        try:
+            with open(context_file) as c:
                 current_context = json.loads(c.read())
-            except ValueError:
-                logging.warning("Writing {} for the first time".format(context_file))
-                current_context = {}
+        except ValueError:
+            logging.warning("Writing {} for the first time".format(context_file))
+            current_context = {}
 
-            current_vpn_is_id = current_context.get("vpn-server-id")
+        current_vpn_is_id = current_context.get("vpn-server-id")
 
-            c.write(json.dumps(nuvlabox_resource))
+        with open(context_file, 'w') as cw:
+            cw.write(json.dumps(nuvlabox_resource))
 
-            if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
-                logging.info('VPN Server ID has been added/changed in Nuvla: {}. Triggering Network Manager...'
-                             .format(nuvlabox_resource.get("vpn-server-id")))
-                with open(self.vpn_infra_file, 'w') as v:
-                    v.write(nuvlabox_resource.get("vpn-server-id"))
+        if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
+            logging.info('VPN Server ID has been added/changed in Nuvla: {}. Triggering Network Manager...'
+                         .format(nuvlabox_resource.get("vpn-server-id")))
+            with open(self.vpn_infra_file, 'w') as v:
+                v.write(nuvlabox_resource.get("vpn-server-id"))
 
     def get_nuvlabox_info(self):
         """ Retrieves the respective resource from Nuvla """
