@@ -1,4 +1,9 @@
 # Changelog
+## [1.2.1] - 2020-01-28
+### Added 
+- publishes telemetry to internal nuvlabox mosquitto broker
+### Changed
+- fixed potential bug when opening context file during restart
 ## [1.2.0] - 2019-12-18
 ### Added 
 - watchdog for VPN credential
