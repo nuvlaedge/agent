@@ -1,4 +1,9 @@
 # Changelog
+## [1.2.2] - 2020-01-29
+### Added
+### Changed
+- fixed bootstrap File Error issue
+- mqtt messaging schema
 ## [1.2.1] - 2020-01-28
 ### Added 
 - publishes telemetry to internal nuvlabox mosquitto broker
