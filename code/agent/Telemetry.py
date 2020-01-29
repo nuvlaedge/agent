@@ -71,33 +71,26 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             # ISSUE: for some reason, the connection is lost after publishing with paho-mqtt
 
             # using os.system for now
-            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
-                                                               "cpu/capacity",
-                                                               str(cpu[0])))
 
-            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
-                                                               "cpu/load",
-                                                               str(cpu[1])))
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "cpu",
+                                                                 json.dumps(cpu)))
 
         if ram:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
             # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
             # same issue as above
-            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
-                                                               "ram/capacity",
-                                                               str(ram[0])))
-
-            os.system("mosquitto_pub -h {} -t {} -m {}".format(self.mqtt_broker_host,
-                                                               "ram/used",
-                                                               str(ram[1])))
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "ram",
+                                                                 json.dumps(ram)))
 
         if disks:
             for dsk in disks:
                 # self.mqtt_telemetry.publish("disks", payload=json.dumps(dsk))
                 # same issue as above
                 os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                   "disks",
-                                                                   json.dumps(dsk)))
+                                                                     "disks",
+                                                                     json.dumps(dsk)))
 
         # self.mqtt_telemetry.disconnect()
 
@@ -109,19 +102,34 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
 
-        self.send_mqtt(cpu_info, ram_info, disk_usage)
+        cpu_sample = {
+            "capacity": cpu_info[0],
+            "load": cpu_info[1]
+        }
+
+        ram_sample = {
+            "capacity": ram_info[0],
+            "used": ram_info[1]
+        }
+
+        self.send_mqtt(cpu_sample, ram_sample, disk_usage)
+
+        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
+        cpu.update(cpu_sample)
+
+        ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
+        ram.update(ram_sample)
+
+        disks = []
+        for dsk in disk_usage:
+            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
+            disks.append(dsk)
 
         return {
             'resources': {
-                'cpu': {
-                    'capacity': cpu_info[0],
-                    'load': cpu_info[1]
-                },
-                'ram': {
-                    'capacity': ram_info[0],
-                    'used': ram_info[1]
-                },
-                'disks': disk_usage
+                'cpu': cpu,
+                'ram': ram,
+                'disks': disks
             },
             'status': operational_status
         }
@@ -214,7 +222,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         self.api()._cimi_put(self.nb_status_id,
-                           json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
+                             json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         self.status = new_status
 
     def update_operational_status(self, status="RUNNING", status_log=None):

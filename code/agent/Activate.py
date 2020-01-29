@@ -86,7 +86,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             with open(context_file) as c:
                 current_context = json.loads(c.read())
-        except ValueError:
+        except (ValueError, FileNotFoundError):
             logging.warning("Writing {} for the first time".format(context_file))
             current_context = {}
 
