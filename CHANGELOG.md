@@ -1,4 +1,9 @@
 # Changelog
+## [1.2.3] - 2020-02-05
+### Added 
+- automatic tagging in Nuvla, based on Docker node labels
+### Changed
+- minimized commissioning payload
 ## [1.2.2] - 2020-01-29
 ### Added
 ### Changed
