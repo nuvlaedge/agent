@@ -161,23 +161,50 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return None
 
+    def get_labels(self):
+        """ Gets all the Docker node labels """
+        nuvla_tags = []
+
+        try:
+            container_labels = self.docker_client.api.inspect_node(self.docker_client.info()["Swarm"]["NodeID"])["Spec"]["Labels"]
+        except docker.errors.APIError:
+            logging.exception("Cannot get node labels")
+            return nuvla_tags
+
+        for label, value in container_labels.items():
+            if value:
+                nuvla_tags.append("{}={}".format(label, value))
+            else:
+                nuvla_tags.append(label)
+
+        return nuvla_tags
+
     def needs_commission(self, current_conf):
         """ Check whether the current commission data structure
         has changed wrt to the previous one
 
         :param current_conf: current commissioning data
-        :return bool
+        :return False when commissioning is not needed, or the changed attributes otherwise
         """
 
         try:
             with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
-                if current_conf == json.loads(r.read()):
+                old_conf = json.loads(r.read())
+                if current_conf == old_conf:
                     return False
                 else:
-                    return True
+                    diff_conf = {}
+                    for key, value in current_conf.items():
+                        if key in old_conf:
+                            if old_conf[key] == value:
+                                continue
+
+                        diff_conf[key] = value
+
+                    return diff_conf
         except FileNotFoundError:
             logging.info("Auto-commissioning the NuvlaBox for the first time...")
-            return True
+            return current_conf
 
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
@@ -198,9 +225,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         my_ip = self.telemetry_instance.get_ip()
         commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
-        if self.needs_commission(commission_payload):
-            logging.info("Commissioning the NuvlaBox...{}".format(commission_payload))
-            self.do_commission(commission_payload)
+        tags = self.get_labels()
+        commission_payload["tags"] = tags
+
+        minimum_commission_payload = self.needs_commission(commission_payload)
+        if minimum_commission_payload:
+            logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
+            self.do_commission(minimum_commission_payload)
 
         self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), commission_payload, is_json=True)
 

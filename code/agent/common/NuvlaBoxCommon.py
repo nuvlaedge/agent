@@ -14,6 +14,7 @@ import struct
 import logging
 import argparse
 import sys
+import docker
 from nuvla.api import Api
 from subprocess import PIPE, Popen
 
@@ -80,6 +81,7 @@ class NuvlaBoxCommon():
 
         :param shared_data_volume: shared Docker volume target path
         """
+        self.docker_client = docker.from_env()
         self.data_volume = shared_data_volume
         self.activation_flag = "{}/.activated".format(self.data_volume)
         self.swarm_manager_token_file = "swarm-manager-token"
