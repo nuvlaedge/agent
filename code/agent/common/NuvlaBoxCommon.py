@@ -88,6 +88,7 @@ class NuvlaBoxCommon():
         self.swarm_worker_token_file = "swarm-worker-token"
         self.commissioning_file = ".commission"
         self.status_file = ".status"
+        self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
         self.ip_file = ".ip"
         self.ca = "ca.pem"
         self.cert = "cert.pem"
