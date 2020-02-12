@@ -149,12 +149,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024),
             "os": docker_info["OperatingSystem"],
             "architecture": docker_info["Architecture"],
+            "hostname": docker_info["Name"],
             "ip": self.get_ip(),
             "nuvlabox-api-endpoint": self.get_ip(),
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%m/%d/%Y, %H:%M:%S"),
-            "bytes-sent": psutil.net_io_counters()[0],
-            "bytes-recv": psutil.net_io_counters()[1]
+            "net-stats": self.get_network_info()
         })
 
         return status_for_nuvla, all_status
@@ -166,6 +166,40 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         return self.docker_client.info()
+
+    def get_network_info(self):
+        """ Gets the list of net ifaces and corresponding rxbytes and txbytes
+
+        :returns {"iface1": {"rxbytes": X, "txbytes": Y}, "iface2": ...}
+        """
+
+        sysfs_net = "{}/sys/class/net".format(self.hostfs)
+
+        try:
+            ifaces = os.listdir(sysfs_net)
+        except FileNotFoundError:
+            logging.warning("Cannot find network information for this device")
+            return {}
+
+        net_io = {}
+        for interface in ifaces:
+            stats = "{}/{}/statistics".format(sysfs_net, interface)
+            try:
+                with open("{}/rx_bytes".format(stats)) as rx:
+                    rx_bytes = int(rx.read())
+                with open("{}/tx_bytes".format(stats)) as tx:
+                    tx_bytes = int(tx.read())
+            except FileNotFoundError:
+                logging.warning("Cannot calculate net usage for interface {}".format(interface))
+                net_io[interface] = {}
+                continue
+
+            net_io[interface] = {
+                "rx_bytes": rx_bytes,
+                "tx_bytes": tx_bytes
+            }
+
+        return net_io
 
     @staticmethod
     def get_cpu():

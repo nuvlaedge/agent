@@ -102,6 +102,7 @@ class NuvlaBoxCommon():
         self.mqtt_broker_host = "nb-mosquitto"
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
+        self.hostfs = "/rootfs"
 
         nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
         while nuvla_endpoint_raw[-1] == "/":

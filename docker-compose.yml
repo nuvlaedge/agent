@@ -8,6 +8,7 @@ services:
       - 5000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - /:/rootfs:ro
     environment:
       - NUVLABOX_UUID=${NUVLABOX_UUID}
       - NUVLA_ENDPOINT=${NUVLA_ENDPOINT:-nuvla.io}
