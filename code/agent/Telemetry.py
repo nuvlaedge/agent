@@ -153,7 +153,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "ip": self.get_ip(),
             "nuvlabox-api-endpoint": self.get_ip(),
             "docker-server-version": self.docker_client.version()["Version"],
-            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%m/%d/%Y, %H:%M:%S"),
+            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y/%m/%d, %H:%M:%S%Z"),
             "net-stats": self.get_network_info()
         })
 
@@ -170,7 +170,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def get_network_info(self):
         """ Gets the list of net ifaces and corresponding rxbytes and txbytes
 
-        :returns {"iface1": {"rxbytes": X, "txbytes": Y}, "iface2": ...}
+        :returns {"iface1": {"rx_bytes": X, "tx_bytes": Y}, "iface2": ...}
         """
 
         sysfs_net = "{}/sys/class/net".format(self.hostfs)
