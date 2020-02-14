@@ -1,4 +1,10 @@
 # Changelog
+## [1.3.0] - 2020-02-14
+### Added 
+- added host metrics to telemetry 
+- now collecting network metrics as well
+### Changed
+- expanded metric collection document for sharing with other NuvlaBox components
 ## [1.2.3] - 2020-02-05
 ### Added 
 - automatic tagging in Nuvla, based on Docker node labels
