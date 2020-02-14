@@ -10,10 +10,10 @@ resource in Nuvla.
 import datetime
 import docker
 import logging
-import multiprocessing
 import socket
 import json
 import os
+import psutil
 import paho.mqtt.client as mqtt
 
 from agent.common import NuvlaBoxCommon
@@ -97,6 +97,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
+        # get status for Nuvla
         cpu_info = self.get_cpu()
         ram_info = self.get_ram()
         disk_usage = self.get_disks_usage()
@@ -125,14 +126,80 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
             disks.append(dsk)
 
-        return {
+        status_for_nuvla = {
             'resources': {
                 'cpu': cpu,
                 'ram': ram,
                 'disks': disks
             },
-            'status': operational_status
+            'status': operational_status,
         }
+
+        # get all status
+        # TODO: merge this into main Nuvla telemetry report
+        docker_info = self.get_docker_info()
+
+        all_status = status_for_nuvla.copy()
+        all_status.update({
+            "cpu-usage": psutil.cpu_percent(),
+            "disk-usage": psutil.disk_usage("/")[3],
+            "memory-usage": psutil.virtual_memory()[2],
+            "cpus": cpu_info[0],
+            "memory": ram_info[0],
+            "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024),
+            "os": docker_info["OperatingSystem"],
+            "architecture": docker_info["Architecture"],
+            "hostname": docker_info["Name"],
+            "ip": self.get_ip(),
+            "nuvlabox-api-endpoint": self.get_ip(),
+            "docker-server-version": self.docker_client.version()["Version"],
+            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y/%m/%d, %H:%M:%S%Z"),
+            "net-stats": self.get_network_info()
+        })
+
+        return status_for_nuvla, all_status
+
+    def get_docker_info(self):
+        """ Invokes the command docker info
+
+        :returns JSON structure with all the Docker informations
+        """
+
+        return self.docker_client.info()
+
+    def get_network_info(self):
+        """ Gets the list of net ifaces and corresponding rxbytes and txbytes
+
+        :returns {"iface1": {"rx_bytes": X, "tx_bytes": Y}, "iface2": ...}
+        """
+
+        sysfs_net = "{}/sys/class/net".format(self.hostfs)
+
+        try:
+            ifaces = os.listdir(sysfs_net)
+        except FileNotFoundError:
+            logging.warning("Cannot find network information for this device")
+            return {}
+
+        net_io = {}
+        for interface in ifaces:
+            stats = "{}/{}/statistics".format(sysfs_net, interface)
+            try:
+                with open("{}/rx_bytes".format(stats)) as rx:
+                    rx_bytes = int(rx.read())
+                with open("{}/tx_bytes".format(stats)) as tx:
+                    tx_bytes = int(tx.read())
+            except FileNotFoundError:
+                logging.warning("Cannot calculate net usage for interface {}".format(interface))
+                net_io[interface] = {}
+                continue
+
+            net_io[interface] = {
+                "rx_bytes": rx_bytes,
+                "tx_bytes": tx_bytes
+            }
+
+        return net_io
 
     @staticmethod
     def get_cpu():
@@ -149,56 +216,24 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except:
             load_average = 0.0
 
-        return int(multiprocessing.cpu_count()), load_average
+        return int(psutil.cpu_count()), load_average
 
-    def get_ram(self):
+    @staticmethod
+    def get_ram():
         """ Looks up the total and used memory available """
 
-        result = self.shell_execute(['/usr/bin/free', '-m'])['stdout'].splitlines()[1].split()
-        capacity = int(result[1])
-        used = int(result[2])
+        capacity = int(round(psutil.virtual_memory()[0]/1024/1024))
+        used = int(round(psutil.virtual_memory()[3]/1024/1024))
         return capacity, used
 
-    def get_disk_part_usage(self, partition_path):
-        """ Individually looks up disk usage for partition """
-
-        result = self.shell_execute(['df', partition_path])['stdout'].splitlines()[1].split()
-        capacity = int(result[1]) // 1024
-        used = int(result[2]) // 1024
-        return capacity, used
-
-    def get_disks_usage(self):
+    @staticmethod
+    def get_disks_usage():
         """ Gets disk usage for N partitions """
 
-        disk_usage = self.get_disk_part_usage('/')
         return [{'device': 'overlay',
-                 'capacity': disk_usage[0],
-                 'used': disk_usage[1]
+                 'capacity': int(psutil.disk_usage('/')[0]/1024/1024/1024),
+                 'used': int(psutil.disk_usage('/')[1]/1024/1024/1024)
                  }]
-
-    @staticmethod
-    def to_json_disks(disks):
-        """ Transformation method """
-
-        disks_json = {}
-        for disk in disks:
-            disks_json[disk[0]] = {'capacity': disk[1], 'used': disk[2]}
-        return disks_json
-
-    @staticmethod
-    def to_json_usb(usb_devices):
-        """ Transformation method """
-
-        usb_devices_json = []
-        for usb in usb_devices:
-            usb_json = {'bus-id': usb[0],
-                        'device-id': usb[1],
-                        'vendor-id': usb[2],
-                        'product-id': usb[3],
-                        'description': usb[4],
-                        'busy': usb[5]}
-            usb_devices_json.append(usb_json)
-        return usb_devices_json
 
     def diff(self, old_status, new_status):
         """ Compares the previous status with the new one and discover the minimal changes """
@@ -216,7 +251,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def update_status(self):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
-        new_status = self.get_status()
+        new_status, all_status = self.get_status()
         updated_status, delete_attributes = self.diff(self.status, new_status)
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
@@ -224,6 +259,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.api()._cimi_put(self.nb_status_id,
                              json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         self.status = new_status
+
+        # write all status into the shared volume for the other components to re-use if necessary
+        with open(self.nuvlabox_status_file, 'w') as nbsf:
+            nbsf.write(json.dumps(all_status))
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status

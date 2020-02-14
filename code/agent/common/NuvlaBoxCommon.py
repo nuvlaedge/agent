@@ -88,6 +88,7 @@ class NuvlaBoxCommon():
         self.swarm_worker_token_file = "swarm-worker-token"
         self.commissioning_file = ".commission"
         self.status_file = ".status"
+        self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
         self.ip_file = ".ip"
         self.ca = "ca.pem"
         self.cert = "cert.pem"
@@ -101,6 +102,7 @@ class NuvlaBoxCommon():
         self.mqtt_broker_host = "nb-mosquitto"
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
+        self.hostfs = "/rootfs"
 
         nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
         while nuvla_endpoint_raw[-1] == "/":
