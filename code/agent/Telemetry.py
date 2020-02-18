@@ -14,6 +14,7 @@ import socket
 import json
 import os
 import psutil
+import requests
 import paho.mqtt.client as mqtt
 
 from agent.common import NuvlaBoxCommon
@@ -40,7 +41,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
         self.status = {'resources': None,
-                       'status': None
+                       'status': None,
+                       'nuvlabox-api-endpoint': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -133,6 +135,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 'disks': disks
             },
             'status': operational_status,
+            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint()
         }
 
         # get all status
@@ -151,7 +154,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "architecture": docker_info["Architecture"],
             "hostname": docker_info["Name"],
             "ip": self.get_ip(),
-            "nuvlabox-api-endpoint": self.get_ip(),
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y/%m/%d, %H:%M:%S%Z"),
             "net-stats": self.get_network_info()
@@ -279,6 +281,28 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.api()._cimi_put(self.nb_status_id, json=new_operational_status)
 
         self.set_local_operational_status(status)
+
+    def get_nuvlabox_api_endpoint(self):
+        """ Double checks that the NuvlaBox API is online
+
+        :returns URL for the NuvlaBox API endpoint
+        """
+
+        nb_ext_endpoint = "https://{}:5001/api".format(self.get_ip())
+        nb_int_endpoint = "https://management-api:5001/api"
+
+        try:
+            requests.get(nb_int_endpoint, verify=False)
+        except requests.exceptions.SSLError:
+            # the API endpoint exists, we simply did not authenticate
+            return nb_ext_endpoint
+        except requests.exceptions.ConnectionError:
+            return None
+        except:
+            # let's assume it doesn't exist either
+            return None
+
+        return nb_int_endpoint
 
     def get_ip(self):
         """ Discovers the NuvlaBox IP (aka endpoint) """
