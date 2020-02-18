@@ -1,4 +1,8 @@
 # Changelog
+## [1.3.2] - 2020-02-18
+### Added 
+- publish nuvlabox api endpoint to Nuvla
+### Changed
 ## [1.3.1] - 2020-02-18
 ### Added
 ### Changed
