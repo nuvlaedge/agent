@@ -159,7 +159,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
             return vpn_fields
 
-        return None
+        return True
 
     def get_labels(self):
         """ Gets all the Docker node labels """
@@ -231,9 +231,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         minimum_commission_payload = self.needs_commission(commission_payload)
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
-            self.do_commission(minimum_commission_payload)
-
-        self.write_file("{}/{}".format(self.data_volume, self.commissioning_file), commission_payload, is_json=True)
+            if self.do_commission(minimum_commission_payload):
+                self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
+                                commission_payload,
+                                is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
         """ Simply build the API query for searching this NuvlaBox's VPN credential
