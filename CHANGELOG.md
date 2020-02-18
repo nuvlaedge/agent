@@ -1,4 +1,8 @@
 # Changelog
+## [1.3.1] - 2020-02-18
+### Added
+### Changed
+- fixed re-commissioning when it fails
 ## [1.3.0] - 2020-02-14
 ### Added 
 - added host metrics to telemetry 
