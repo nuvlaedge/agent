@@ -53,13 +53,6 @@ The NuvlaBox agent will only work if a [Nuvla](https://github.com/nuvla/deployme
 
 Simply run `docker-compose up --build`
 
-### If Nuvla is running on `localhost`
-
-If Nuvla is running in the same machine, then you'll need to tweak the Docker network to allow the NuvlaBox Agent to reach out to Nuvla at localhost.
-
-In this scenario, please follow the instructions from https://github.com/nuvlabox/deployment#test-deployment, and use the [docker-compose.localhost.yml](docker-compose.localhost.yml) file.
-
-
 ## Test the NuvlaBox Agent
 
 This microservice is completely automated, meaning that as long as all the proper environment variables have been correctly set and the right dependencies have been met, the respective Docker container will start by itself, automatically activate the NuvlaBox in Nuvla and start sending telemetry to periodically.
