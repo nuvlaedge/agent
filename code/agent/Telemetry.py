@@ -42,7 +42,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.docker_client = docker.from_env()
         self.status = {'resources': None,
                        'status': None,
-                       'nuvlabox-api-endpoint': None
+                       'nuvlabox-api-endpoint': None,
+                       'operating-system': None,
+                       'architecture': None,
+                       'ip': None,
+                       'last-boot': None,
+                       'hostname': None,
+                       'docker-server-version': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
