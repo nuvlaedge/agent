@@ -6,7 +6,7 @@
     <groupId>sixsq.nuvlabox.agent</groupId>
     <artifactId>agent</artifactId>
     <packaging>pom</packaging>
-    <version>1.3.3-SNAPSHOT</version>
+    <version>1.4.0</version>
     <name>agent</name>
     <url>http://sixsq.com/</url>
 

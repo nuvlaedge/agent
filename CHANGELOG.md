@@ -1,4 +1,10 @@
 # Changelog
+## [1.4.0] - 2020-03-30
+### Added
+### Changed
+- optimized metrics retrieval for telemetry
+- re-formatted nuvlabox-status payload
+- expanded the telemetry metrics that are sent to Nuvla
 ## [1.3.2] - 2020-02-18
 ### Added 
 - publish nuvlabox api endpoint to Nuvla
