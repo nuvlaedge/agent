@@ -42,7 +42,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.docker_client = docker.from_env()
         self.status = {'resources': None,
                        'status': None,
-                       'nuvlabox-api-endpoint': None
+                       'nuvlabox-api-endpoint': None,
+                       'operating-system': None,
+                       'architecture': None,
+                       'ip': None,
+                       'last-boot': None,
+                       'hostname': None,
+                       'docker-server-version': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -100,19 +106,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Gets several types of information to populate the NuvlaBox status """
 
         # get status for Nuvla
-        cpu_info = self.get_cpu()
-        ram_info = self.get_ram()
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
+        docker_info = self.get_docker_info()
 
         cpu_sample = {
-            "capacity": cpu_info[0],
-            "load": cpu_info[1]
+            "capacity": int(psutil.cpu_count()),
+            "load": float(psutil.getloadavg()[2])
         }
 
         ram_sample = {
-            "capacity": ram_info[0],
-            "used": ram_info[1]
+            "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
+            "used": int(round(psutil.virtual_memory()[3]/1024/1024))
         }
 
         self.send_mqtt(cpu_sample, ram_sample, disk_usage)
@@ -134,29 +139,30 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 'ram': ram,
                 'disks': disks
             },
-            'status': operational_status,
-            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint()
-        }
-
-        # get all status
-        # TODO: merge this into main Nuvla telemetry report
-        docker_info = self.get_docker_info()
-
-        all_status = status_for_nuvla.copy()
-        all_status.update({
-            "cpu-usage": psutil.cpu_percent(),
-            "disk-usage": psutil.disk_usage("/")[3],
-            "memory-usage": psutil.virtual_memory()[2],
-            "cpus": cpu_info[0],
-            "memory": ram_info[0],
-            "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024),
-            "os": docker_info["OperatingSystem"],
+            'operating-system': docker_info["OperatingSystem"],
             "architecture": docker_info["Architecture"],
             "hostname": docker_info["Name"],
             "ip": self.get_ip(),
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y/%m/%d, %H:%M:%S%Z"),
-            "net-stats": self.get_network_info()
+            'status': operational_status,
+            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint()
+        }
+
+        net_stats = self.get_network_info()
+        if net_stats:
+            status_for_nuvla['resources']['net-stats'] = net_stats
+
+        # get all status for internal monitoring
+        all_status = status_for_nuvla.copy()
+        all_status.update({
+            "cpu-usage": psutil.cpu_percent(),
+            "cpu-load": cpu_sample['load'],
+            "disk-usage": psutil.disk_usage("/")[3],
+            "memory-usage": psutil.virtual_memory()[2],
+            "cpus": cpu_sample['capacity'],
+            "memory": ram_sample['capacity'],
+            "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024)
         })
 
         return status_for_nuvla, all_status
@@ -183,7 +189,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.warning("Cannot find network information for this device")
             return {}
 
-        net_io = {}
+        net_stats = []
         for interface in ifaces:
             stats = "{}/{}/statistics".format(sysfs_net, interface)
             try:
@@ -193,40 +199,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     tx_bytes = int(tx.read())
             except FileNotFoundError:
                 logging.warning("Cannot calculate net usage for interface {}".format(interface))
-                net_io[interface] = {}
                 continue
 
-            net_io[interface] = {
-                "rx_bytes": rx_bytes,
-                "tx_bytes": tx_bytes
-            }
+            net_stats.append({
+                "interface": interface,
+                "bytes-transmitted": tx_bytes,
+                "bytes-received": rx_bytes
+            })
 
-        return net_io
-
-    @staticmethod
-    def get_cpu():
-        """ Looks up the CPU percentage in use
-
-        :returns Total count of CPUs
-        :returns 1-min average load
-        """
-
-        try:
-            with open("/proc/loadavg", "r") as f:
-                averages = f.readline()
-                load_average = float(averages.split(' ')[2])
-        except:
-            load_average = 0.0
-
-        return int(psutil.cpu_count()), load_average
-
-    @staticmethod
-    def get_ram():
-        """ Looks up the total and used memory available """
-
-        capacity = int(round(psutil.virtual_memory()[0]/1024/1024))
-        used = int(round(psutil.virtual_memory()[3]/1024/1024))
-        return capacity, used
+        return net_stats
 
     @staticmethod
     def get_disks_usage():
