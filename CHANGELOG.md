@@ -1,4 +1,8 @@
 # Changelog
+## [1.4.1] - 2020-04-01
+### Added
+### Changed
+- change time format for last-boot parameter
 ## [1.4.0] - 2020-03-30
 ### Added
 ### Changed
