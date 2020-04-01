@@ -144,7 +144,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "hostname": docker_info["Name"],
             "ip": self.get_ip(),
             "docker-server-version": self.docker_client.version()["Version"],
-            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y/%m/%d, %H:%M:%S%Z"),
+            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             'status': operational_status,
             "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint()
         }
