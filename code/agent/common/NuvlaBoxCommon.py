@@ -99,6 +99,7 @@ class NuvlaBoxCommon():
         self.vpn_infra_file = "{}/vpn-is".format(self.vpn_folder)
         self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
         self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
+        self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
         self.mqtt_broker_host = "nb-mosquitto"
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90

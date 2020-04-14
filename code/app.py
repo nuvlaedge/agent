@@ -18,7 +18,8 @@ Arguments:
 import socket
 import threading
 import json
-from flask import Flask, request, jsonify
+import agent.AgentApi as AgentApi
+from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
@@ -77,6 +78,33 @@ def trigger_commission():
 
     commissioning_response = app.config["infra"].do_commission(payload)
     return jsonify(commissioning_response)
+
+
+@app.route('/api/peripheral/', defaults={'identifier': None}, methods=['POST'])
+@app.route('/api/peripheral/<identifier>', methods=['GET', 'PUT', 'DELETE'])
+def manage_peripheral(identifier):
+    """ API endpoint to let other components manage NuvlaBox peripherals
+
+    :param identifier: local id of the peripheral to be managed
+    """
+
+    logging.info('Received %s request for peripheral management' % request.method)
+
+    payload = None
+    if request.data:
+        payload = json.loads(request.data)
+
+    if identifier:
+        if request.method == "DELETE":
+            message, return_code = AgentApi.delete(identifier)
+        else:
+            message = "Not implemented"
+            return_code = 501
+    else:
+        # POST peripheral
+        message, return_code = AgentApi.post(payload)
+
+    return Response(message, status=return_code)
 
 
 if __name__ == "__main__":
