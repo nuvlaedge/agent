@@ -7,6 +7,7 @@ List of functions to support the NuvlaBox Agent API instantiated by app.py
 """
 
 import json
+import logging
 import os
 import nuvla.api
 
@@ -111,13 +112,17 @@ def delete(peripheral_identifier, peripheral_nuvla_id=None):
 
     if not local_peripheral_exists(peripheral_filepath):
         # local peripheral file does not exist, let's check in Nuvla
+        logging.info("{} does not exist locally. Checking in Nuvla...".format(peripheral_filepath))
         if peripheral_nuvla_id:
             try:
                 delete_peripheral = NB.api().delete(peripheral_nuvla_id)
+                logging.info("Deleted {} from Nuvla".format(peripheral_nuvla_id))
                 return delete_peripheral.data, delete_peripheral.data['status']
             except nuvla.api.api.NuvlaError as e:
+                logging.warning("While deleting {} from Nuvla: {}".format(peripheral_nuvla_id, e.response.json()))
                 return e.response.json(), e.response.status_code
         else:
+            logging.warning("{} and {} not found".format(peripheral_filepath, peripheral_nuvla_id))
             return "Peripheral not found", 404
     else:
         # file exists, but before deleting it, check if we need to infer the Nuvla ID from it
@@ -127,17 +132,46 @@ def delete(peripheral_identifier, peripheral_nuvla_id=None):
         if peripheral_nuvla_id:
             try:
                 delete_peripheral = NB.api().delete(peripheral_nuvla_id)
+                logging.info("Deleted {} from Nuvla".format(peripheral_nuvla_id))
+
                 os.remove(peripheral_filepath)
+                logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
+
                 return delete_peripheral.data, delete_peripheral.data['status']
             except nuvla.api.api.NuvlaError as e:
                 if e.response.status_code != 404:
+                    logging.warning("While deleting {} from Nuvla: {}".format(peripheral_nuvla_id, e.response.json()))
                     # Maybe something went wrong and we should try later, so keep the local peripheral copy alive
                     return e.response.json(), e.response.status_code
             except Exception as e:
                 # for any other deletion problem, report
+                logging.exception("While deleting {} from Nuvla".format(peripheral_nuvla_id))
                 return "Error occurred while deleting {}: {}".format(peripheral_identifier, e), 500
 
         # Even if the peripheral does not exist in Nuvla anymore, let's delete it locally
         os.remove(peripheral_filepath)
+        logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
         return "Deleted %s" % peripheral_identifier, 200
+
+
+def find(parameter, value):
+    """ Finds all locally registered peripherals that match parameter=value
+
+    :param parameter: name of the parameter to search for
+    :param value: value of that parameter
+    :returns list of peripheral matching the search query
+    """
+    matched_peripherals = []
+
+    for filename in os.listdir(NB.peripherals_dir):
+        with open(NB.peripherals_dir + "/" + filename) as f:
+            try:
+                content = json.loads(f.read())
+            except:
+                continue
+
+            if parameter in content and content[parameter] == value:
+                matched_peripherals.append(filename)
+
+    return matched_peripherals, 200
 

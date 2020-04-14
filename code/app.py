@@ -80,15 +80,15 @@ def trigger_commission():
     return jsonify(commissioning_response)
 
 
-@app.route('/api/peripheral/', defaults={'identifier': None}, methods=['POST'])
-@app.route('/api/peripheral/<identifier>', methods=['GET', 'PUT', 'DELETE'])
+@app.route('/api/peripheral', defaults={'identifier': None}, methods=['POST', 'GET'])
+@app.route('/api/peripheral/<path:identifier>', methods=['GET', 'PUT', 'DELETE'])
 def manage_peripheral(identifier):
     """ API endpoint to let other components manage NuvlaBox peripherals
 
     :param identifier: local id of the peripheral to be managed
     """
 
-    logging.info('Received %s request for peripheral management' % request.method)
+    logging.info('  ####   Received %s request for peripheral management' % request.method)
 
     payload = None
     if request.data:
@@ -96,15 +96,25 @@ def manage_peripheral(identifier):
 
     if identifier:
         if request.method == "DELETE":
+            logging.info('  ####   Deleting peripheral %s' % identifier)
             message, return_code = AgentApi.delete(identifier)
         else:
+            logging.info('  ####   Method %s not implemented yet!!' % request.method)
             message = "Not implemented"
             return_code = 501
     else:
-        # POST peripheral
-        message, return_code = AgentApi.post(payload)
+        # POST or FIND peripheral
+        if request.method == "POST":
+            logging.info('  ####   Creating new peripheral with payload %s' % payload)
+            message, return_code = AgentApi.post(payload)
+        else:
+            # GET
+            parameter = request.args.get('parameter')
+            value = request.args.get('value')
+            logging.info('  ####   Find peripherals with {}={}'.format(parameter, value))
+            message, return_code = AgentApi.find(parameter, value)
 
-    return Response(message, status=return_code)
+    return jsonify(message), return_code
 
 
 if __name__ == "__main__":
