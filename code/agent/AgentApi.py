@@ -36,11 +36,11 @@ def local_peripheral_save(filepath, content):
     """ Create a local file copy of the Nuvla peripheral resource
 
     :param filepath: path of the file to be written in the .peripherals folder
-    :param content: content of the file (normally JSON)
+    :param content: content of the file in JSON format
     """
 
     with open(filepath, 'w') as f:
-        f.write(content)
+        f.write(json.dumps(content))
 
 
 def local_peripheral_get_identifier(filepath):
