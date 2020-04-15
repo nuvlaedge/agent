@@ -69,18 +69,21 @@ def post(payload):
 
     if not payload or not isinstance(payload, dict):
         # Invalid payload
-        return "Payload {} malformed. It must be a JSON payload".format(payload), 400
+        logging.error("Payload {} malformed. It must be a JSON payload".format(payload))
+        return {"error": "Payload {} malformed. It must be a JSON payload".format(payload)}, 400
 
     try:
         peripheral_identifier = payload['identifier']
     except KeyError as e:
-        return "Payload {} is incomplete. Missing 'identifier'. {}".format(payload, e), 400
+        logging.error("Payload {} is incomplete. Missing 'identifier'. {}".format(payload, e))
+        return {"error": "Payload {} is incomplete. Missing 'identifier'. {}".format(payload, e)}, 400
 
     peripheral_filepath = "{}/{}".format(NB.peripherals_dir, peripheral_identifier)
 
     # Check if peripheral already exists locally before pushing to Nuvla
     if local_peripheral_exists(peripheral_filepath):
-        return "Peripheral %s file already registered. Please delete it first" % peripheral_identifier, 400
+        logging.error("Peripheral %s file already registered. Please delete it first" % peripheral_identifier)
+        return {"error": "Peripheral %s file already registered. Please delete it first" % peripheral_identifier}, 400
 
     # complete the payload with the NB specific attributes, in case they are missing
     if 'parent' not in payload:
@@ -100,19 +103,24 @@ def post(payload):
 
     # Try to POST the resource
     try:
+        logging.info("Posting peripheral {}".format(payload))
         new_peripheral = NB.api().add(nuvla_resource, payload)
     except nuvla.api.api.NuvlaError as e:
+        logging.exception("Failed to POST peripheral")
         return e.response.json(), e.response.status_code
     except Exception as e:
-        return "Unable to complete POST request: {}".format(e), 500
+        logging.exception("Unable to POST peripheral to Nuvla")
+        return {"error": "Unable to complete POST request: {}".format(e)}, 500
 
     payload['id'] = new_peripheral.data['resource-id']
 
     try:
+        logging.info("Saving peripheral %s locally" % payload['id'])
         local_peripheral_save(peripheral_filepath, payload)
     except Exception as e:
+        logging.exception("Unable to save peripheral. Reverting request...")
         delete(peripheral_identifier, peripheral_nuvla_id=payload['id'])
-        return "Unable to fulfill request: %s" % e, 500
+        return {"error": "Unable to fulfill request: %s" % e}, 500
 
     return new_peripheral.data, new_peripheral.data['status']
 
@@ -141,7 +149,7 @@ def delete(peripheral_identifier, peripheral_nuvla_id=None):
                 return e.response.json(), e.response.status_code
         else:
             logging.warning("{} and {} not found".format(peripheral_filepath, peripheral_nuvla_id))
-            return "Peripheral not found", 404
+            return {"error": "Peripheral not found"}, 404
     else:
         # file exists, but before deleting it, check if we need to infer the Nuvla ID from it
         if not peripheral_nuvla_id:
@@ -164,12 +172,12 @@ def delete(peripheral_identifier, peripheral_nuvla_id=None):
             except Exception as e:
                 # for any other deletion problem, report
                 logging.exception("While deleting {} from Nuvla".format(peripheral_nuvla_id))
-                return "Error occurred while deleting {}: {}".format(peripheral_identifier, e), 500
+                return {"error": "Error occurred while deleting {}: {}".format(peripheral_identifier, e)}, 500
 
         # Even if the peripheral does not exist in Nuvla anymore, let's delete it locally
         os.remove(peripheral_filepath)
         logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
-        return "Deleted %s" % peripheral_identifier, 200
+        return {"message": "Deleted %s" % peripheral_identifier}, 200
 
 
 def find(parameter, value, identifier_pattern):
