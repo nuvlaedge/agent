@@ -27,7 +27,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Constructs an Infrastructure object, with a status placeholder
 
         :param data_volume: shared volume
-        :param api: api object
         """
 
         super().__init__(shared_data_volume=data_volume)

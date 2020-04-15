@@ -18,7 +18,8 @@ Arguments:
 import socket
 import threading
 import json
-from flask import Flask, request, jsonify
+import agent.AgentApi as AgentApi
+from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
@@ -61,7 +62,7 @@ def set_status():
             print(app.config["telemetry"], dir(app.config["telemetry"]))
 
     logging.warning('to be implemented')
-    return "Hello World!"
+    return "to be implemented"
 
 
 @app.route('/api/commission', methods=['POST'])
@@ -77,6 +78,52 @@ def trigger_commission():
 
     commissioning_response = app.config["infra"].do_commission(payload)
     return jsonify(commissioning_response)
+
+
+@app.route('/api/healthcheck', methods=['GET'])
+def healthcheck():
+    """ Static endpoint just for clients to check if API/Agent is up and running
+    """
+
+    return jsonify(True)
+
+
+@app.route('/api/peripheral', defaults={'identifier': None}, methods=['POST', 'GET'])
+@app.route('/api/peripheral/<path:identifier>', methods=['GET', 'PUT', 'DELETE'])
+def manage_peripheral(identifier):
+    """ API endpoint to let other components manage NuvlaBox peripherals
+
+    :param identifier: local id of the peripheral to be managed
+    """
+
+    logging.info('  ####   Received %s request for peripheral management' % request.method)
+
+    payload = None
+    if request.data:
+        payload = json.loads(request.data)
+
+    if identifier:
+        if request.method == "DELETE":
+            logging.info('  ####   Deleting peripheral %s' % identifier)
+            message, return_code = AgentApi.delete(identifier)
+        else:
+            logging.info('  ####   Method %s not implemented yet!!' % request.method)
+            message = "Not implemented"
+            return_code = 501
+    else:
+        # POST or FIND peripheral
+        if request.method == "POST":
+            logging.info('  ####   Creating new peripheral with payload %s' % payload)
+            message, return_code = AgentApi.post(payload)
+        else:
+            # GET
+            parameter = request.args.get('parameter')
+            value = request.args.get('value')
+            identifier_pattern = request.args.get('identifier_pattern')
+            logging.info('  ####   Find peripherals with {}={}'.format(parameter, value))
+            message, return_code = AgentApi.find(parameter, value, identifier_pattern)
+
+    return jsonify(message), return_code
 
 
 if __name__ == "__main__":
@@ -111,7 +158,7 @@ if __name__ == "__main__":
     app.config["telemetry"] = telemetry
     app.config["infra"] = infra
 
-    monitoring_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0"})
+    monitoring_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": "80"})
     monitoring_thread.daemon = True
     monitoring_thread.start()
 
