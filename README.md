@@ -61,16 +61,240 @@ This microservice is completely automated, meaning that as long as all the prope
 
 The NuvlaBox Agent provides an internal REST API for allowing other NuvlaBox component to interact with Nuvla without having to implement their own Nuvla API clients, thus reducing duplicated code throughout the NuvlaBox software stack.
 
-**The API is not published outside the Docker network, and is available at _agent:5000/api_**
+**The API is not published outside the Docker network, and is available at _http://agent/api_**
 
 #### Get agent healthcheck
 
 Returns something if the agent and respective API are already up and running. This call is meant to be used as a healthcheck for other components that are waiting for the agent to be ready.
 
- - URL
+ - **URL**
  
- /api/
+    /api/healthcheck
+   
+ - **Methods**
+ 
+    `GET`
+    
+ - **URL Params**
+ 
+    None
+    
+ - **On success**
+    - Code: `200`
+    
+        Content: `True`
+        
+ - **Example**
+ 
+    ```
+    curl --fail -X GET http://agent/api/healthcheck
+    ```   
+ 
+#### Re-commission the NuvlaBox
 
+It might happen that due to a change in the NuvlaBox or a need to refresh certain credentials and/or system configurations, the NuvlaBox needs to be re-commissioned so that Nuvla can propagate the new changes. This call will trigger a NuvlaBox re-commissioning, according to the request payload.
+
+This call is tailored to be used by specific NuvlaBox components like the Network Manager.
+
+
+#### Manage NuvlaBox peripherals
+
+Gives other NuvlaBox components the ability to register and manage NuvlaBox peripherals in Nuvla. 
+
+##### Register a new NuvlaBox peripheral
+
+Creates a new nuvlabox-peripheral resource in Nuvla and save a local copy of this peripheral locally in the NuvlaBox.
+
+
+ - **URL**
+ 
+    /api/peripheral
+   
+ - **Methods**
+ 
+    `POST`
+    
+ - **URL Params**
+ 
+    None
+    
+  - **Data payload**
+ 
+    JSON document with a structure matching the `nuvlabox-peripheral` [resource in Nuvla](https://nuvla.io/ui/documentation/nuvlabox-peripheral-1-1) 
+    
+ - **On success**
+    - Code: `201`
+    
+        Content: JSON response from Nuvla. Example:
+        
+                ```
+                {
+                    "status": 201,
+                    "message": "some message",
+                    "resource-id": "<uuid of the Nuvla resource>"
+                }
+                ```
+ 
+ - **On error**
+    - Code: `400`
+    
+        Content: `{"error": "error message"}`
+        
+    - Code: `500`
+    
+        Content: `{"error": "error message"}`
+     
+    - Code: others
+    
+        Content: If the error has been thrown during the interaction with the Nuvla API, then the Nuvla response will be literally forwarded. This response might include error codes like `403`, `404`, `409`, etc.
+          
+       
+ - **Example**
+ 
+    ```
+    curl --fail -X POST http://agent/api/peripheral \
+            -H content-type:application/json \
+            -d '''{
+                    "available": true,
+                    "classes": ["audio", "video"],
+                    "name": "my peripheral",
+                    "description": "description of my awesome peripheral",
+                    "device-path": "/dev/mydevice",
+                    "identifier": "unique-local-peripheral-id",
+                    "interface": "USB",
+                    "product": "Gadget A",
+                    "serial-number": "1234567890",
+                    "vendor": "company A"
+                   }'''
+            
+    ```   
+    
+    Response:
+    ```
+    {
+        "message":"nuvlabox-peripheral/d149dc67-fd5c-402d-8608-306852a8c0f3 created",
+        "resource-id":"nuvlabox-peripheral/d149dc67-fd5c-402d-8608-306852a8c0f3",
+        "status":201    
+    }
+    ```
+ 
+##### Search for a NuvlaBox peripheral
+
+Returns a list of NuvlaBox peripherals matching the URL params in the request.
+
+ - **URL**
+ 
+    /api/peripheral
+   
+ - **Methods**
+ 
+    `GET`
+    
+ - **URL Params**
+ 
+    `parameter=<peripheral-parameter-name>`
+    
+    `value=<peripheral-parameter-value>`
+    
+    `identifier_pattern=<pattern-for-multiple-peripheral-identifiers>`
+    
+    
+  - **Data payload**
+ 
+    None
+    
+ - **On success**
+    - Code: `200`
+    
+        Content: List of matching peripheral identifiers
+       
+ - **Examples**
+ 
+    ```
+    curl --fail -X GET 'http://agent/api/peripheral?parameter=interface&value=USB'
+    ```   
+    
+    Response:
+    ```
+    ["unique-local-peripheral-id"]
+    ```
+    ---
+    
+    
+    ```
+    curl --fail -X GET 'http://agent/api/peripheral?parameter=interface&value=BT'
+    ```   
+    
+    Response:
+    ```
+    []
+    ```
+    
+    ---
+    
+    
+    ```
+    curl --fail -X GET 'http://agent/api/peripheral?identifier_pattern=unique-local*'
+    ```   
+    
+    Response:
+    ```
+    ["unique-local-peripheral-id", "unique-local-peripheral-id-2"]
+    ```
+ 
+
+##### Manage an existing peripheral
+
+Provides reading and editing capabilities for an existing peripheral.
+
+ - **URL**
+ 
+    /api/peripheral/<identifier>
+   
+ - **Methods**
+ 
+    `DELETE`
+    
+ - **URL Params**
+ 
+    None
+    
+  - **Data payload**
+ 
+    None
+    
+ - **On success**
+    - Code: `200`
+    
+        Content: `{"message": "successfully deleted ..."}` (can contain extra fields like `status` and `resource-id`)
+ 
+ - **On error**
+    - Code: `404`
+    
+        Content: `{"error": "not found error message"}`
+        
+    - Code: `500`
+    
+        Content: `{"error": "error message"}`
+     
+    - Code: others
+    
+        Content: If the error has been thrown during the interaction with the Nuvla API, then the Nuvla response will be literally forwarded. This response might include error codes like `403`, `404`, `409`, etc.
+          
+       
+ - **Example**
+ 
+    ```
+    curl -X DELETE http://agent/api/peripheral/bad-local-peripheral
+    ```   
+    
+    Response:
+    ```
+    {
+        "error":"Peripheral not found"
+    }
+    ```
+ 
 
 
 ## Contributing
