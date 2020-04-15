@@ -196,16 +196,16 @@ def find(parameter, value, identifier_pattern):
 
     for filename in glob.glob(search_dir):
         if parameter and value:
-            with open(NB.peripherals_dir + "/" + filename) as f:
+            with open(filename) as f:
                 try:
                     content = json.loads(f.read())
                 except:
                     continue
 
                 if parameter in content and content[parameter] == value:
-                    matched_peripherals.append(filename)
+                    matched_peripherals.append(os.path.basename(filename))
         else:
-            matched_peripherals.append(filename)
+            matched_peripherals.append(os.path.basename(filename))
 
     return matched_peripherals, 200
 
