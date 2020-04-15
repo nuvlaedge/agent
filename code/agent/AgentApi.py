@@ -148,7 +148,7 @@ def delete(peripheral_identifier, peripheral_nuvla_id=None):
                 logging.warning("While deleting {} from Nuvla: {}".format(peripheral_nuvla_id, e.response.json()))
                 return e.response.json(), e.response.status_code
         else:
-            logging.warning("{} and {} not found".format(peripheral_filepath, peripheral_nuvla_id))
+            logging.warning("{} not found and Nuvla resource ID not provided".format(peripheral_filepath))
             return {"error": "Peripheral not found"}, 404
     else:
         # file exists, but before deleting it, check if we need to infer the Nuvla ID from it
