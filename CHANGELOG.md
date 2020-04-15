@@ -1,4 +1,10 @@
 # Changelog
+## [1.5.0] - 2020-04-15
+### Added 
+- API for managing NuvlaBox peripherals
+### Changed
+- API port to 80
+- fixed docstrings
 ## [1.4.1] - 2020-04-01
 ### Added
 ### Changed
