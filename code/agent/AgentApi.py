@@ -9,6 +9,8 @@ List of functions to support the NuvlaBox Agent API instantiated by app.py
 import json
 import logging
 import os
+import glob
+import socket
 import nuvla.api
 
 from agent.common import NuvlaBoxCommon
@@ -79,6 +81,22 @@ def post(payload):
     # Check if peripheral already exists locally before pushing to Nuvla
     if local_peripheral_exists(peripheral_filepath):
         return "Peripheral %s file already registered. Please delete it first" % peripheral_identifier, 400
+
+    # complete the payload with the NB specific attributes, in case they are missing
+    if 'parent' not in payload:
+        payload['parent'] = NB.nuvlabox_id
+
+    if 'version' not in payload:
+        if os.path.exists("{}/{}".format(NB.data_volume, NB.context)):
+            version = json.loads(open("{}/{}".format(NB.data_volume, NB.context)).read())['version']
+        else:
+            try:
+                tag = NB.docker_client.api.inspect_container(socket.gethostname())['Config']['Labels']['git.branch']
+                version = int(tag.split('.')[0])
+            except (KeyError, ValueError, IndexError):
+                version = 1
+
+        payload['version'] = version
 
     # Try to POST the resource
     try:
@@ -154,24 +172,32 @@ def delete(peripheral_identifier, peripheral_nuvla_id=None):
         return "Deleted %s" % peripheral_identifier, 200
 
 
-def find(parameter, value):
+def find(parameter, value, identifier_pattern):
     """ Finds all locally registered peripherals that match parameter=value
 
     :param parameter: name of the parameter to search for
     :param value: value of that parameter
+    :param identifier_pattern: regex expression to limit the search query to peripherals matching the identifier pattern
     :returns list of peripheral matching the search query
     """
+
     matched_peripherals = []
 
-    for filename in os.listdir(NB.peripherals_dir):
-        with open(NB.peripherals_dir + "/" + filename) as f:
-            try:
-                content = json.loads(f.read())
-            except:
-                continue
+    search_dir = "{}/{}".format(NB.peripherals_dir, identifier_pattern) if identifier_pattern \
+        else NB.peripherals_dir + "/*"
 
-            if parameter in content and content[parameter] == value:
-                matched_peripherals.append(filename)
+    for filename in glob.glob(search_dir):
+        if parameter and value:
+            with open(NB.peripherals_dir + "/" + filename) as f:
+                try:
+                    content = json.loads(f.read())
+                except:
+                    continue
+
+                if parameter in content and content[parameter] == value:
+                    matched_peripherals.append(filename)
+        else:
+            matched_peripherals.append(filename)
 
     return matched_peripherals, 200
 

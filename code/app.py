@@ -62,7 +62,7 @@ def set_status():
             print(app.config["telemetry"], dir(app.config["telemetry"]))
 
     logging.warning('to be implemented')
-    return "Hello World!"
+    return "to be implemented"
 
 
 @app.route('/api/commission', methods=['POST'])
@@ -78,6 +78,14 @@ def trigger_commission():
 
     commissioning_response = app.config["infra"].do_commission(payload)
     return jsonify(commissioning_response)
+
+
+@app.route('/api/healthcheck', methods=['GET'])
+def healthcheck():
+    """ Static endpoint just for clients to check if API/Agent is up and running
+    """
+
+    return jsonify(True)
 
 
 @app.route('/api/peripheral', defaults={'identifier': None}, methods=['POST', 'GET'])
@@ -111,8 +119,9 @@ def manage_peripheral(identifier):
             # GET
             parameter = request.args.get('parameter')
             value = request.args.get('value')
+            identifier_pattern = request.args.get('identifier_pattern')
             logging.info('  ####   Find peripherals with {}={}'.format(parameter, value))
-            message, return_code = AgentApi.find(parameter, value)
+            message, return_code = AgentApi.find(parameter, value, identifier_pattern)
 
     return jsonify(message), return_code
 
