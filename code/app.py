@@ -158,7 +158,7 @@ if __name__ == "__main__":
     app.config["telemetry"] = telemetry
     app.config["infra"] = infra
 
-    monitoring_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0"})
+    monitoring_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": "80"})
     monitoring_thread.daemon = True
     monitoring_thread.start()
 

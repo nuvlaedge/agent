@@ -57,6 +57,22 @@ Simply run `docker-compose up --build`
 
 This microservice is completely automated, meaning that as long as all the proper environment variables have been correctly set and the right dependencies have been met, the respective Docker container will start by itself, automatically activate the NuvlaBox in Nuvla and start sending telemetry to periodically.
 
+### Agent API Calls
+
+The NuvlaBox Agent provides an internal REST API for allowing other NuvlaBox component to interact with Nuvla without having to implement their own Nuvla API clients, thus reducing duplicated code throughout the NuvlaBox software stack.
+
+**The API is not published outside the Docker network, and is available at _agent:5000/api_**
+
+#### Get agent healthcheck
+
+Returns something if the agent and respective API are already up and running. This call is meant to be used as a healthcheck for other components that are waiting for the agent to be ready.
+
+ - URL
+ 
+ /api/
+
+
+
 ## Contributing
 
 This is an open-source project, so all community contributions are more than welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md)
