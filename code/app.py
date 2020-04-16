@@ -100,7 +100,10 @@ def manage_peripheral(identifier):
 
     payload = None
     if request.data:
-        payload = json.loads(request.data)
+        try:
+            payload = json.loads(request.data)
+        except:
+            return jsonify({"error": "Payload {} malformed. It must be a JSON payload".format(payload)}), 400
 
     if identifier:
         if request.method == "DELETE":
