@@ -1,4 +1,8 @@
 # Changelog
+## [1.5.1] - 2020-04-16
+### Added
+### Changed
+- sanitize HTTP response whenever the request payload is malformed
 ## [1.5.0] - 2020-04-15
 ### Added 
 - API for managing NuvlaBox peripherals
