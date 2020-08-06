@@ -30,8 +30,8 @@ COPY --from=psutil-builder /usr/local/lib/python3.8/site-packages /usr/local/lib
 RUN apt update && apt install -y procps curl=7.64.0-4+deb10u1 mosquitto-clients
 
 RUN set -eux; \
-    apkArch="$(apk --print-arch)"; \
-    case "$apkArch" in \
+    Arch="$(dpkg --print-architecture)"; \
+    case "$Arch" in \
       armv7|armhf) apt install -y wiringpi; \
     esac;
 
