@@ -19,6 +19,7 @@ import paho.mqtt.client as mqtt
 
 from agent.common import NuvlaBoxCommon
 from os import path, stat
+from subprocess import run, PIPE, STDOUT
 
 
 class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
@@ -48,7 +49,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'ip': None,
                        'last-boot': None,
                        'hostname': None,
-                       'docker-server-version': None
+                       'docker-server-version': None,
+                       'gpio-pins': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -109,6 +111,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
         docker_info = self.get_docker_info()
+        if self.gpio_utility:
+            # Get GPIO pins status
+            gpio_pins = self.get_gpio_pins()
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -166,6 +171,38 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         })
 
         return status_for_nuvla, all_status
+
+    @staticmethod
+    def get_gpio_pins():
+        """ Uses the GPIO utility to scan and get the current status of all GPIO pins in the device.
+        It then parses the output and gives back a list of pins
+
+        :returns list of JSONs, i.e. [{pin: 1, name: GPIO. 1, bcm: 4, mode: IN}, {pin: 7, voltage: 0, mode: ALT1}]"""
+
+        command = ["gpio", "readall"]
+        gpio_out = run(command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
+
+        if gpio_out.returncode != 0:
+            return None
+
+        trimmed_gpio_out = gpio_out.stdout.splitlines()[3:-3]
+
+        formatted_gpio_status = []
+        for gpio_line in trimmed_gpio_out:
+            two_pins = gpio_line.split('||')
+            gpio_values = gpio_line.split('|')
+            gpio_pin = {}
+            try:
+                gpio_pin['pin'] = int(gpio_values[6])
+            except ValueError:
+                logging.warning(f"Unable to get GPIO pin status on {gpio_values}")
+                continue
+
+            try:
+                gpio_pin['bcm'] = int(gpio_values[1])
+            except ValueError:
+                logging.debug("No BCM pin for ")
+
 
     def get_docker_info(self):
         """ Invokes the command docker info

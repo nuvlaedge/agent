@@ -4,6 +4,7 @@ services:
   agent:
     build: .
     user: root
+    privileged: true
     expose:
       - 5000
     volumes:
