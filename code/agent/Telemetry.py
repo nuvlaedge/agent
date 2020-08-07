@@ -208,7 +208,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
                 try:
                     value = locate(exp["type"])
-                    gpio_pin[exp["attribute"].lower()] = value(gpio_values[exp["position"]])
+                    cast_value = value(gpio_values[exp["position"]].rstrip().lstrip())
+
+                    if cast_value or cast_value == 0:
+                        gpio_pin[exp["attribute"].lower()] = cast_value
+                    else:
+                        continue
                 except ValueError:
                     logging.debug(f"No suitable {exp['attribute']} value for pin {gpio_pin['pin']}")
                     continue
