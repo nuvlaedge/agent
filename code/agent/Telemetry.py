@@ -323,11 +323,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         minimal_update = {}
         delete_attributes = []
         for key in self.status.keys():
-            if new_status[key] is None:
-                delete_attributes.append(key)
-                continue
-            if old_status[key] != new_status[key]:
-                minimal_update[key] = new_status[key]
+            if key in new_status:
+                if new_status[key] is None:
+                    delete_attributes.append(key)
+                    continue
+                if old_status[key] != new_status[key]:
+                    minimal_update[key] = new_status[key]
         return minimal_update, delete_attributes
 
     def update_status(self):
