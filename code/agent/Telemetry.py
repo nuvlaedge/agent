@@ -197,11 +197,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.error(f"Missing indexes needed to parse GPIO pin: {indexes}. Need {needed_indexes_len}")
             return None
 
-        try:
-            for i in range(len(expected)):
-                expected[i]["position"] = indexes[i]
-
-
         gpio_values = line.split('|')
         gpio_pin = {}
         try:
