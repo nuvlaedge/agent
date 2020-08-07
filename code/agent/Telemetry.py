@@ -189,19 +189,27 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         formatted_gpio_status = []
         for gpio_line in trimmed_gpio_out:
-            two_pins = gpio_line.split('||')
             gpio_values = gpio_line.split('|')
             gpio_pin = {}
+
+            # left column pin
             try:
                 gpio_pin['pin'] = int(gpio_values[6])
+                # if we can get pin, we can move on. Pin is the only mandatory attr
+
+                # the left column pin attributes are in positions:
+                # 1: BCM value
+                #
+                for value_index in [(1, "BCM"), ]:
+                    try:
+                        gpio_pin[value_index[1]] = int(gpio_values[value_index[0]])
+                    except ValueError:
+                        logging.debug(f"No BCM pin for pin {gpio_pin['pin']}")
             except ValueError:
                 logging.warning(f"Unable to get GPIO pin status on {gpio_values}")
-                continue
+                # do nothing, cause we still have to parse the second column of this line
 
-            try:
-                gpio_pin['bcm'] = int(gpio_values[1])
-            except ValueError:
-                logging.debug("No BCM pin for ")
+
 
 
     def get_docker_info(self):
