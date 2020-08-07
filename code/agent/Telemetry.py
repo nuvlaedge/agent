@@ -20,6 +20,7 @@ import paho.mqtt.client as mqtt
 from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
+from pydoc import locate
 
 
 class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
@@ -111,9 +112,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
         docker_info = self.get_docker_info()
-        if self.gpio_utility:
-            # Get GPIO pins status
-            gpio_pins = self.get_gpio_pins()
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -158,6 +156,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if net_stats:
             status_for_nuvla['resources']['net-stats'] = net_stats
 
+        if self.gpio_utility:
+            # Get GPIO pins status
+            gpio_pins = self.get_gpio_pins()
+
+            if gpio_pins:
+                status_for_nuvla['gpio-pins'] = gpio_pins
+
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
         all_status.update({
@@ -173,7 +178,56 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         return status_for_nuvla, all_status
 
     @staticmethod
-    def get_gpio_pins():
+    def parse_gpio_pin_cell(indexes, line):
+        """ Parses one cell of the output from gpio readall, which has 2 pins
+
+        :param indexes: the index numbers for the values of BCM, Name, Mode, V and Physical (in this order)
+
+        :returns a GPIO dict obj with the parsed pin"""
+
+        # the expected list of attributes is
+        expected = [{"position": None, "attribute": "BCM", "type": "int"},
+                    {"position": None, "attribute": "NAME", "type": "str"},
+                    {"position": None, "attribute": "MODE", "type": "str"},
+                    {"position": None, "attribute": "VOLTAGE", "type": "int"}]
+
+        needed_indexes_len = 5
+
+        if len(indexes) < needed_indexes_len:
+            logging.error(f"Missing indexes needed to parse GPIO pin: {indexes}. Need {needed_indexes_len}")
+            return None
+
+        try:
+            for i in range(len(expected)):
+                expected[i]["position"] = indexes[i]
+
+
+        gpio_values = line.split('|')
+        gpio_pin = {}
+        try:
+            gpio_pin['pin'] = int(gpio_values[indexes[-1]])
+            # if we can get the physical pin, we can move on. Pin is the only mandatory attr
+
+            for i, exp in enumerate(expected):
+                expected[i]["position"] = indexes[i]
+
+                try:
+                    value = locate(exp["type"])
+                    gpio_pin[exp["attribute"].lower()] = value(gpio_values[exp["position"]])
+                except ValueError:
+                    logging.debug(f"No suitable {exp['attribute']} value for pin {gpio_pin['pin']}")
+                    continue
+
+            return gpio_pin
+        except ValueError:
+            logging.warning(f"Unable to get GPIO pin status on {gpio_values}, index {indexes[-1]}")
+            return None
+        except:
+            # if there's any other issue while doing so, it means the provided argument is not valid
+            logging.exception(f"Invalid list of indexes {indexes} for GPIO pin in {line}. Cannot parse this pin")
+            return None
+
+    def get_gpio_pins(self):
         """ Uses the GPIO utility to scan and get the current status of all GPIO pins in the device.
         It then parses the output and gives back a list of pins
 
@@ -182,35 +236,27 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         command = ["gpio", "readall"]
         gpio_out = run(command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
 
-        if gpio_out.returncode != 0:
+        if gpio_out.returncode != 0 or not gpio_out.stdout:
             return None
 
         trimmed_gpio_out = gpio_out.stdout.splitlines()[3:-3]
 
         formatted_gpio_status = []
         for gpio_line in trimmed_gpio_out:
-            gpio_values = gpio_line.split('|')
-            gpio_pin = {}
 
-            # left column pin
-            try:
-                gpio_pin['pin'] = int(gpio_values[6])
-                # if we can get pin, we can move on. Pin is the only mandatory attr
+            # each line has two columns = 2 pins
 
-                # the left column pin attributes are in positions:
-                # 1: BCM value
-                #
-                for value_index in [(1, "BCM"), ]:
-                    try:
-                        gpio_pin[value_index[1]] = int(gpio_values[value_index[0]])
-                    except ValueError:
-                        logging.debug(f"No BCM pin for pin {gpio_pin['pin']}")
-            except ValueError:
-                logging.warning(f"Unable to get GPIO pin status on {gpio_values}")
-                # do nothing, cause we still have to parse the second column of this line
+            first_pin_indexes = [1, 3, 4, 5, 6]
+            second_pin_indexes = [14, 11, 10, 9, 8]
+            first_pin = self.parse_gpio_pin_cell(first_pin_indexes, gpio_line)
+            if first_pin:
+                formatted_gpio_status.append(first_pin)
 
+            second_pin = self.parse_gpio_pin_cell(second_pin_indexes, gpio_line)
+            if second_pin:
+                formatted_gpio_status.append(second_pin)
 
-
+        return formatted_gpio_status
 
     def get_docker_info(self):
         """ Invokes the command docker info
