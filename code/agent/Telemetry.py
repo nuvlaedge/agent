@@ -58,7 +58,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.gpio_utility = False
         try:
-            run(['gpio', '-v'])
+            run(['gpio', '-v'], stdout=PIPE)
             self.gpio_utility = True
         except:
             # no need to catch any exception. This is just a quick check and fail for the GPIO utility
