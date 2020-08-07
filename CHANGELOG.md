@@ -1,4 +1,8 @@
 # Changelog
+## [1.6.0] - 2020-08-07
+### Added 
+- GPIO telemetry when available (for ARM* devices only)
+### Changed
 ## [1.5.1] - 2020-04-16
 ### Added
 ### Changed
