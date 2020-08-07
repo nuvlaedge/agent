@@ -29,6 +29,12 @@ COPY --from=psutil-builder /usr/local/lib/python3.8/site-packages /usr/local/lib
 
 RUN apt update && apt install -y procps curl=7.64.0-4+deb10u1 mosquitto-clients
 
+RUN set -eux; \
+    Arch="$(dpkg --print-architecture)"; \
+    case "$Arch" in \
+      armv7|armhf) curl "https://project-downloads.drogon.net/wiringpi-latest.deb" --output /tmp/wiringpi.deb && dpkg -i /tmp/wiringpi.deb; \
+    esac;
+
 RUN apt-get clean autoclean \
     && apt-get autoremove --yes \
     && /bin/bash -c "rm -rf /var/lib/{apt,dpkg,cache,log}/"debian:stretch-slim

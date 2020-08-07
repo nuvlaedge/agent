@@ -16,7 +16,6 @@ import argparse
 import sys
 import docker
 from nuvla.api import Api
-from subprocess import PIPE, Popen
 
 
 def get_mac_address(ifname, separator=':'):
