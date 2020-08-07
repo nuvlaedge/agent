@@ -56,6 +56,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.mqtt_telemetry = mqtt.Client()
 
+        self.gpio_utility = False
+        try:
+            run(['gpio', '-v'])
+            self.gpio_utility = True
+        except:
+            # no need to catch any exception. This is just a quick check and fail for the GPIO utility
+            pass
+
     def send_mqtt(self, cpu=None, ram=None, disks=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 

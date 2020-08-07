@@ -16,7 +16,6 @@ import argparse
 import sys
 import docker
 from nuvla.api import Api
-from subprocess import run, PIPE, Popen
 
 
 def get_mac_address(ifname, separator=':'):
@@ -131,14 +130,6 @@ class NuvlaBoxCommon():
 
         if not self.nuvlabox_id.startswith("nuvlabox/"):
             self.nuvlabox_id = 'nuvlabox/{}'.format(self.nuvlabox_id)
-
-        self.gpio_utility = False
-        try:
-            run(['gpio', '-v'])
-            self.gpio_utility = True
-        except:
-            # no need to catch any exception. This is just a quick check and fail for the GPIO utility
-            pass
 
     def api(self):
         """ Returns an Api object """
