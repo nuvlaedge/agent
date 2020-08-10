@@ -44,10 +44,8 @@ def get_log_level(args):
     return logging.INFO
 
 
-def logger(log_level, log_file):
+def logger(log_level):
     """ Configures logging """
-
-    logging.basicConfig(filename=log_file)
 
     root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
@@ -67,7 +65,6 @@ def arguments():
     parser = argparse.ArgumentParser(description='NuvlaBox Agent')
     parser.add_argument('-d', '--debug', dest='debug', default=False, action='store_true')
     parser.add_argument('-q', '--quiet', dest='quiet', default=False, action='store_true')
-    parser.add_argument('-l', '--log-filepath', dest='log_file', default=None, metavar='FILE')
 
     return parser
 

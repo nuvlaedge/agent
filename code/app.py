@@ -40,9 +40,7 @@ def init():
 
     params = NuvlaBoxCommon.arguments().parse_args()
 
-    final_log_file = params.log_file if params.log_file else default_log_filename
-
-    logger = NuvlaBoxCommon.logger(NuvlaBoxCommon.get_log_level(params), final_log_file)
+    logger = NuvlaBoxCommon.logger(NuvlaBoxCommon.get_log_level(params))
 
     return logger, params
 
