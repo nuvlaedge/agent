@@ -16,6 +16,7 @@ import argparse
 import sys
 import docker
 from nuvla.api import Api
+from subprocess import PIPE, Popen
 
 
 def get_mac_address(ifname, separator=':'):
@@ -85,6 +86,7 @@ class NuvlaBoxCommon():
         self.commissioning_file = ".commission"
         self.status_file = ".status"
         self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
+        self.nuvlabox_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
         self.ip_file = ".ip"
         self.ca = "ca.pem"
         self.cert = "cert.pem"
@@ -127,6 +129,10 @@ class NuvlaBoxCommon():
 
         if not self.nuvlabox_id.startswith("nuvlabox/"):
             self.nuvlabox_id = 'nuvlabox/{}'.format(self.nuvlabox_id)
+
+        self.nuvlabox_engine_version = None
+        if 'NUVLABOX_ENGINE_VERSION' in os.environ and os.environ['NUVLABOX_ENGINE_VERSION']:
+            self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
 
     def api(self):
         """ Returns an Api object """
