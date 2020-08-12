@@ -51,7 +51,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'last-boot': None,
                        'hostname': None,
                        'docker-server-version': None,
-                       'gpio-pins': None
+                       'gpio-pins': None,
+                       'nuvlabox-engine-version': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -170,6 +171,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             if gpio_pins:
                 status_for_nuvla['gpio-pins'] = gpio_pins
+
+        # set the nb engine version if it exists
+        if self.nuvlabox_engine_version:
+            status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
