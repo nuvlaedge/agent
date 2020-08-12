@@ -1,4 +1,8 @@
 # Changelog
+## [1.7.0] - 2020-08-12
+### Added 
+- nuvlabox-engine-version information is now part of telemetry
+### Changed
 ## [1.6.1] - 2020-08-10
 ### Added
 ### Changed
