@@ -51,7 +51,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'last-boot': None,
                        'hostname': None,
                        'docker-server-version': None,
-                       'gpio-pins': None
+                       'gpio-pins': None,
+                       'nuvlabox-engine-version': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -63,28 +64,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except:
             # no need to catch any exception. This is just a quick check and fail for the GPIO utility
             pass
-
-        # Only once, at initilization, set the nb engine version if it exists
-        if self.nuvlabox_engine_version:
-            logging.info(f"Setting NuvlaBox Engine Version {self.nuvlabox_engine_version} in Nuvla")
-            self.set_nuvlabox_engine_version()
-
-    def set_nuvlabox_engine_version(self):
-        """ PUTs the NuvlaBox Engine version in Nuvla, if it has changed """
-
-        # check local registered version
-        if os.path.isfile(f"{self.nuvlabox_engine_version_file}"):
-            with open(self.nuvlabox_engine_version_file) as nbev:
-                existing_version = nbev.read()
-
-            if self.nuvlabox_engine_version in existing_version:
-                return
-
-        self.api()._cimi_put(self.nb_status_id,
-                             json={"nuvlabox-engine-version": self.nuvlabox_engine_version})
-
-        with open(self.nuvlabox_engine_version_file, 'w') as nbevw:
-            nbevw.write(self.nuvlabox_engine_version)
 
     def send_mqtt(self, cpu=None, ram=None, disks=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
@@ -192,6 +171,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             if gpio_pins:
                 status_for_nuvla['gpio-pins'] = gpio_pins
+
+        # set the nb engine version if it exists
+        if self.nuvlabox_engine_version:
+            status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
