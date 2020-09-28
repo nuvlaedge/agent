@@ -1,4 +1,8 @@
 # Changelog
+## [1.8.0] - 2020-09-28
+### Added 
+- report enabled Docker Plugins as part of the telemetry
+### Changed
 ## [1.7.0] - 2020-08-12
 ### Added 
 - nuvlabox-engine-version information is now part of telemetry
