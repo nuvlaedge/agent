@@ -157,8 +157,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "ip": self.get_ip(),
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            'status': operational_status,
-            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint()
+            "status": operational_status,
+            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint(),
+            "docker-plugins": self.get_docker_plugins()
         }
 
         net_stats = self.get_network_info()
@@ -270,6 +271,20 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 formatted_gpio_status.append(second_pin)
 
         return formatted_gpio_status
+
+    def get_docker_plugins(self):
+        """ Gets the list of all Docker plugins that are installed and enabled
+
+        :returns list of strings (plugin names) """
+
+        all_plugins = self.docker_client.plugins.list()
+
+        enabled_plugins = []
+        for plugin in all_plugins:
+            if plugin.enabled:
+                enabled_plugins.append(plugin.name)
+
+        return enabled_plugins
 
     def get_docker_info(self):
         """ Invokes the command docker info
