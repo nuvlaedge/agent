@@ -52,7 +52,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'hostname': None,
                        'docker-server-version': None,
                        'gpio-pins': None,
-                       'nuvlabox-engine-version': None
+                       'nuvlabox-engine-version': None,
+                       'inferred-location': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -363,6 +364,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     inferred_location.extend([longitude, latitude])
                     if service_info['altitude_key']:
                         inferred_location.append(geolocation[service_info['altitude_key']])
+
+                # if we got here, then we already have coordinates, no need for further queries
+                break
             except KeyError:
                 logging.exception(f"Cannot get coordination from geolocation JSON {geolocation}, with service {service}")
                 continue
