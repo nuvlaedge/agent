@@ -338,7 +338,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         inferred_location = []
         for service, service_info in self.ip_geolocation_services.items():
-            logging.info(service, service_info)
             try:
                 logging.debug("Inferring geolocation with 3rd party service %s" % service)
                 geolocation = requests.get(service_info['url']).json()
@@ -374,7 +373,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 logging.exception(f"Error while parsing geolocation from {service}")
                 continue
 
-        logging.warning(inferred_location)
         if inferred_location:
             # we have valid coordinates, so let's keep a local record of it
             content = {"coordinated": inferred_location, "timestamp": now}
@@ -470,13 +468,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
-        self.api()._cimi_put(self.nb_status_id,
+        try:
+            self.api()._cimi_put(self.nb_status_id,
                              json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
-        self.status = new_status
+        except:
+            logging.exception("Unable to update NuvlaBox status in Nuvla")
+            return None
+        finally:
+            # write all status into the shared volume for the other components to re-use if necessary
+            with open(self.nuvlabox_status_file, 'w') as nbsf:
+                nbsf.write(json.dumps(all_status))
 
-        # write all status into the shared volume for the other components to re-use if necessary
-        with open(self.nuvlabox_status_file, 'w') as nbsf:
-            nbsf.write(json.dumps(all_status))
+        self.status = new_status
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status
