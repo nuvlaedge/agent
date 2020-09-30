@@ -52,7 +52,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'hostname': None,
                        'docker-server-version': None,
                        'gpio-pins': None,
-                       'nuvlabox-engine-version': None
+                       'nuvlabox-engine-version': None,
+                       'inferred-location': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -64,6 +65,42 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except:
             # no need to catch any exception. This is just a quick check and fail for the GPIO utility
             pass
+
+        self.ip_geolocation_services = {
+            "ip-api.com": {
+                "url": "http://ip-api.com/json/",
+                "coordinates_key": None,
+                "longitude_key": "lon",
+                "latitude_key": "lat",
+                "altitude_key": None
+            },
+            "ipinfo.io": {
+                "url": "https://ipinfo.io/json",
+                "coordinates_key": "loc",
+                "longitude_key": None,
+                "latitude_key": None,
+                "altitude_key": None
+            },
+            "ipapi.co": {
+                "url": "https://ipapi.co/json",
+                "coordinates_key": None,
+                "longitude_key": "longitude",
+                "latitude_key": "latitude",
+                "altitude_key": None
+            },
+            "ipgeolocation.com": {
+                "url": "https://ipgeolocation.com/?json=1",
+                "coordinates_key": "coords",
+                "longitude_key": None,
+                "latitude_key": None,
+                "altitude_key": None
+            }
+        }
+
+        # Minimum interval, in seconds, for inferring IP-based geolocation
+        # (to avoid network jittering and 3rd party service spamming)
+        # Default to 1 hour
+        self.time_between_get_geolocation = 3600
 
     def send_mqtt(self, cpu=None, ram=None, disks=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
@@ -173,6 +210,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             if gpio_pins:
                 status_for_nuvla['gpio-pins'] = gpio_pins
 
+        inferred_location = self.get_ip_geolocation()
+        if inferred_location:
+            status_for_nuvla['inferred-location'] = inferred_location
+
         # set the nb engine version if it exists
         if self.nuvlabox_engine_version:
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
@@ -272,6 +313,74 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return formatted_gpio_status
 
+    def get_ip_geolocation(self):
+        """ Based on a preset of geolocation services, this method tries, one by one, to infer the
+        NuvlaBox physical location based on IP
+
+        :returns inferred_location. A list ([longitude, latitude, altitude]). Note that 'altitude' might be missing"""
+
+        now = int(datetime.datetime.timestamp(datetime.datetime.now()))
+        try:
+            with open(self.ip_geolocation_file) as ipgeof:
+                previous_geolocation_json = json.loads(ipgeof.read())
+
+            before = previous_geolocation_json["timestamp"]
+
+            if now - before <= self.time_between_get_geolocation:
+                # too soon to infer geolocation
+                return None
+        except FileNotFoundError:
+            logging.debug("Inferring IP-based geolocation for the first time")
+        except (json.decoder.JSONDecodeError, KeyError):
+            logging.exception("Existing IP-based geolocation is malformed. Inferring again...")
+        except:
+            logging.exception("Error while preparing to infer IP-based geolocation. Forcing infer operation...")
+
+        inferred_location = []
+        for service, service_info in self.ip_geolocation_services.items():
+            try:
+                logging.debug("Inferring geolocation with 3rd party service %s" % service)
+                geolocation = requests.get(service_info['url'], allow_redirects=False).json()
+            except:
+                logging.exception(f"Could not infer IP-based geolocation from service {service}")
+                continue
+
+            try:
+                if service_info['coordinates_key']:
+                    coordinates = geolocation[service_info['coordinates_key']]
+                    # note that Nuvla expects [long, lat], and not [lat, long], thus the reversing
+                    if isinstance(coordinates, str):
+                        inferred_location = coordinates.split(',')[::-1]
+                    elif isinstance(coordinates, list):
+                        inferred_location = coordinates[::-1]
+                    else:
+                        logging.warning(f"Cannot parse coordinates {coordinates} retrieved from geolocation service {service}")
+                        continue
+                else:
+                    longitude = geolocation[service_info['longitude_key']]
+                    latitude = geolocation[service_info['latitude_key']]
+
+                    inferred_location.extend([longitude, latitude])
+                    if service_info['altitude_key']:
+                        inferred_location.append(geolocation[service_info['altitude_key']])
+
+                # if we got here, then we already have coordinates, no need for further queries
+                break
+            except KeyError:
+                logging.exception(f"Cannot get coordination from geolocation JSON {geolocation}, with service {service}")
+                continue
+            except:
+                logging.exception(f"Error while parsing geolocation from {service}")
+                continue
+
+        if inferred_location:
+            # we have valid coordinates, so let's keep a local record of it
+            content = {"coordinated": inferred_location, "timestamp": now}
+            with open(self.ip_geolocation_file, 'w') as ipgeof:
+                ipgeof.write(json.dumps(content))
+
+        return inferred_location
+
     def get_docker_plugins(self):
         """ Gets the list of all Docker plugins that are installed and enabled
 
@@ -359,13 +468,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
-        self.api()._cimi_put(self.nb_status_id,
+        try:
+            self.api()._cimi_put(self.nb_status_id,
                              json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
-        self.status = new_status
+        except:
+            logging.exception("Unable to update NuvlaBox status in Nuvla")
+            return None
+        finally:
+            # write all status into the shared volume for the other components to re-use if necessary
+            with open(self.nuvlabox_status_file, 'w') as nbsf:
+                nbsf.write(json.dumps(all_status))
 
-        # write all status into the shared volume for the other components to re-use if necessary
-        with open(self.nuvlabox_status_file, 'w') as nbsf:
-            nbsf.write(json.dumps(all_status))
+        self.status = new_status
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status
