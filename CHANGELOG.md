@@ -1,4 +1,9 @@
 # Changelog
+## [1.9.0] - 2020-09-30
+### Added 
+- automatic IP-based geolocation retrieval
+### Changed
+- fixed consistency on nuvlabox status persistency
 ## [1.8.0] - 2020-09-28
 ### Added 
 - report enabled Docker Plugins as part of the telemetry
