@@ -340,7 +340,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         for service, service_info in self.ip_geolocation_services.items():
             try:
                 logging.debug("Inferring geolocation with 3rd party service %s" % service)
-                geolocation = requests.get(service_info['url']).json()
+                geolocation = requests.get(service_info['url'], allow_redirects=False).json()
             except:
                 logging.exception(f"Could not infer IP-based geolocation from service {service}")
                 continue
