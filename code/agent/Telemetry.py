@@ -337,6 +337,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         inferred_location = []
         for service, service_info in self.ip_geolocation_services.items():
+            logging.info(service, service_info)
             try:
                 logging.debug("Inferring geolocation with 3rd party service %s" % service)
                 geolocation = requests.get(service_info['url']).json()
@@ -369,6 +370,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 logging.exception(f"Error while parsing geolocation from {service}")
                 continue
 
+        logging.warning(inferred_location)
         if inferred_location:
             # we have valid coordinates, so let's keep a local record of it
             content = {"coordinated": inferred_location, "timestamp": now}
