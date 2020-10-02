@@ -1,4 +1,8 @@
 # Changelog
+## [1.9.1] - 2020-10-02
+### Added 
+- ONBUILD SixSq license dump
+### Changed
 ## [1.9.0] - 2020-09-30
 ### Added 
 - automatic IP-based geolocation retrieval
