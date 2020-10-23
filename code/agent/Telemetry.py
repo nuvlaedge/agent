@@ -53,7 +53,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'docker-server-version': None,
                        'gpio-pins': None,
                        'nuvlabox-engine-version': None,
-                       'inferred-location': None
+                       'inferred-location': None,
+                       'vulnerabilities': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -214,6 +215,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if inferred_location:
             status_for_nuvla['inferred-location'] = inferred_location
 
+        # get results from security scans
+        vulnerabilities = self.get_security_vulnerabilities()
+        if vulnerabilities is not None:
+            status_for_nuvla['vulnerabilities'] = vulnerabilities
+
         # set the nb engine version if it exists
         if self.nuvlabox_engine_version:
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
@@ -231,6 +237,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         })
 
         return status_for_nuvla, all_status
+
+    def get_security_vulnerabilities(self):
+        """ Reads vulnerabilities from the security scans, from a file in the shared volume
+
+        :return: contents of the file
+        """
+
+        if os.path.exists(self.vulnerabilities_file):
+            with open(self.vulnerabilities_file) as vf:
+                return json.loads(vf.read())
+        else:
+            return None
 
     @staticmethod
     def parse_gpio_pin_cell(indexes, line):
