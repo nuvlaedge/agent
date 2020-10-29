@@ -497,7 +497,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             with open(self.nuvlabox_status_file, 'w') as nbsf:
                 nbsf.write(json.dumps(all_status))
 
-        self.status = new_status
+        self.status.update(new_status)
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status
