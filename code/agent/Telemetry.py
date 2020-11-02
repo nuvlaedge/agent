@@ -53,7 +53,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'docker-server-version': None,
                        'gpio-pins': None,
                        'nuvlabox-engine-version': None,
-                       'inferred-location': None
+                       'inferred-location': None,
+                       'vulnerabilities': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -214,6 +215,23 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if inferred_location:
             status_for_nuvla['inferred-location'] = inferred_location
 
+        # get results from security scans
+        vulnerabilities = self.get_security_vulnerabilities()
+        if vulnerabilities is not None:
+            scores = list(filter((-1).__ne__, map(lambda v: v.get('vulnerability-score', -1), vulnerabilities)))
+            formatted_vulnerabilities = {
+                'summary': {
+                    'total': len(vulnerabilities),
+                    'affected-products': list(set(map(lambda v: v.get('product', 'unknown'), vulnerabilities)))
+                },
+                'items': sorted(vulnerabilities, key=lambda v: v.get('vulnerability-score', 0), reverse=True)[0:100]
+            }
+
+            if len(scores) > 0:
+                formatted_vulnerabilities['summary']['average-score'] = round(sum(scores) / len(scores), 2)
+
+            status_for_nuvla['vulnerabilities'] = formatted_vulnerabilities
+
         # set the nb engine version if it exists
         if self.nuvlabox_engine_version:
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
@@ -231,6 +249,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         })
 
         return status_for_nuvla, all_status
+
+    def get_security_vulnerabilities(self):
+        """ Reads vulnerabilities from the security scans, from a file in the shared volume
+
+        :return: contents of the file
+        """
+
+        if os.path.exists(self.vulnerabilities_file):
+            with open(self.vulnerabilities_file) as vf:
+                return json.loads(vf.read())
+        else:
+            return None
 
     @staticmethod
     def parse_gpio_pin_cell(indexes, line):
@@ -479,7 +509,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             with open(self.nuvlabox_status_file, 'w') as nbsf:
                 nbsf.write(json.dumps(all_status))
 
-        self.status = new_status
+        self.status.update(new_status)
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status

@@ -25,7 +25,7 @@ LABEL git.build.time=${GIT_BUILD_TIME}
 LABEL travis.build.number=${TRAVIS_BUILD_NUMBER}
 LABEL travis.build.web.url=${TRAVIS_BUILD_WEB_URL}
 
-COPY --from=psutil-builder /usr/local/lib/python3.8/site-packages /usr/local/lib/python3.8/site-packages
+COPY --from=psutil-builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
 
 RUN apt update && apt install -y procps curl=7.64.0-4+deb10u1 mosquitto-clients
 

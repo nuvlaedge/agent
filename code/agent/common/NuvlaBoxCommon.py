@@ -89,6 +89,7 @@ class NuvlaBoxCommon():
         self.nuvlabox_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
         self.ip_file = ".ip"
         self.ip_geolocation_file = "{}/.ipgeolocation".format(self.data_volume)
+        self.vulnerabilities_file = "{}/vulnerabilities".format(self.data_volume)
         self.ca = "ca.pem"
         self.cert = "cert.pem"
         self.key = "key.pem"
