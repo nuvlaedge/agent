@@ -223,7 +223,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 'summary': {
                     'total': len(vulnerabilities),
                     'affected-products': list(set(map(lambda v: v.get('product', 'unknown'), vulnerabilities))),
-                    'average-score': "%.2f" % (sum(scores) / len(scores))
+                    'average-score': round(sum(scores) / len(scores), 2)
                 },
                 'items': sorted(vulnerabilities, key=lambda v: v.get('vulnerability-score', 0), reverse=True)[0:100]
             }
