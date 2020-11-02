@@ -218,7 +218,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # get results from security scans
         vulnerabilities = self.get_security_vulnerabilities()
         if vulnerabilities is not None:
-            status_for_nuvla['vulnerabilities'] = vulnerabilities
+            scores = list(filter((-1).__ne__, map(lambda v: v.get('vulnerability-score', -1), vulnerabilities)))
+            formatted_vulnerabilities = {
+                'summary': {
+                    'total': len(vulnerabilities),
+                    'affected-products': list(set(map(lambda v: v.get('product', 'unknown'), vulnerabilities))),
+                    'average-score': "%.2f" % (sum(scores) / len(scores))
+                },
+                'items': sorted(vulnerabilities, key=lambda v: v.get('vulnerability-score', 0), reverse=True)[0:100]
+            }
+            status_for_nuvla['vulnerabilities'] = formatted_vulnerabilities
 
         # set the nb engine version if it exists
         if self.nuvlabox_engine_version:
