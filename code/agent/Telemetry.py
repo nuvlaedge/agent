@@ -222,11 +222,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             formatted_vulnerabilities = {
                 'summary': {
                     'total': len(vulnerabilities),
-                    'affected-products': list(set(map(lambda v: v.get('product', 'unknown'), vulnerabilities))),
-                    'average-score': round(sum(scores) / len(scores), 2)
+                    'affected-products': list(set(map(lambda v: v.get('product', 'unknown'), vulnerabilities)))
                 },
                 'items': sorted(vulnerabilities, key=lambda v: v.get('vulnerability-score', 0), reverse=True)[0:100]
             }
+
+            if len(scores) > 0:
+                formatted_vulnerabilities['summary']['average-score'] = round(sum(scores) / len(scores), 2)
+
             status_for_nuvla['vulnerabilities'] = formatted_vulnerabilities
 
         # set the nb engine version if it exists
