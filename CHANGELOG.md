@@ -1,4 +1,8 @@
 # Changelog
+## [1.9.2] - 2020-11-02
+### Added 
+- telemetry for vulnerabilities
+### Changed
 ## [1.9.1] - 2020-10-02
 ### Added 
 - ONBUILD SixSq license dump
