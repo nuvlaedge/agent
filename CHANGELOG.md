@@ -1,4 +1,8 @@
 # Changelog
+## [1.11.0] - 2020-11-20
+### Added 
+- add power consumption information to official telemetry and data gateway
+### Changed
 ## [1.10.1] - 2020-11-20
 ### Added 
 - add telemetry for power consumption
