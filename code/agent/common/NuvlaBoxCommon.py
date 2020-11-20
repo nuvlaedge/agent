@@ -136,6 +136,40 @@ class NuvlaBoxCommon():
         if 'NUVLABOX_ENGINE_VERSION' in os.environ and os.environ['NUVLABOX_ENGINE_VERSION']:
             self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
 
+        # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
+        # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
+        self.nvidia_software_power_consumption_model = {
+            "ina3221x": {
+                "channels": 3,
+                "boards": {
+                    "agx_xavier": {
+                        "i2c_addresses": ["1-0040", "1-0041"],
+                        "channels_path": ["1-0040/iio:device0", "1-0041/iio:device1"]
+                    },
+                    "nano": {
+                        "i2c_addresses": ["6-0040"],
+                        "channels_path": ["6-0040/iio:device0"]
+                    },
+                    "tx1": {
+                        "i2c_addresses": ["1-0040"],
+                        "channels_path": ["1-0040/iio:device0"]
+                    },
+                    "tx1_dev_kit": {
+                        "i2c_addresses": ["1-0042", "1-0043"],
+                        "channels_path": ["1-0042/iio:device2", "1-0043/iio:device3"]
+                    },
+                    "tx2": {
+                        "i2c_addresses": ["0-0040", "0-0041"],
+                        "channels_path": ["0-0040/iio:device0", "0-0041/iio:device1"]
+                    },
+                    "tx2_dev_kit": {
+                        "i2c_addresses": ["0-0042", "0-0043"],
+                        "channels_path": ["0-0042/iio:device2", "0-0043/iio:device3"]
+                    }
+                }
+            }
+        }
+
     def api(self):
         """ Returns an Api object """
 
