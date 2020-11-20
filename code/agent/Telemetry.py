@@ -104,7 +104,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
-    def send_mqtt(self, cpu=None, ram=None, disks=None):
+    def send_mqtt(self, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
         :param cpu: tuple (capacity, load)
@@ -151,6 +151,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                                                      "disks",
                                                                      json.dumps(dsk)))
 
+        if energy:
+            # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
+            # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
+            # same issue as above
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "energy",
+                                                                 json.dumps(energy)))
+
         # self.mqtt_telemetry.disconnect()
 
     def get_status(self):
@@ -170,8 +178,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
             "used": int(round(psutil.virtual_memory()[3]/1024/1024))
         }
-
-        self.send_mqtt(cpu_sample, ram_sample, disk_usage)
 
         cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
         cpu.update(cpu_sample)
@@ -244,6 +250,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if self.nuvlabox_engine_version:
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
+        # Publish the telemetry into the Data Gateway
+        self.send_mqtt(cpu_sample, ram_sample, disk_usage, power_consumption)
+
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
         all_status.update({
@@ -275,9 +284,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 return {}
 
             i2c_addresses_found = [ addr for addr in os.listdir(i2c_fs_path) if re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr) ]
+            i2c_addresses_found.sort()
             channels = self.nvidia_software_power_consumption_model[driver]['channels']
             for nvidia_board, power_info in self.nvidia_software_power_consumption_model[driver]['boards'].items():
-                if i2c_addresses_found.sort() != power_info['i2c_addresses'].sort():
+                known_i2c_addresses = power_info['i2c_addresses']
+                known_i2c_addresses.sort()
+                if i2c_addresses_found != known_i2c_addresses:
                     continue
 
                 for metrics_folder_name in power_info['channels_path']:
@@ -294,6 +306,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                             try:
                                 metric_basename = m.read().split()[0]
                             except:
+                                logging.warning(f'Cannot read power metric rail name at {rail_name_file}')
                                 continue
 
                         rail_current_file = f'{metrics_folder_path}/in_current{channel}_input'
@@ -310,13 +323,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         ]
 
                         existing_metrics = os.listdir(metrics_folder_path)
-                        if not all(desired_metric[0] in existing_metrics for desired_metric in desired_metrics_files):
+                        if not all(desired_metric[0].split('/')[-1] in existing_metrics for desired_metric in desired_metrics_files):
                             # one or more power metric files we need, are missing from the directory, skip them
                             continue
 
                         for metric_combo in desired_metrics_files:
                             try:
-                                with open(f'{metrics_folder_path}/{metric_combo[0]}') as mf:
+                                with open(metric_combo[0]) as mf:
                                     output.append([metric_combo[1], mf.read().split()[0], metric_combo[2]])
                             except:
                                 continue
