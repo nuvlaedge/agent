@@ -104,11 +104,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
-    def send_mqtt(self, message, topic):
+    def send_mqtt(self, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
-        :param message: message to be published, JSON compliant
-        :param topic: topic to publish to
+        :param cpu: tuple (capacity, load)
+        :param ram: tuple (capacity, used)
+        :param disk: list of {device: partition_name, capacity: value, used: value}
         """
 
         try:
@@ -122,7 +123,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             self.mqtt_telemetry.disconnect()
             return
 
-        if message:
+        msgs = []
+        if cpu:
             # e1 = self.mqtt_telemetry.publish("cpu/capacity", payload=str(cpu[0]))
             # e2 = self.mqtt_telemetry.publish("cpu/load", payload=str(cpu[1]))
             # ISSUE: for some reason, the connection is lost after publishing with paho-mqtt
@@ -130,32 +132,32 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             # using os.system for now
 
             os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                 topic,
-                                                                 json.dumps(message)))
+                                                                 "cpu",
+                                                                 json.dumps(cpu)))
 
-        # if ram:
-        #     # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
-        #     # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
-        #     # same issue as above
-        #     os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-        #                                                          "ram",
-        #                                                          json.dumps(ram)))
-        #
-        # if disks:
-        #     for dsk in disks:
-        #         # self.mqtt_telemetry.publish("disks", payload=json.dumps(dsk))
-        #         # same issue as above
-        #         os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-        #                                                              "disks",
-        #                                                              json.dumps(dsk)))
-        #
-        # if energy:
-        #     # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
-        #     # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
-        #     # same issue as above
-        #     os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-        #                                                          "energy",
-        #                                                          json.dumps(energy)))
+        if ram:
+            # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
+            # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
+            # same issue as above
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "ram",
+                                                                 json.dumps(ram)))
+
+        if disks:
+            for dsk in disks:
+                # self.mqtt_telemetry.publish("disks", payload=json.dumps(dsk))
+                # same issue as above
+                os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                     "disks",
+                                                                     json.dumps(dsk)))
+
+        if energy:
+            # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
+            # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
+            # same issue as above
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "energy",
+                                                                 json.dumps(energy)))
 
         # self.mqtt_telemetry.disconnect()
 
@@ -177,21 +179,21 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "used": int(round(psutil.virtual_memory()[3]/1024/1024))
         }
 
-        # cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
-        # cpu.update(cpu_sample)
-        #
-        # ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
-        # ram.update(ram_sample)
+        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
+        cpu.update(cpu_sample)
+
+        ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
+        ram.update(ram_sample)
 
         disks = []
         for dsk in disk_usage:
-            # dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
+            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
             disks.append(dsk)
 
         status_for_nuvla = {
             'resources': {
-                'cpu': cpu_sample,
-                'ram': ram_sample,
+                'cpu': cpu,
+                'ram': ram,
                 'disks': disks
             },
             'operating-system': docker_info["OperatingSystem"],
@@ -209,6 +211,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if net_stats:
             status_for_nuvla['resources']['net-stats'] = net_stats
 
+        power_consumption = None
         try:
             power_consumption = self.get_power_consumption()
             if power_consumption:
@@ -249,7 +252,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla['resources'], "nuvlabox-telemetry")
+        self.send_mqtt(cpu_sample, ram_sample, disk_usage, power_consumption)
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
