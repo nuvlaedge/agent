@@ -1,4 +1,8 @@
 # Changelog
+## [1.10.1] - 2020-11-20
+### Added 
+- add telemetry for power consumption
+### Changed
 ## [1.10.0] - 2020-11-02
 ### Added 
 - support for vulnerability reporting in telemetry
