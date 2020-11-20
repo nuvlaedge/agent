@@ -273,7 +273,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         underlying host system and the existence of a power monitoring drive/device. Thus this is optional
         telemetry data.
 
-        :return:
+        :return: list of well-defined metric-consumption-units lists. Example: [["metric", "consumption", "unit"], ... ]
         """
 
         output = []
