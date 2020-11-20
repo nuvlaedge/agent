@@ -14,6 +14,7 @@ import socket
 import json
 import os
 import psutil
+import re
 import requests
 import paho.mqtt.client as mqtt
 
@@ -103,7 +104,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
-    def send_mqtt(self, cpu=None, ram=None, disks=None):
+    def send_mqtt(self, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
         :param cpu: tuple (capacity, load)
@@ -150,6 +151,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                                                      "disks",
                                                                      json.dumps(dsk)))
 
+        if energy:
+            # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
+            # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
+            # same issue as above
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "energy",
+                                                                 json.dumps(energy)))
+
         # self.mqtt_telemetry.disconnect()
 
     def get_status(self):
@@ -169,8 +178,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
             "used": int(round(psutil.virtual_memory()[3]/1024/1024))
         }
-
-        self.send_mqtt(cpu_sample, ram_sample, disk_usage)
 
         cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
         cpu.update(cpu_sample)
@@ -204,6 +211,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if net_stats:
             status_for_nuvla['resources']['net-stats'] = net_stats
 
+        power_consumption = None
+        try:
+            power_consumption = self.get_power_consumption()
+            if power_consumption:
+                status_for_nuvla['resources']['power-consumption'] = power_consumption
+        except:
+            logging.exception("Unable to retrieve power consumption metrics")
+
         if self.gpio_utility:
             # Get GPIO pins status
             gpio_pins = self.get_gpio_pins()
@@ -236,6 +251,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if self.nuvlabox_engine_version:
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
+        # Publish the telemetry into the Data Gateway
+        self.send_mqtt(cpu_sample, ram_sample, disk_usage, power_consumption)
+
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
         all_status.update({
@@ -249,6 +267,75 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         })
 
         return status_for_nuvla, all_status
+
+    def get_power_consumption(self):
+        """ Attempts to retrieve power monitoring information, if it exists. It is highly dependant on the
+        underlying host system and the existence of a power monitoring drive/device. Thus this is optional
+        telemetry data.
+
+        :return: list of well-defined metric-consumption-units lists. Example: [["metric", "consumption", "unit"], ... ]
+        """
+
+        output = []
+        # for the NVIDIA Jetson ...
+        for driver in self.nvidia_software_power_consumption_model:
+            i2c_fs_path = f'{self.hostfs}/sys/bus/i2c/drivers/{driver}'
+
+            if not os.path.exists(i2c_fs_path):
+                return {}
+
+            i2c_addresses_found = [ addr for addr in os.listdir(i2c_fs_path) if re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr) ]
+            i2c_addresses_found.sort()
+            channels = self.nvidia_software_power_consumption_model[driver]['channels']
+            for nvidia_board, power_info in self.nvidia_software_power_consumption_model[driver]['boards'].items():
+                known_i2c_addresses = power_info['i2c_addresses']
+                known_i2c_addresses.sort()
+                if i2c_addresses_found != known_i2c_addresses:
+                    continue
+
+                for metrics_folder_name in power_info['channels_path']:
+                    metrics_folder_path = f'{i2c_fs_path}/{metrics_folder_name}'
+                    if not os.path.exists(metrics_folder_path):
+                        continue
+
+                    for channel in range(0, channels):
+                        rail_name_file = f'{metrics_folder_path}/rail_name_{channel}'
+                        if not os.path.exists(rail_name_file):
+                            continue
+
+                        with open(rail_name_file) as m:
+                            try:
+                                metric_basename = m.read().split()[0]
+                            except:
+                                logging.warning(f'Cannot read power metric rail name at {rail_name_file}')
+                                continue
+
+                        rail_current_file = f'{metrics_folder_path}/in_current{channel}_input'
+                        rail_voltage_file = f'{metrics_folder_path}/in_voltage{channel}_input'
+                        rail_power_file = f'{metrics_folder_path}/in_power{channel}_input'
+                        rail_critical_current_limit_file = f'{metrics_folder_path}/crit_current_limit_{channel}'
+
+                        # (filename, metricname, units)
+                        desired_metrics_files = [
+                            (rail_current_file, f"{metric_basename}_current", "mA"),
+                            (rail_voltage_file, f"{metric_basename}_voltage", "mV"),
+                            (rail_power_file, f"{metric_basename}_power", "mW"),
+                            (rail_critical_current_limit_file, f"{metric_basename}_critical_current_limit", "mA")
+                        ]
+
+                        existing_metrics = os.listdir(metrics_folder_path)
+                        if not all(desired_metric[0].split('/')[-1] in existing_metrics for desired_metric in desired_metrics_files):
+                            # one or more power metric files we need, are missing from the directory, skip them
+                            continue
+
+                        for metric_combo in desired_metrics_files:
+                            try:
+                                with open(metric_combo[0]) as mf:
+                                    output.append([metric_combo[1], mf.read().split()[0], metric_combo[2]])
+                            except:
+                                continue
+
+        return output
 
     def get_security_vulnerabilities(self):
         """ Reads vulnerabilities from the security scans, from a file in the shared volume
