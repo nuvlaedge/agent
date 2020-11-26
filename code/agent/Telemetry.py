@@ -567,7 +567,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         lsblk_command = ["lsblk", "--json", "-o", "NAME,SIZE,MOUNTPOINT,FSUSED", "-b", "-a"]
         r = run(lsblk_command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
 
-        logging.info(r)
         if r.returncode != 0 or not r.stdout:
             return output_fallback
 
