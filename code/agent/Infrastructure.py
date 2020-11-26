@@ -84,16 +84,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         k8s_apiserver_container_label = "io.kubernetes.container.name=kube-apiserver"
         k8s_apiservers = self.docker_client.containers.list(filters={"label": k8s_apiserver_container_label})
 
+        k8s_cluster_info = {}
         if not k8s_apiservers:
-            return None
+            return k8s_cluster_info
 
         arg_address = "advertise-address"
         arg_port = "secure-port"
         arg_ca = "client-ca-file"
         arg_cert = "kubelet-client-certificate"
         arg_key = "kubelet-client-key"
-        k8s_cluster_info = []
-        # just in case there is more than one k8s config
+        # just in case there is more than one k8s config, we want to get the first one that looks healthy
         for api in k8s_apiservers:
             try:
                 inspect = self.docker_client.api.inspect_container(api.id)
@@ -122,12 +122,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 with open(f'{self.hostfs}{args[arg_key]}') as key:
                     k8s_client_key = key.read()
 
-                k8s_cluster_info.append({
-                    'kubernetes-endpoint': k8s_endpoint,
-                    'kubernetes-client-ca': k8s_client_ca,
-                    'kubernetes-client-cert': k8s_client_cert,
-                    'kubernetes-client-key': k8s_client_key
+                k8s_cluster_info.update({
+                    'endpoint': k8s_endpoint,
+                    'ca': k8s_client_ca,
+                    'cert': k8s_client_cert,
+                    'key': k8s_client_key
                 })
+                # if we got here, then it's very likely that the k8s cluster is up and running, no need to go further
+                break
             except (KeyError, FileNotFoundError) as e:
                 logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
                 continue
@@ -283,7 +285,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         my_ip = self.telemetry_instance.get_ip()
         commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
-        logging.info(self.is_kubernetes_running())
+        k8s_config = self.is_kubernetes_running()
+        if k8s_config:
+            commission_payload["kubernetes-endpoint"] = k8s_config['endpoint']
+            commission_payload["kubernetes-client-ca"] = k8s_config['ca']
+            commission_payload["kubernetes-client-cert"] = k8s_config['cert']
+            commission_payload["kubernetes-client-key"] = k8s_config['key']
 
         tags = self.get_labels()
         commission_payload["tags"] = tags
