@@ -1,4 +1,8 @@
 # Changelog
+## [1.11.1] - 2020-11-26
+        ### Added
+        ### Changed
+                  - report disk telemetry for all mounted disks
 ## [1.11.0] - 2020-11-20
 ### Added 
 - add power consumption information to official telemetry and data gateway
