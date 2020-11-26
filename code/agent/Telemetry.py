@@ -558,10 +558,32 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def get_disks_usage():
         """ Gets disk usage for N partitions """
 
-        return [{'device': 'overlay',
-                 'capacity': int(psutil.disk_usage('/')[0]/1024/1024/1024),
-                 'used': int(psutil.disk_usage('/')[1]/1024/1024/1024)
-                 }]
+        output = []
+
+        lsblk_command = ["lsblk", "--json", "-o", "NAME,SIZE,MOUNTPOINT,FSUSED", "-b", "-a"]
+        r = run(lsblk_command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
+
+        if r.returncode != 0 or not r.stdout:
+            return output
+
+        lsblk = json.loads(r.stdout)
+        for blockdevice, devices in lsblk.items():
+            for dev in devices:
+                if dev.get('mountpoint'):
+                    # means it is mounted, so we can get its usage
+                    try:
+                        capacity = round(int(dev['size']/1024/1024/1024))
+                        used = round(int(dev['fsused']/1024/1024/1024))
+                        output.append({
+                            'device': dev['name'],
+                            'capacity': capacity,
+                            'used': used
+                        })
+                    except KeyError:
+                        logging.exception(f'Unable to get disk usage for mountpoint {dev.get("mountpoint")}')
+                        continue
+
+        return output
 
     def diff(self, old_status, new_status):
         """ Compares the previous status with the new one and discover the minimal changes """
