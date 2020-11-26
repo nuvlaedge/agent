@@ -583,6 +583,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         # means it is mounted, so we can get its usage
                         try:
                             capacity = round(int(dev['size'])/1024/1024/1024)
+
+                            # TODO: delete this condition once the Nuvla server starts accepting float values
+                            if capacity <= 0:
+                                continue
+
                             used = round(int(dev['fsused'])/1024/1024/1024)
                             output.append({
                                 'device': dev['name'],
