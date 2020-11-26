@@ -559,31 +559,44 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Gets disk usage for N partitions """
 
         output = []
+        output_fallback = [{'device': 'overlay',
+                            'capacity': int(psutil.disk_usage('/')[0]/1024/1024/1024),
+                            'used': int(psutil.disk_usage('/')[1]/1024/1024/1024)
+                            }]
 
         lsblk_command = ["lsblk", "--json", "-o", "NAME,SIZE,MOUNTPOINT,FSUSED", "-b", "-a"]
         r = run(lsblk_command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
 
+        logging.info(r)
         if r.returncode != 0 or not r.stdout:
-            return output
+            return output_fallback
 
         lsblk = json.loads(r.stdout)
         for blockdevice, devices in lsblk.items():
-            for dev in devices:
-                if dev.get('mountpoint'):
-                    # means it is mounted, so we can get its usage
-                    try:
-                        capacity = round(int(dev['size']/1024/1024/1024))
-                        used = round(int(dev['fsused']/1024/1024/1024))
-                        output.append({
-                            'device': dev['name'],
-                            'capacity': capacity,
-                            'used': used
-                        })
-                    except KeyError:
-                        logging.exception(f'Unable to get disk usage for mountpoint {dev.get("mountpoint")}')
-                        continue
+            for parent_dev in devices:
+                flattened = [parent_dev]
+                if parent_dev.get('children'):
+                    flattened += parent_dev['children']
 
-        return output
+                for dev in flattened:
+                    if dev.get('mountpoint'):
+                        # means it is mounted, so we can get its usage
+                        try:
+                            capacity = round(int(dev['size']/1024/1024/1024))
+                            used = round(int(dev['fsused']/1024/1024/1024))
+                            output.append({
+                                'device': dev['name'],
+                                'capacity': capacity,
+                                'used': used
+                            })
+                        except KeyError:
+                            logging.exception(f'Unable to get disk usage for mountpoint {dev.get("mountpoint")}')
+                            continue
+
+        if output:
+            return output
+        else:
+            return output_fallback
 
     def diff(self, old_status, new_status):
         """ Compares the previous status with the new one and discover the minimal changes """
