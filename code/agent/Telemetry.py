@@ -582,14 +582,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     if dev.get('mountpoint'):
                         # means it is mounted, so we can get its usage
                         try:
-                            capacity = round(int(dev['size']/1024/1024/1024))
-                            used = round(int(dev['fsused']/1024/1024/1024))
+                            capacity = round(int(dev['size'])/1024/1024/1024)
+                            used = round(int(dev['fsused'])/1024/1024/1024)
                             output.append({
                                 'device': dev['name'],
                                 'capacity': capacity,
                                 'used': used
                             })
-                        except KeyError:
+                        except (KeyError, TypeError):
                             logging.exception(f'Unable to get disk usage for mountpoint {dev.get("mountpoint")}')
                             continue
 
