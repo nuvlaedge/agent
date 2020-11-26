@@ -75,6 +75,65 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return False
 
+    def is_kubernetes_running(self):
+        """ Tries to infer whether there is a k8s cluster running in the host
+        and if so, it tries to retrieve its API endpoint and client certificates
+
+        :returns dict {:endpoint, :ca, :cert, :key}"""
+
+        k8s_apiserver_container_label = "io.kubernetes.container.name=kube-apiserver"
+        k8s_apiservers = self.docker_client.containers.list(filters={"label": k8s_apiserver_container_label})
+
+        if not k8s_apiservers:
+            return None
+
+        arg_address = "advertise-address"
+        arg_port = "secure-port"
+        arg_ca = "client-ca-file"
+        arg_cert = "kubelet-client-certificate"
+        arg_key = "kubelet-client-key"
+        k8s_cluster_info = []
+        # just in case there is more than one k8s config
+        for api in k8s_apiservers:
+            try:
+                inspect = self.docker_client.api.inspect_container(api.id)
+            except docker.errors.NotFound:
+                logging.warning(f'Error inspecting container {api.id} while looking up for k8s cluster')
+                continue
+
+            args_list = inspect.get('Args', [])
+            # convert list to dict
+            try:
+                args = { args_list[i].split('=')[0].lstrip("--"): args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
+            except IndexError:
+                logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
+                continue
+
+            try:
+                k8s_endpoint = f'https://{args[arg_address]}:{args[arg_port]}' \
+                    if not args[arg_address].startswith("http") else f'{args[arg_address]}:{args[arg_port]}'
+
+                with open(f'{self.hostfs}{args[arg_ca]}') as ca:
+                    k8s_client_ca = ca.read()
+
+                with open(f'{self.hostfs}{args[arg_cert]}') as cert:
+                    k8s_client_cert = cert.read()
+
+                with open(f'{self.hostfs}{args[arg_key]}') as key:
+                    k8s_client_key = key.read()
+
+                k8s_cluster_info.append({
+                    'kubernetes-endpoint': k8s_endpoint,
+                    'kubernetes-client-ca': k8s_client_ca,
+                    'kubernetes-client-cert': k8s_client_cert,
+                    'kubernetes-client-key': k8s_client_key
+                })
+            except (KeyError, FileNotFoundError) as e:
+                logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
+                continue
+
+        return k8s_cluster_info
+
     def get_tls_keys(self):
         """ Finds and returns the Docker API client TLS keys """
 
@@ -223,6 +282,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         my_ip = self.telemetry_instance.get_ip()
         commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
+
+        logging.info(self.is_kubernetes_running())
 
         tags = self.get_labels()
         commission_payload["tags"] = tags
