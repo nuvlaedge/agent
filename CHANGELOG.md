@@ -1,4 +1,8 @@
 # Changelog
+## [1.12.0] - 2020-11-27
+        ### Added 
+                  - detect and report Kubernetes clusters running on the host
+        ### Changed
 ## [1.11.1] - 2020-11-26
         ### Added
         ### Changed
