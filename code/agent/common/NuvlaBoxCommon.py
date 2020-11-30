@@ -108,16 +108,18 @@ class NuvlaBoxCommon():
 
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None
-        self.nuvla_endpoint_key = 'NUVLA_ENDPOINT='
-        self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE='
+        self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
+        self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
         if os.path.exists(self.nuvlabox_nuvla_configuration):
             with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
                 for line in nuvla_conf.read().split():
                     try:
-                        if line and self.nuvla_endpoint_key in line:
-                            nuvla_endpoint_raw = line.split('=')[-1]
-                        if line and self.nuvla_endpoint_insecure_key in line:
-                            nuvla_endpoint_insecure_raw = bool(line.split('=')[-1])
+                        if line:
+                            line_split = line.split('=')
+                            if self.nuvla_endpoint_key == line_split[0]:
+                                nuvla_endpoint_raw = line_split[1:]
+                            if self.nuvla_endpoint_insecure_key == line_split[0]:
+                                nuvla_endpoint_insecure_raw = bool(line_split[-1])
                     except IndexError:
                         pass
 
