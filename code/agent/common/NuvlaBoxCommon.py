@@ -117,9 +117,9 @@ class NuvlaBoxCommon():
                         if line:
                             line_split = line.split('=')
                             if self.nuvla_endpoint_key == line_split[0]:
-                                nuvla_endpoint_raw = line_split[1:]
+                                nuvla_endpoint_raw = line_split[1]
                             if self.nuvla_endpoint_insecure_key == line_split[0]:
-                                nuvla_endpoint_insecure_raw = bool(line_split[-1])
+                                nuvla_endpoint_insecure_raw = bool(line_split[1])
                     except IndexError:
                         pass
 
