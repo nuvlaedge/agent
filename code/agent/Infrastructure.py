@@ -226,7 +226,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         nuvla_tags = []
 
         try:
-            container_labels = self.docker_client.api.inspect_node(self.docker_client.info()["Swarm"]["NodeID"])["Spec"]["Labels"]
+            node_id = self.docker_client.info()["Swarm"]["NodeID"]
+            container_labels = self.docker_client.api.inspect_node(node_id)["Spec"]["Labels"]
         except docker.errors.APIError:
             logging.exception("Cannot get node labels")
             return nuvla_tags
@@ -236,6 +237,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 nuvla_tags.append("{}={}".format(label, value))
             else:
                 nuvla_tags.append(label)
+
+        nuvla_tags.append(f'node.id={node_id}')
 
         return nuvla_tags
 

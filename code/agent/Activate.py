@@ -71,6 +71,12 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         with open(self.activation_flag, 'w') as a:
             a.write(json.dumps(self.user_info))
 
+        # Also store the Nuvla connection details for future restarts
+        with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
+            conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n\
+                        {self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
+            nuvla_conf.write(conf)
+
         return self.user_info
 
     def create_nb_document_file(self, nuvlabox_resource):
