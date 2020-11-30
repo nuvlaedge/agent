@@ -74,7 +74,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         # Also store the Nuvla connection details for future restarts
         with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
             conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n\
-                        {self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
+{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
             nuvla_conf.write(conf)
 
         return self.user_info

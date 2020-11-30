@@ -135,6 +135,8 @@ if __name__ == "__main__":
     e = Event()
     # Try to activate the NuvlaBox
     activation = Activate(data_volume)
+    logging.info(f'Nuvla endpoint: {activation.nuvla_endpoint}')
+    logging.info(f'Nuvla connection insecure: {str(activation.nuvla_endpoint_insecure)}')
     while True:
         can_activate, user_info = activation.activation_is_possible()
         if can_activate or user_info:
