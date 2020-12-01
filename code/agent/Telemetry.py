@@ -56,7 +56,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'nuvlabox-engine-version': None,
                        'inferred-location': None,
                        'vulnerabilities': None,
-                       'swarm-node-id': None
+                       'swarm-node-id': None,
+                       'installation-parameters': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -189,7 +190,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         unique_config_files = list(filter(None, set(config_files)))
 
-        if working_dir and project_name and config_files:
+        if working_dir and project_name and unique_config_files:
             return {'project-name': project_name, 'working-dir': working_dir, 'config-files': unique_config_files}
         else:
             return None
