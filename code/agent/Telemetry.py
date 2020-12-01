@@ -170,7 +170,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         filter_label = "nuvlabox.component=True"
-        nuvlabox_containers = self.docker_client.api.containers(filters={'label': filter_label})
+        nuvlabox_containers = self.docker_client.containers.list(filters={'label': filter_label})
 
         try:
             myself = self.docker_client.containers.get(socket.gethostname())
@@ -181,17 +181,23 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
         working_dir = myself.labels['com.docker.compose.project.working_dir']
         project_name = myself.labels['com.docker.compose.project']
+        environment = myself.attrs.get('Config', {}).get('Env', [])
         for container in nuvlabox_containers:
-            c_labels = container.get('Labels', {})
+            c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
                     c_labels.get('com.docker.compose.project.working_dir', '') == working_dir and \
-                    container.get('Id', '') != myself.id:
+                    container.id != myself.id:
                 config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
+                environment += container.attrs.get('Config', {}).get('Env', [])
 
         unique_config_files = list(filter(None, set(config_files)))
+        unique_env = list(filter(None, set(environment)))
 
         if working_dir and project_name and unique_config_files:
-            return {'project-name': project_name, 'working-dir': working_dir, 'config-files': unique_config_files}
+            return {'project-name': project_name,
+                    'working-dir': working_dir,
+                    'config-files': unique_config_files,
+                    'environment': unique_env}
         else:
             return None
 
