@@ -238,8 +238,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             else:
                 nuvla_tags.append(label)
 
-        nuvla_tags.append(f'node.id={node_id}')
-
         return nuvla_tags
 
     def needs_commission(self, current_conf):

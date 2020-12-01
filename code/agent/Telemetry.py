@@ -55,7 +55,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'gpio-pins': None,
                        'nuvlabox-engine-version': None,
                        'inferred-location': None,
-                       'vulnerabilities': None
+                       'vulnerabilities': None,
+                       'swarm-node-id': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -161,6 +162,39 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # self.mqtt_telemetry.disconnect()
 
+    def get_installation_parameters(self):
+        """ Retrieves the configurations and parameteres used during the NuvlaBox Engine installation
+
+        :return: obj - {project-name: str, config-files: list, working-dir: str}
+        """
+
+        filter_label = "nuvlabox.component=True"
+        nuvlabox_containers = self.docker_client.api.containers(filters={'label': filter_label})
+
+        try:
+            myself = self.docker_client.containers.get(socket.gethostname())
+        except docker.errors.NotFound:
+            logging.error(f'Cannot find this container by hostname: {socket.gethostname()}. Cannot proceed')
+            raise
+
+        config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
+        working_dir = myself.labels['com.docker.compose.project.working_dir']
+        project_name = myself.labels['com.docker.compose.project']
+        for container in nuvlabox_containers:
+            c_labels = container.get('Labels', {})
+            if c_labels.get('com.docker.compose.project', '') == project_name and \
+                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir and \
+                    container.get('Id', '') != myself.id:
+                config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
+
+        unique_config_files = list(filter(None, set(config_files)))
+
+        if working_dir and project_name and config_files:
+            return {'project-name': project_name, 'working-dir': working_dir, 'config-files': unique_config_files}
+        else:
+            return None
+
+
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
@@ -168,6 +202,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
         docker_info = self.get_docker_info()
+        node_id = self.docker_client.info()["Swarm"]["NodeID"]
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -204,8 +239,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
             "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint(),
-            "docker-plugins": self.get_docker_plugins()
+            "docker-plugins": self.get_docker_plugins(),
+            "swarm-node-id": node_id
         }
+
+        installation_params = self.get_installation_parameters()
+        if installation_params:
+            status_for_nuvla['installation-parameters'] = installation_params
 
         net_stats = self.get_network_info()
         if net_stats:
