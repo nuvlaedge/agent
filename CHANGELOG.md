@@ -1,4 +1,11 @@
 # Changelog
+## [1.13.0] - 2020-12-04
+        ### Added 
+                  - include installation parameters in telemetry 
+                  - persist critical environment variables over restarts and reboots
+        ### Changed
+                  - minor bug fixes
+                  - improve logging
 ## [1.12.0] - 2020-11-27
         ### Added 
                   - detect and report Kubernetes clusters running on the host
