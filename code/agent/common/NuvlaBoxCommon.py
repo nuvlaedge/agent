@@ -94,6 +94,7 @@ class NuvlaBoxCommon():
         self.cert = "cert.pem"
         self.key = "key.pem"
         self.context = ".context"
+        self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.vpn_folder = "{}/vpn".format(self.data_volume)
         self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
         self.vpn_infra_file = "{}/vpn-is".format(self.vpn_folder)
@@ -105,13 +106,34 @@ class NuvlaBoxCommon():
         self.mqtt_broker_keep_alive = 90
         self.hostfs = "/rootfs"
 
-        nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
+        nuvla_endpoint_raw = None
+        nuvla_endpoint_insecure_raw = None
+        self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
+        self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
+        if os.path.exists(self.nuvlabox_nuvla_configuration):
+            with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
+                for line in nuvla_conf.read().split():
+                    try:
+                        if line:
+                            line_split = line.split('=')
+                            if self.nuvla_endpoint_key == line_split[0]:
+                                nuvla_endpoint_raw = line_split[1]
+                            if self.nuvla_endpoint_insecure_key == line_split[0]:
+                                nuvla_endpoint_insecure_raw = bool(line_split[1])
+                    except IndexError:
+                        pass
+
+        if not nuvla_endpoint_raw:
+            nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
+
         while nuvla_endpoint_raw[-1] == "/":
             nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
 
         self.nuvla_endpoint = nuvla_endpoint_raw.replace("https://", "")
 
-        nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
+        if not nuvla_endpoint_insecure_raw:
+            nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
+
         if isinstance(nuvla_endpoint_insecure_raw, str):
             if nuvla_endpoint_insecure_raw.lower() == "false":
                 nuvla_endpoint_insecure_raw = False
