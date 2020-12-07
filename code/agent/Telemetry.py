@@ -378,7 +378,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         for metric_combo in desired_metrics_files:
                             try:
                                 with open(metric_combo[0]) as mf:
-                                    output.append([metric_combo[1], mf.read().split()[0], metric_combo[2]])
+                                    output.append({
+                                        "metric-name": metric_combo[1],
+                                        "energy-consumption": float(mf.read().split()[0]),
+                                        "unit": metric_combo[2]
+                                    })
                             except:
                                 continue
 
