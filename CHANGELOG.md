@@ -1,4 +1,8 @@
 # Changelog
+## [1.13.1] - 2020-12-07
+        ### Added
+        ### Changed
+                  - re-structure power consumption information
 ## [1.13.0] - 2020-12-04
         ### Added 
                   - include installation parameters in telemetry 
