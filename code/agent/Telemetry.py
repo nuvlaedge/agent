@@ -106,12 +106,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
-    def send_mqtt(self, cpu=None, ram=None, disks=None, energy=None):
+    def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
+        :param nuvlabox_status: full dump of the NB status {}
         :param cpu: tuple (capacity, load)
         :param ram: tuple (capacity, used)
         :param disk: list of {device: partition_name, capacity: value, used: value}
+        :param energy: energy consumption metric
         """
 
         try:
@@ -125,7 +127,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             self.mqtt_telemetry.disconnect()
             return
 
-        msgs = []
+        os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                             "nuvlabox-status",
+                                                             json.dumps(nuvlabox_status)))
+
         if cpu:
             # e1 = self.mqtt_telemetry.publish("cpu/capacity", payload=str(cpu[0]))
             # e2 = self.mqtt_telemetry.publish("cpu/load", payload=str(cpu[1]))
@@ -299,7 +304,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(cpu_sample, ram_sample, disk_usage, power_consumption)
+        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage)
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
