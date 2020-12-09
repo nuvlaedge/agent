@@ -226,22 +226,22 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "used": int(round(psutil.virtual_memory()[3]/1024/1024))
         }
 
-        # cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
-        # cpu.update(cpu_sample)
-        #
-        # ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
-        # ram.update(ram_sample)
+        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
+        cpu.update(cpu_sample)
 
-        # disks = []
-        # for dsk in disk_usage:
-        #     dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
-        #     disks.append(dsk)
+        ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
+        ram.update(ram_sample)
+
+        disks = []
+        for dsk in disk_usage:
+            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
+            disks.append(dsk)
 
         status_for_nuvla = {
             'resources': {
-                'cpu': cpu_sample,
-                'ram': ram_sample,
-                'disks': disk_usage
+                'cpu': cpu,
+                'ram': ram,
+                'disks': disks
             },
             'operating-system': docker_info["OperatingSystem"],
             "architecture": docker_info["Architecture"],
@@ -304,7 +304,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla)
+        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage)
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
