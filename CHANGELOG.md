@@ -1,4 +1,8 @@
 # Changelog
+## [1.13.2] - 2020-12-09
+        ### Added
+        ### Changed
+                  - make nuvlabox-status telemetry available as a whole, via the MQTT data-gateway
 ## [1.13.1] - 2020-12-07
         ### Added
         ### Changed
