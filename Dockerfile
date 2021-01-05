@@ -13,17 +13,15 @@ FROM python:3-slim
 
 ARG GIT_BRANCH
 ARG GIT_COMMIT_ID
-ARG GIT_DIRTY
 ARG GIT_BUILD_TIME
-ARG TRAVIS_BUILD_NUMBER
-ARG TRAVIS_BUILD_WEB_URL
+ARG GITHUB_RUN_NUMBER
+ARG GITHUB_RUN_ID
 
 LABEL git.branch=${GIT_BRANCH}
 LABEL git.commit.id=${GIT_COMMIT_ID}
-LABEL git.dirty=${GIT_DIRTY}
 LABEL git.build.time=${GIT_BUILD_TIME}
-LABEL travis.build.number=${TRAVIS_BUILD_NUMBER}
-LABEL travis.build.web.url=${TRAVIS_BUILD_WEB_URL}
+LABEL git.run.number=${GITHUB_RUN_NUMBER}
+LABEL git.run.id=${TRAVIS_BUILD_WEB_URL}
 
 COPY --from=psutil-builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
 
