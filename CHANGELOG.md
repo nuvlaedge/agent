@@ -1,4 +1,9 @@
 # Changelog
+## [1.14.0] - 2021-01-05
+### Added 
+ - publish API on localhost only 
+ - add PUT method for peripherals
+### Changed
 ## [1.13.2] - 2020-12-09
         ### Added
         ### Changed
