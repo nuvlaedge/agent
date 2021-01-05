@@ -43,6 +43,22 @@ def local_peripheral_save(filepath, content):
         f.write(json.dumps(content))
 
 
+def local_peripheral_update(filepath, new_content):
+    """ Create a local file copy of the Nuvla peripheral resource
+
+    :param filepath: path of the file to be written in the .peripherals folder
+    :param new_content: updated content of the file in JSON format
+    """
+
+    with open(filepath) as f:
+        peripheral = json.loads(f.read())
+
+    peripheral.update(new_content)
+
+    with open(filepath, 'w') as f:
+        f.write(json.dumps(peripheral))
+
+
 def local_peripheral_get_identifier(filepath):
     """ Reads the content of a local copy of the NB peripheral, and gets the Nuvla ID
 
@@ -174,6 +190,7 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
                     logging.info("Deleted {} from Nuvla".format(peripheral_nuvla_id))
                 else:
                     out_peripheral = NB.api().edit(peripheral_nuvla_id, payload)
+                    local_peripheral_update(peripheral_filepath, payload)
                     logging.info("Changed {} in Nuvla, with payload: {}".format(peripheral_nuvla_id, payload))
 
                 return out_peripheral.data, out_peripheral.data.get('status', 200)
