@@ -154,7 +154,7 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
                 else:
                     out_peripheral = NB.api().edit(peripheral_nuvla_id, payload)
                     logging.info("Changed {} in Nuvla, with payload: {}".format(peripheral_nuvla_id, payload))
-                return out_peripheral.data, out_peripheral.data['status']
+                return out_peripheral.data, out_peripheral.data.get('status', 200)
             except nuvla.api.api.NuvlaError as e:
                 logging.warning("Cannot {} {} in Nuvla: {}".format(action, peripheral_nuvla_id, e.response.json()))
                 return e.response.json(), e.response.status_code
@@ -176,7 +176,7 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
                     out_peripheral = NB.api().edit(peripheral_nuvla_id, payload)
                     logging.info("Changed {} in Nuvla, with payload: {}".format(peripheral_nuvla_id, payload))
 
-                return out_peripheral.data, out_peripheral.data['status']
+                return out_peripheral.data, out_peripheral.data.get('status', 200)
             except nuvla.api.api.NuvlaError as e:
                 if e.response.status_code != 404:
                     logging.warning("While running {} on {} from Nuvla: {}".format(action,
