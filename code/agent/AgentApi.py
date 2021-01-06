@@ -222,7 +222,7 @@ def find(parameter, value, identifier_pattern):
     :returns list of peripheral matching the search query
     """
 
-    matched_peripherals = []
+    matched_peripherals = {}
 
     search_dir = "{}/{}".format(NB.peripherals_dir, identifier_pattern) if identifier_pattern \
         else NB.peripherals_dir + "/**/**"
@@ -230,17 +230,18 @@ def find(parameter, value, identifier_pattern):
     for filename in glob.iglob(search_dir, recursive=True):
         if os.path.isdir(filename):
             continue
-        if parameter and value:
-            with open(filename) as f:
-                try:
-                    content = json.loads(f.read())
-                except:
-                    continue
 
-                if parameter in content and content[parameter] == value:
-                    matched_peripherals.append(os.path.basename(filename))
+        with open(filename) as f:
+            try:
+                content = json.loads(f.read())
+            except:
+                continue
+
+        if parameter and value:
+            if parameter in content and content[parameter] == value:
+                matched_peripherals[os.path.basename(filename)] = content
         else:
-            matched_peripherals.append(os.path.basename(filename))
+            matched_peripherals[os.path.basename(filename)] = content
 
     return matched_peripherals, 200
 

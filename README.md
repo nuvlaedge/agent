@@ -204,7 +204,7 @@ Returns a list of NuvlaBox peripherals matching the URL params in the request.
  - **On success**
     - Code: `200`
     
-        Content: List of matching peripheral identifiers
+        Content: Dict of matching peripheral identifiers
        
  - **Examples**
  
@@ -214,7 +214,7 @@ Returns a list of NuvlaBox peripherals matching the URL params in the request.
     
     Response:
     ```
-    ["unique-local-peripheral-id"]
+    {"peripheral-identifier": {"interface": ...}}
     ```
     ---
     
@@ -225,7 +225,7 @@ Returns a list of NuvlaBox peripherals matching the URL params in the request.
     
     Response:
     ```
-    []
+    {}
     ```
     
     ---
@@ -237,7 +237,7 @@ Returns a list of NuvlaBox peripherals matching the URL params in the request.
     
     Response:
     ```
-    ["unique-local-peripheral-id", "unique-local-peripheral-id-2"]
+    {"peripheral-1-id": {...}, "peripheral-2-id": {...}}
     ```
  
 

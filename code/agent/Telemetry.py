@@ -206,7 +206,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             return None
 
-
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
@@ -237,12 +236,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
             disks.append(dsk)
 
+        resources = {
+            'cpu': cpu,
+            'ram': ram
+        }
+        if disks:
+            resources['disks'] = disks
+
         status_for_nuvla = {
-            'resources': {
-                'cpu': cpu,
-                'ram': ram,
-                'disks': disks
-            },
+            'resources': resources,
             'operating-system': docker_info["OperatingSystem"],
             "architecture": docker_info["Architecture"],
             "hostname": docker_info["Name"],
