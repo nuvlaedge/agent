@@ -239,9 +239,9 @@ def find(parameter, value, identifier_pattern):
 
         if parameter and value:
             if parameter in content and content[parameter] == value:
-                matched_peripherals[os.path.basename(filename)] = content
+                matched_peripherals[filename.replace(f'{NB.peripherals_dir}/', '')] = content
         else:
-            matched_peripherals[os.path.basename(filename)] = content
+            matched_peripherals[filename.replace(f'{NB.peripherals_dir}/', '')] = content
 
     return matched_peripherals, 200
 
