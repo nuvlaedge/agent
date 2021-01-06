@@ -244,3 +244,22 @@ def find(parameter, value, identifier_pattern):
 
     return matched_peripherals, 200
 
+
+def get(identifier):
+    """ Finds a specific locally registered peripherals that matches the identifier, by filename
+
+    :param identifier: peripheral identifier and filename (including its subfolder if any)
+    :returns peripheral content
+    """
+
+    search_for = "{}/{}".format(NB.peripherals_dir, identifier)
+
+    if local_peripheral_exists(search_for):
+        with open(search_for) as p:
+            try:
+                return json.loads(p.read()), 200
+            except:
+                return {"error": "Cannot read peripheral information"}, 500
+    else:
+        return {"error": "Peripheral not found"}, 404
+

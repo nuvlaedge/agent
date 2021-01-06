@@ -104,9 +104,11 @@ def manage_peripheral(identifier):
             return jsonify({"error": "Payload {} malformed. It must be a JSON payload".format(payload)}), 400
 
     if identifier:
+        logging.info('  ####   %s peripheral %s' % (request.method, identifier))
         if request.method in ["DELETE", "PUT"]:
-            logging.info('  ####   %s peripheral %s' % (request.method, identifier))
             message, return_code = AgentApi.modify(identifier, action=request.method, payload=payload)
+        elif request.method == "GET":
+            message, return_code = AgentApi.get(identifier)
         else:
             logging.info('  ####   Method %s not implemented yet!!' % request.method)
             message = "Not implemented"
