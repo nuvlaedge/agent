@@ -106,7 +106,10 @@ def manage_peripheral(identifier):
     if identifier:
         logging.info('  ####   %s peripheral %s' % (request.method, identifier))
         if request.method in ["DELETE", "PUT"]:
-            message, return_code = AgentApi.modify(identifier, action=request.method, payload=payload)
+            # DELETE accepts resource ID for simplicity and backward compatibility
+            resource_id = request.args.get('id')
+            message, return_code = AgentApi.modify(identifier, peripheral_nuvla_id=resource_id,
+                                                   action=request.method, payload=payload)
         elif request.method == "GET":
             message, return_code = AgentApi.get(identifier)
         else:
