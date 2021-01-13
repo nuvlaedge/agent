@@ -1,4 +1,8 @@
 # Changelog
+## [1.14.1] - 2021-01-13
+### Added 
+ - expand API
+### Changed
 ## [1.14.0] - 2021-01-05
 ### Added 
  - publish API on localhost only 
