@@ -683,8 +683,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         try:
-            self.api()._cimi_put(self.nb_status_id,
-                             json=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
+            r = self.api().edit(self.nb_status_id,
+                                data=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         except:
             logging.exception("Unable to update NuvlaBox status in Nuvla")
             return None
@@ -694,6 +694,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 nbsf.write(json.dumps(all_status))
 
         self.status.update(new_status)
+
+        return r.data
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status

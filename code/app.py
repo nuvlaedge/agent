@@ -182,7 +182,9 @@ if __name__ == "__main__":
         if nuvlabox_resource.get("vpn-server-id"):
             infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
 
-        telemetry.update_status()
+        response = telemetry.update_status()
+
+        # TODO: if response.get('jobs')
 
         infra.try_commission()
         e.wait(timeout=refresh_interval/2)
