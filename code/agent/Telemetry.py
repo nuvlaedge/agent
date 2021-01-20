@@ -57,7 +57,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'inferred-location': None,
                        'vulnerabilities': None,
                        'swarm-node-id': None,
-                       'installation-parameters': None
+                       'installation-parameters': None,
+                       'swarm-node-cert-expiry-date': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -206,6 +207,26 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             return None
 
+    def get_swarm_node_cert_expiration_date(self):
+        """ If the docker swarm certs can be found, try to infer their expiration date
+
+        :return:
+        """
+
+        if os.path.exists(self.swarm_node_cert):
+            command = ["openssl", "x509", "-enddate", "-noout", "-in", self.swarm_node_cert]
+            output = run(command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
+            # example output: 'notAfter=Mar 12 19:13:00 2021 GMT\n'
+            if output.returncode != 0 or not output.stdout:
+                return None
+
+            expiry_date_raw = output.stdout.strip().split('=')[-1]
+            raw_format = '%b %d %H:%M:%S %Y %Z'
+
+            return datetime.datetime.strptime(expiry_date_raw, raw_format).strftime(self.nuvla_timestamp_format)
+        else:
+            return None
+
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
@@ -264,6 +285,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         net_stats = self.get_network_info()
         if net_stats:
             status_for_nuvla['resources']['net-stats'] = net_stats
+
+        try:
+            swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()
+            if swarm_cert_expiration:
+                status_for_nuvla['swarm-node-cert-expiry-date'] = swarm_cert_expiration
+        except Exception as e:
+            logging.warning(f"Cannot infer Docker Swarm cert expiration date. Reason: {str(e)}")
 
         power_consumption = None
         try:

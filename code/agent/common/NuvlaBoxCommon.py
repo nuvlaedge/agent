@@ -105,6 +105,8 @@ class NuvlaBoxCommon():
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
         self.hostfs = "/rootfs"
+        self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
+        self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
 
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None
