@@ -267,6 +267,37 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.info("Auto-commissioning the NuvlaBox for the first time...")
             return current_conf
 
+    def has_nuvla_job_pull(self):
+        """ Checks if the job-engine-lite has been deployed alongside the NBE
+
+        :return:
+        """
+
+        job_engine_lite_container = "nuvlabox-job-engine-lite"
+        try:
+            container = self.docker_client.containers.get(job_engine_lite_container)
+        except docker.errors.NotFound:
+            return False
+        except Exception as e:
+            logging.error(f"Unable to search for container {job_engine_lite_container}. Reason: {str(e)}")
+            return False
+
+        try:
+            return container.status.lower() == "exited" and container.attrs.get('State', {}).get('ExitCode', 1) == 0
+        except AttributeError:
+            return False
+
+    def get_nuvlabox_capabilities(self, commissioning_dict: dict):
+        """ Finds the NuvlaBox capabilities and adds them to the NB commissioning payload
+
+        :param commissioning_dict: the commission payload, as a dict, to be changed in case there are capabilities
+        :return:
+        """
+
+        # NUVLA_JOB_PULL if job-engine-lite has been deployed with the NBE
+        if self.has_nuvla_job_pull():
+            commissioning_dict['capabilities'] = ['NUVLA_JOB_PULL']
+
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
@@ -292,6 +323,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             commission_payload["kubernetes-client-ca"] = k8s_config['ca']
             commission_payload["kubernetes-client-cert"] = k8s_config['cert']
             commission_payload["kubernetes-client-key"] = k8s_config['key']
+
+        self.get_nuvlabox_capabilities(commission_payload)
 
         tags = self.get_labels()
         commission_payload["tags"] = tags
