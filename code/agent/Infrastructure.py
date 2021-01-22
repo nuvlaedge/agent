@@ -283,7 +283,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             return False
 
         try:
-            return container.status.lower() == "exited" and container.attrs.get('State', {}).get('ExitCode', 1) == 0
+            return container.status.lower() == "paused"
         except AttributeError:
             return False
 
@@ -295,8 +295,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         # NUVLA_JOB_PULL if job-engine-lite has been deployed with the NBE
+        commissioning_dict['capabilities'] = []
         if self.has_nuvla_job_pull():
-            commissioning_dict['capabilities'] = ['NUVLA_JOB_PULL']
+            commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
