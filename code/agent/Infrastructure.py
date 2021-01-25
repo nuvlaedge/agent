@@ -283,9 +283,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             return False
 
         try:
-            return container.status.lower() == "paused"
-        except AttributeError:
+            if container.status.lower() == "paused":
+                self.job_engine_lite_image = container.attrs['Config']['Image']
+                return True
+        except (AttributeError, KeyError):
             return False
+
+        return False
 
     def get_nuvlabox_capabilities(self, commissioning_dict: dict):
         """ Finds the NuvlaBox capabilities and adds them to the NB commissioning payload

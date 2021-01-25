@@ -107,6 +107,7 @@ class NuvlaBoxCommon():
         self.hostfs = "/rootfs"
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
         self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
+        self.job_engine_lite_image = None
 
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None

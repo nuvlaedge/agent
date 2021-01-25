@@ -24,6 +24,7 @@ from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
 from agent.Infrastructure import Infrastructure
+from agent.Job import Job
 from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
@@ -184,7 +185,17 @@ if __name__ == "__main__":
 
         response = telemetry.update_status()
 
-        # TODO: if response.get('jobs')
+        if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image:
+            for job_id in response['jobs']:
+                job = Job(data_volume, job_id)
+                if job.do_nothing:
+                    continue
+
+                try:
+                    job.launch()
+                except Exception as e:
+                    # catch all
+                    logging.error(f'Cannot process job {job_id}. Reason: {str(e)}')
 
         infra.try_commission()
         e.wait(timeout=refresh_interval/2)
