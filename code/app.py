@@ -186,6 +186,7 @@ if __name__ == "__main__":
         response = telemetry.update_status()
 
         if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image:
+            logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             for job_id in response['jobs']:
                 job = Job(data_volume, job_id)
                 if job.do_nothing:
@@ -193,9 +194,9 @@ if __name__ == "__main__":
 
                 try:
                     job.launch()
-                except Exception as e:
+                except Exception as ex:
                     # catch all
-                    logging.error(f'Cannot process job {job_id}. Reason: {str(e)}')
+                    logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
 
         infra.try_commission()
         e.wait(timeout=refresh_interval/2)

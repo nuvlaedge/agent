@@ -84,7 +84,10 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
         cmd = f'-- /app/job_executor.py --api-url https://{self.nuvla_endpoint} ' \
             f'--api-insecure {self.nuvla_endpoint_insecure} ' \
             f'--api-key {user_info["api-key"]} ' \
-            f'--api-secret {user_info["secret-key"]}'
+            f'--api-secret {user_info["secret-key"]} ' \
+            f'--job-id {self.job_id}'
+
+        logging.info(f'Starting job {self.job_id} inside {self.job_engine_lite_image} container, with command: {cmd}')
 
         self.docker_client.containers.run(self.job_engine_lite_image,
                                           command=cmd,
@@ -98,5 +101,4 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
                                                   'bind': '/var/run/docker.sock',
                                                   'mode': 'ro'
                                               }
-                                          }
-                                          )
+                                          })
