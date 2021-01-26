@@ -188,7 +188,7 @@ if __name__ == "__main__":
         if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image:
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             for job_id in response['jobs']:
-                job = Job(data_volume, job_id)
+                job = Job(data_volume, job_id, infra.job_engine_lite_image)
                 if job.do_nothing:
                     continue
 

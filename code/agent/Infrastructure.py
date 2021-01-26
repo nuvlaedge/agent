@@ -15,6 +15,7 @@ from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
 from os import path, stat, remove
 
+
 class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Infrastructure class includes all methods and
     properties necessary update the infrastructure services
@@ -284,7 +285,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         try:
             if container.status.lower() == "paused":
-                NuvlaBoxCommon.NuvlaBoxCommon.job_engine_lite_image .job_engine_lite_image = container.attrs['Config']['Image']
+                self.job_engine_lite_image = container.attrs['Config']['Image']
                 return True
         except (AttributeError, KeyError):
             return False

@@ -10,25 +10,27 @@ import logging
 import docker
 import json
 
-from agent.Infrastructure import Infrastructure
+from agent.common import NuvlaBoxCommon
 
 
-class Job(Infrastructure):
+class Job(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Job class, which includes all methods and
     properties necessary to handle pull mode jobs
 
     Attributes:
         data_volume: path to shared NuvlaBox data
         job_id: Nuvla UUID of the job
+        job_engine_lite_image: Docker image for Job Engine lite
     """
 
-    def __init__(self, data_volume, job_id):
+    def __init__(self, data_volume, job_id, job_engine_lite_image):
         """ Constructs an Job object """
 
-        super().__init__(data_volume=data_volume)
+        super().__init__(shared_data_volume=data_volume)
         self.job_id = job_id
         self.job_id_clean = job_id.replace('/', '-')
         self.do_nothing = self.check_job_is_running()
+        self.job_engine_lite_image = job_engine_lite_image
 
     def check_job_is_running(self):
         """ Checks if the job is already running """
