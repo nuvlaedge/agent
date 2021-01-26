@@ -715,7 +715,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                 data=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
         except:
             logging.exception("Unable to update NuvlaBox status in Nuvla")
-            return None
+            return {}
         finally:
             # write all status into the shared volume for the other components to re-use if necessary
             with open(self.nuvlabox_status_file, 'w') as nbsf:
