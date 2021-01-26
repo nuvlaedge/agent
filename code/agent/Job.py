@@ -70,6 +70,15 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             with open(self.activation_flag) as a:
                 user_info = json.loads(a.read())
         except FileNotFoundError:
+            logging.error(f'Cannot find NuvlaBox API key for job {self.job_id}')
+            return
+
+        # Get the compute-api network
+        try:
+            compute_api = self.docker_client.containers.get('compute-api')
+            local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
+        except:
+            logging.error(f'Cannot infer compute-api network for local job {self.job_id}')
             return
 
         cmd = f'-- /app/job_executor.py --api-url https://{self.nuvla_endpoint} ' \
@@ -83,6 +92,7 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
                                           name=self.job_id_clean,
                                           hostname=self.job_id_clean,
                                           remove=True,
+                                          network=local_net,
                                           volumes={
                                               '/var/run/docker.sock': {
                                                   'bind': '/var/run/docker.sock',
