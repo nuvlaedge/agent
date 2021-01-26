@@ -10,10 +10,10 @@ import logging
 import docker
 import json
 
-from agent.common import NuvlaBoxCommon
+from agent.Infrastructure import Infrastructure
 
 
-class Job(NuvlaBoxCommon.NuvlaBoxCommon):
+class Job(Infrastructure):
     """ The Job class, which includes all methods and
     properties necessary to handle pull mode jobs
 
@@ -25,7 +25,7 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
     def __init__(self, data_volume, job_id):
         """ Constructs an Job object """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(data_volume=data_volume)
         self.job_id = job_id
         self.job_id_clean = job_id.replace('/', '-')
         self.do_nothing = self.check_job_is_running()
@@ -87,7 +87,7 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             f'--api-secret {user_info["secret-key"]} ' \
             f'--job-id {self.job_id}'
 
-        logging.info(f'Starting job {self.job_id} inside {self.job_engine_lite_image} container, with command: {cmd}')
+        logging.info(f'Starting job {self.job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
 
         self.docker_client.containers.run(self.job_engine_lite_image,
                                           command=cmd,

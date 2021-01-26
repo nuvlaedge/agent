@@ -284,7 +284,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         try:
             if container.status.lower() == "paused":
-                self.job_engine_lite_image = container.attrs['Config']['Image']
+                NuvlaBoxCommon.NuvlaBoxCommon.job_engine_lite_image .job_engine_lite_image = container.attrs['Config']['Image']
                 return True
         except (AttributeError, KeyError):
             return False
