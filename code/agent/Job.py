@@ -84,10 +84,12 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             return
 
         cmd = f'-- /app/job_executor.py --api-url https://{self.nuvla_endpoint} ' \
-            f'--api-insecure {self.nuvla_endpoint_insecure} ' \
             f'--api-key {user_info["api-key"]} ' \
             f'--api-secret {user_info["secret-key"]} ' \
             f'--job-id {self.job_id}'
+
+        if self.nuvla_endpoint_insecure:
+            cmd = f'{cmd} --api-insecure'
 
         logging.info(f'Starting job {self.job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
 
