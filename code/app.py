@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
         response = telemetry.update_status()
 
-        if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image:
+        if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             for job_id in response['jobs']:
                 job = Job(data_volume, job_id, infra.job_engine_lite_image)
