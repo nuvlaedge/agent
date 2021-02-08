@@ -1,4 +1,8 @@
 # Changelog
+## [1.15.0] - 2021-02-08
+### Added 
+ - support for pull-mode jobs
+### Changed
 ## [1.14.1] - 2021-01-13
 ### Added 
  - expand API
