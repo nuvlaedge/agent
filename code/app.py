@@ -24,6 +24,7 @@ from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
 from agent.Infrastructure import Infrastructure
+from agent.Job import Job
 from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
@@ -182,7 +183,20 @@ if __name__ == "__main__":
         if nuvlabox_resource.get("vpn-server-id"):
             infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
 
-        telemetry.update_status()
+        response = telemetry.update_status()
+
+        if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image and response.get('jobs'):
+            logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
+            for job_id in response['jobs']:
+                job = Job(data_volume, job_id, infra.job_engine_lite_image)
+                if job.do_nothing:
+                    continue
+
+                try:
+                    job.launch()
+                except Exception as ex:
+                    # catch all
+                    logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
 
         infra.try_commission()
         e.wait(timeout=refresh_interval/2)
