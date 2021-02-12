@@ -132,6 +132,7 @@ def post(payload):
                           payload=payload)
 
         if fix_edit[1] == 200:
+            fix_edit[0]['id'] = existing_nuvla_per['resources'][0]['id']
             local_peripheral_save(peripheral_filepath, payload)
             return fix_edit[0], 201
 
