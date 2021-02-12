@@ -127,9 +127,15 @@ def post(payload):
     if existing_nuvla_per.get('count', 0) > 0:
         # already registered in Nuvla, but not locally...maybe something went wrong in a past mgmt action
         # let's just update it
-        return modify(peripheral_identifier,
-                      peripheral_nuvla_id=existing_nuvla_per['resources'][0]['id'],
-                      payload=payload)
+        fix_edit = modify(peripheral_identifier,
+                          peripheral_nuvla_id=existing_nuvla_per['resources'][0]['id'],
+                          payload=payload)
+
+        if fix_edit[1] == 200:
+            local_peripheral_save(peripheral_filepath, payload)
+            return fix_edit[0], 201
+
+        return fix_edit
 
     # else
     # Try to POST the resource
