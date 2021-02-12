@@ -1,4 +1,8 @@
 # Changelog
+## [1.15.1] - 2021-02-12
+### Added 
+ - mechanism to cope with duplicated peripherals
+### Changed
 ## [1.15.0] - 2021-02-08
 ### Added 
  - support for pull-mode jobs
