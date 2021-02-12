@@ -117,6 +117,21 @@ def post(payload):
 
         payload['version'] = version
 
+    # check if it already exists in Nuvla
+    try:
+        existing_nuvla_per = NB.api().get('nuvlabox-peripheral', filter=f'identifier="{peripheral_identifier}"').data
+    except nuvla.api.api.NuvlaError as e:
+        logging.exception("Unable to reach Nuvla")
+        return e.response.json(), e.response.status_code
+
+    if existing_nuvla_per.get('count', 0) > 0:
+        # already registered in Nuvla, but not locally...maybe something went wrong in a past mgmt action
+        # let's just update it
+        return modify(peripheral_identifier,
+                      peripheral_nuvla_id=existing_nuvla_per['resources'][0]['id'],
+                      payload=payload)
+
+    # else
     # Try to POST the resource
     try:
         logging.info("Posting peripheral {}".format(payload))
