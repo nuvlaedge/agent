@@ -670,7 +670,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     "bytes-received": rx_bytes
                 }
 
-                if previous_net_stats:
+                if interface in previous_net_stats:
                     # if we've previously reported already the net stats, then if means we've simply restarted the NB
                     # in this case, we take the last known value as the current value, to continue with the counting
                     rx_bytes_report = previous_net_stats[interface].get('bytes-received', 0)
