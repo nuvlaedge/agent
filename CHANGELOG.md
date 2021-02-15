@@ -1,4 +1,8 @@
 # Changelog
+## [1.15.2] - 2021-02-15
+### Added
+### Changed
+ - handle network counters to count for NB lifetime only
 ## [1.15.1] - 2021-02-12
 ### Added 
  - mechanism to cope with duplicated peripherals
