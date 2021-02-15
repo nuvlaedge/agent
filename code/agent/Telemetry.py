@@ -658,26 +658,28 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
                     self.first_net_stats[interface] = {
                         "bytes-transmitted": tx_bytes,
-                        "bytes-received": rx_bytes
+                        "bytes-received": rx_bytes,
+                        "bytes-transmitted-carry": previous_net_stats.get(interface, {}).get('bytes-transmitted', 0),
+                        "bytes-received-carry": previous_net_stats.get(interface, {}).get('bytes-received', 0),
                     }
                 else:
-                    # then counters are still going. In this case we just need to do -> current - first
-                    rx_bytes_report = rx_bytes - self.first_net_stats[interface].get('bytes-received', 0)
-                    tx_bytes_report = tx_bytes - self.first_net_stats[interface].get('bytes-transmitted', 0)
+                    # then counters are still going. In this case we just need to do -> current - first + carry
+                    rx_bytes_report = rx_bytes - \
+                                      self.first_net_stats[interface].get('bytes-received', 0) + \
+                                      self.first_net_stats[interface].get('bytes-received-carry', 0)
+                    tx_bytes_report = tx_bytes - \
+                                      self.first_net_stats[interface].get('bytes-transmitted', 0) + \
+                                      self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
             else:
+                rx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-received', 0)
+                tx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-transmitted', 0)
+
                 self.first_net_stats[interface] = {
                     "bytes-transmitted": tx_bytes,
-                    "bytes-received": rx_bytes
+                    "bytes-received": rx_bytes,
+                    "bytes-transmitted-carry": tx_bytes_report,
+                    "bytes-received-carry": rx_bytes_report
                 }
-
-                if interface in previous_net_stats:
-                    # if we've previously reported already the net stats, then if means we've simply restarted the NB
-                    # in this case, we take the last known value as the current value, to continue with the counting
-                    rx_bytes_report = previous_net_stats[interface].get('bytes-received', 0)
-                    tx_bytes_report = previous_net_stats[interface].get('bytes-transmitted', 0)
-                else:
-                    # first time we are reporting this interface, during the NB lifetime, so its count must be 0
-                    rx_bytes_report = tx_bytes_report = 0
 
             previous_net_stats[interface] = {
                 "bytes-transmitted": tx_bytes_report,
