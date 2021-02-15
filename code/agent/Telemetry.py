@@ -43,6 +43,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
+        self.first_net_stats = {}
         self.status = {'resources': None,
                        'status': None,
                        'nuvlabox-api-endpoint': None,
@@ -609,7 +610,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def get_network_info(self):
         """ Gets the list of net ifaces and corresponding rxbytes and txbytes
 
-        :returns {"iface1": {"rx_bytes": X, "tx_bytes": Y}, "iface2": ...}
+        :returns [{"interface": "iface1", "bytes-transmitted": X, "bytes-received": Y}, {"interface": "iface2", ...}]
         """
 
         sysfs_net = "{}/sys/class/net".format(self.hostfs)
@@ -619,6 +620,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except FileNotFoundError:
             logging.warning("Cannot find network information for this device")
             return {}
+
+        previous_net_stats = {}
+        try:
+            with open(self.previous_net_stats_file) as pns:
+                previous_net_stats = json.load(pns)
+        except (FileNotFoundError, json.decoder.JSONDecodeError):
+            pass
 
         net_stats = []
         for interface in ifaces:
@@ -632,11 +640,60 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 logging.warning("Cannot calculate net usage for interface {}".format(interface))
                 continue
 
+            # we compute the net stats since the beginning of the NB lifetime
+            # and our counters reset on every NB restart
+            if interface in self.first_net_stats:
+                if rx_bytes < self.first_net_stats[interface].get('bytes-received', 0) or \
+                        tx_bytes < self.first_net_stats[interface].get('bytes-transmitted', 0):
+                    # then the system counters were reset
+                    logging.warning(f'Host network counters seem to have been reset for network interface {interface}')
+                    if interface in previous_net_stats:
+                        # in this case, because the numbers no longer correlate, we need to add up to the previous
+                        # reported value
+                        rx_bytes_report = previous_net_stats[interface].get('bytes-received', 0) + rx_bytes
+                        tx_bytes_report = previous_net_stats[interface].get('bytes-transmitted', 0) + tx_bytes
+                    else:
+                        rx_bytes_report = rx_bytes
+                        tx_bytes_report = tx_bytes
+
+                    self.first_net_stats[interface] = {
+                        "bytes-transmitted": tx_bytes,
+                        "bytes-received": rx_bytes,
+                        "bytes-transmitted-carry": previous_net_stats.get(interface, {}).get('bytes-transmitted', 0),
+                        "bytes-received-carry": previous_net_stats.get(interface, {}).get('bytes-received', 0),
+                    }
+                else:
+                    # then counters are still going. In this case we just need to do -> current - first + carry
+                    rx_bytes_report = rx_bytes - \
+                                      self.first_net_stats[interface].get('bytes-received', 0) + \
+                                      self.first_net_stats[interface].get('bytes-received-carry', 0)
+                    tx_bytes_report = tx_bytes - \
+                                      self.first_net_stats[interface].get('bytes-transmitted', 0) + \
+                                      self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
+            else:
+                rx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-received', 0)
+                tx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-transmitted', 0)
+
+                self.first_net_stats[interface] = {
+                    "bytes-transmitted": tx_bytes,
+                    "bytes-received": rx_bytes,
+                    "bytes-transmitted-carry": tx_bytes_report,
+                    "bytes-received-carry": rx_bytes_report
+                }
+
+            previous_net_stats[interface] = {
+                "bytes-transmitted": tx_bytes_report,
+                "bytes-received": rx_bytes_report
+            }
+
             net_stats.append({
                 "interface": interface,
-                "bytes-transmitted": tx_bytes,
-                "bytes-received": rx_bytes
+                "bytes-transmitted": tx_bytes_report,
+                "bytes-received": rx_bytes_report
             })
+
+        with open(self.previous_net_stats_file, 'w') as pns:
+            pns.write(json.dumps(previous_net_stats))
 
         return net_stats
 

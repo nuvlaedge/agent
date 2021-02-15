@@ -94,6 +94,7 @@ class NuvlaBoxCommon():
         self.cert = "cert.pem"
         self.key = "key.pem"
         self.context = ".context"
+        self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
         self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.vpn_folder = "{}/vpn".format(self.data_volume)
         self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
