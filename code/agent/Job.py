@@ -48,6 +48,9 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             if job_container.status.lower() in ['running', 'restarting']:
                 logging.info(f'Job {self.job_id} is already running in container {job_container.name}')
                 return True
+            elif job_container.status.lower() in ['created']:
+                logging.warning(f'Job {self.job_id} was created by not started. Removing it and starting a new one')
+                job_container.remove()
             else:
                 # then it is stopped or dead. force kill it and re-initiate
                 job_container.kill()
