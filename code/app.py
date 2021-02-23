@@ -87,6 +87,14 @@ def healthcheck():
     return jsonify(True)
 
 
+@app.route('/api/agent-container-id', methods=['GET'])
+def get_agent_container_id():
+    """ Static endpoint just for clients to get the Agent container Docker ID
+    """
+
+    return jsonify(socket.gethostname())
+
+
 @app.route('/api/peripheral', defaults={'identifier': None}, methods=['POST', 'GET'])
 @app.route('/api/peripheral/<path:identifier>', methods=['GET', 'PUT', 'DELETE'])
 def manage_peripheral(identifier):
