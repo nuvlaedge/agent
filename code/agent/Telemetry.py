@@ -235,7 +235,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
         docker_info = self.get_docker_info()
-        node_id = self.docker_client.info()["Swarm"]["NodeID"]
+        node_id = docker_info.get("Swarm", {}).get("NodeID")
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -275,9 +275,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
             "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint(),
-            "docker-plugins": self.get_docker_plugins(),
-            "swarm-node-id": node_id
+            "docker-plugins": self.get_docker_plugins()
         }
+
+        if node_id:
+            status_for_nuvla["swarm-node-id"] = node_id
 
         installation_params = self.get_installation_parameters()
         if installation_params:
@@ -853,7 +855,27 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
                 ip = str(open(self.vpn_ip_file).read().splitlines()[0])
             else:
-                ip = self.docker_client.info()["Swarm"]["NodeAddr"]
+                ip = self.docker_client.info().get("Swarm", {}).get("NodeAddr")
+                if not ip:
+                    # then probably this isn't running in Swarm mode
+                    try:
+                        ip = None
+                        with open(f'{self.hostfs}/proc/net/tcp') as ipfile:
+                            ips = ipfile.readlines()
+                            for line in ips[1:]:
+                                cols = line.strip().split(' ')
+                                if cols[1].startswith('00000000') or cols[2].startswith('00000000'):
+                                    continue
+                                hex_ip = cols[1].split(':')[0]
+                                ip = f'{int(hex_ip[len(hex_ip)-2:],16)}.' \
+                                    f'{int(hex_ip[len(hex_ip)-4:len(hex_ip)-2],16)}.' \
+                                    f'{int(hex_ip[len(hex_ip)-6:len(hex_ip)-4],16)}.' \
+                                    f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
+                                break
+                        if not ip:
+                            raise Exception('Cannot infer IP')
+                    except:
+                        ip = '127.0.0.1'
         else:
             logging.warning("Cannot infer the NuvlaBox IP!")
             return None

@@ -153,7 +153,8 @@ class NuvlaBoxCommon():
         elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
             self.nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
         else:
-            self.nuvlabox_id = get_mac_address('eth0', '')
+            # self.nuvlabox_id = get_mac_address('eth0', '')
+            raise Exception(f'NUVLABOX_UUID not provided')
 
         if not self.nuvlabox_id.startswith("nuvlabox/"):
             self.nuvlabox_id = 'nuvlabox/{}'.format(self.nuvlabox_id)

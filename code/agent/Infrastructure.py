@@ -236,9 +236,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             node_id = self.docker_client.info()["Swarm"]["NodeID"]
             container_labels = self.docker_client.api.inspect_node(node_id)["Spec"]["Labels"]
-        except docker.errors.APIError as e:
+        except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
             if not "node is not a swarm manager" in str(e).lower():
-                logging.error(f"Cannot get node labels: {str(e)}")
+                logging.debug(f"Cannot get node labels: {str(e)}")
             return nuvla_tags
 
         for label, value in container_labels.items():
