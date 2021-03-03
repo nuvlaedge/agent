@@ -10,6 +10,7 @@ and respective credentials in Nuvla
 import logging
 import docker
 import json
+import requests
 import time
 from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
@@ -32,12 +33,18 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         super().__init__(shared_data_volume=data_volume)
         self.telemetry_instance = Telemetry(data_volume, None)
+        self.compute_api = 'compute-api'
+        self.compute_api_port = '5000'
 
     @staticmethod
     def get_swarm_tokens():
         """ Retrieve Swarm tokens """
 
-        return docker.from_env().swarm.attrs['JoinTokens']['Manager'], docker.from_env().swarm.attrs['JoinTokens']['Worker']
+        if docker.from_env().swarm.attrs:
+            return docker.from_env().swarm.attrs['JoinTokens']['Manager'], \
+                   docker.from_env().swarm.attrs['JoinTokens']['Worker']
+        else:
+            return None
 
     @staticmethod
     def write_file(file, content, is_json=False):
@@ -304,15 +311,34 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         if self.has_nuvla_job_pull():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
+    def compute_api_is_running(self) -> bool:
+        """
+        Pokes ate the compute-api endpoint to see if it is up and running
+
+        :return: True or False
+        """
+
+        compute_api_url = f'https://{self.compute_api}:{self.compute_api_port}'
+        try:
+            requests.get(compute_api_url)
+        except requests.exceptions.SSLError:
+            # this is expected. It means it is up, we just weren't authorized
+            pass
+        except:
+            return False
+
+        return True
+
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
 
         commission_payload = {}
         swarm_tokens = self.get_swarm_tokens()
-        self.token_diff(swarm_tokens[0], swarm_tokens[1])
-        commission_payload['swarm-token-manager'] = swarm_tokens[0]
-        commission_payload['swarm-token-worker'] = swarm_tokens[1]
+        if swarm_tokens:
+            self.token_diff(swarm_tokens[0], swarm_tokens[1])
+            commission_payload['swarm-token-manager'] = swarm_tokens[0]
+            commission_payload['swarm-token-worker'] = swarm_tokens[1]
 
         tls_keys = self.get_tls_keys()
         if tls_keys:
@@ -320,8 +346,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             commission_payload["swarm-client-cert"] = tls_keys[1]
             commission_payload["swarm-client-key"] = tls_keys[2]
 
-        my_ip = self.telemetry_instance.get_ip()
-        commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
+        if self.compute_api_is_running():
+            my_ip = self.telemetry_instance.get_ip()
+            commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
         k8s_config = self.is_kubernetes_running()
         if k8s_config:
