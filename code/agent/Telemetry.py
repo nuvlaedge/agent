@@ -747,18 +747,22 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             return output_fallback
 
-    def diff(self, old_status, new_status):
+    @staticmethod
+    def diff(old_status, new_status):
         """ Compares the previous status with the new one and discover the minimal changes """
 
         minimal_update = {}
         delete_attributes = []
-        for key in self.status.keys():
+        for key in old_status.keys():
             if key in new_status:
                 if new_status[key] is None:
                     delete_attributes.append(key)
                     continue
                 if old_status[key] != new_status[key]:
                     minimal_update[key] = new_status[key]
+            else:
+                if old_status[key] and any(old_status.values()):
+                    delete_attributes.append(key)
         return minimal_update, delete_attributes
 
     def update_status(self):
@@ -770,8 +774,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         try:
+            logging.info(f'{delete_attributes}')
             r = self.api().edit(self.nb_status_id,
-                                data=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
+                                data=updated_status,
+                                select=delete_attributes)
         except:
             logging.exception("Unable to update NuvlaBox status in Nuvla")
             return {}

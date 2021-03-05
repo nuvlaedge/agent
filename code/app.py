@@ -64,6 +64,21 @@ def set_status():
     return "to be implemented"
 
 
+@app.route('/api/find-data-gateway')
+def find_data_gateway():
+    """
+    Returns 200 or 404, depending on whether the data-gateway is reachable or not
+
+    :return: 200 or 404
+    """
+
+    try:
+        socket.gethostbyname('data-gateway')
+        return jsonify('success'), 200
+    except socket.gaierror as e:
+        return jsonify(str(e)), 404
+
+
 @app.route('/api/commission', methods=['POST'])
 def trigger_commission():
     """ API endpoint to let other components trigger a commissioning
