@@ -774,7 +774,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
         try:
-            logging.info(f'{delete_attributes}')
             r = self.api().edit(self.nb_status_id,
                                 data=updated_status,
                                 select=delete_attributes)

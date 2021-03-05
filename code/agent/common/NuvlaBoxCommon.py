@@ -15,6 +15,8 @@ import logging
 import argparse
 import sys
 import docker
+import signal
+from contextlib import contextmanager
 from nuvla.api import Api
 from subprocess import PIPE, Popen
 
@@ -68,6 +70,27 @@ def arguments():
     parser.add_argument('-q', '--quiet', dest='quiet', default=False, action='store_true')
 
     return parser
+
+
+def raise_timeout(signum, frame):
+    raise TimeoutError
+
+
+@contextmanager
+def timeout(time):
+    # Register a function to raise a TimeoutError on the signal.
+    signal.signal(signal.SIGALRM, raise_timeout)
+    # Schedule the signal to be sent after ``time``.
+    signal.alarm(time)
+
+    try:
+        yield
+    except TimeoutError:
+        pass
+    finally:
+        # Unregister the signal so it won't be triggered
+        # if the timeout is not reached.
+        signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
 class NuvlaBoxCommon():

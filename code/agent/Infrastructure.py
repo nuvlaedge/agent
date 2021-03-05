@@ -320,12 +320,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         compute_api_url = f'https://{self.compute_api}:{self.compute_api_port}'
+
         try:
-            requests.get(compute_api_url)
+            if docker.from_env().containers.get(self.compute_api).status != 'running':
+                return False
+            with NuvlaBoxCommon.timeout(3):
+                requests.get(compute_api_url)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
             pass
-        except:
+        except Exception as e:
             return False
 
         return True
