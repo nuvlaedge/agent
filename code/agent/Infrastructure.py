@@ -470,6 +470,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if path.exists(self.ssh_flag):
             logging.debug("Immutable SSH key has already been processed at installation time")
+            with open(self.ssh_flag) as sshf:
+                original_ssh_key = sshf.read()
+                if self.ssh_pub_key != original_ssh_key:
+                    logging.warning(f'Received new SSH key but the original {original_ssh_key} is immutable. Ignoring')
             return
 
         event = {
@@ -512,3 +516,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 logging.error(msg)
                 event['content']['state'] = msg
                 self.push_event(event)
+
+            with open(self.ssh_flag, 'w') as sshfw:
+                sshfw.write(self.ssh_pub_key)
