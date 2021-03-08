@@ -14,6 +14,7 @@ import requests
 import time
 from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
+from datetime import datetime
 from os import path, stat, remove
 
 
@@ -459,12 +460,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     logging.error("Trying to fix local VPN client by recommissioning...")
                     self.write_file(self.vpn_infra_file, vpn_is_id)
 
-    def set_immutable_ssh_key(self, ssh_pub_key: str):
+    def set_immutable_ssh_key(self):
         """
         Takes a public SSH key from env and adds it to the installing host user.
         This is only done once, at installation time.
 
-        :param ssh_pub_key: public SSH key
         :return:
         """
 
@@ -484,7 +484,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 },
                 "state": f"Unknown problem while setting immutable SSH key"
             },
-            "severity": "high"
+            "severity": "high",
+            "timestamp": datetime.utcnow().strftime(self.nuvla_timestamp_format)
         }
         if self.ssh_pub_key and self.installation_home:
             ssh_folder = f"{self.hostfs}{self.installation_home}/.ssh"
@@ -493,6 +494,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
                 self.push_event(event)
                 return
+
+            with open(f'{self.data_volume}/{self.context}') as nb:
+                nb_owner = json.load(nb).get('owner')
+
+            event_owners = [nb_owner, self.nuvlabox_id] if nb_owner else [self.nuvlabox_id]
+            event['acl'] = {'owners': event_owners}
 
             cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
 

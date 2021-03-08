@@ -59,7 +59,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'vulnerabilities': None,
                        'swarm-node-id': None,
                        'installation-parameters': None,
-                       'swarm-node-cert-expiry-date': None
+                       'swarm-node-cert-expiry-date': None,
+                       'host-user-home': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -291,6 +292,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         net_stats = self.get_network_info()
         if net_stats:
             status_for_nuvla['resources']['net-stats'] = net_stats
+
+        if self.installation_home:
+            status_for_nuvla['host-user-home'] = self.installation_home
 
         try:
             swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()

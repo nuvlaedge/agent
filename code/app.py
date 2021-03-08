@@ -182,6 +182,8 @@ if __name__ == "__main__":
     telemetry = Telemetry(data_volume, nuvlabox_status_id)
     infra = Infrastructure(data_volume)
 
+    infra.set_immutable_ssh_key()
+
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
 

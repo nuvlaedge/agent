@@ -187,7 +187,18 @@ class NuvlaBoxCommon():
             self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
 
         self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
-        self.installation_home = os.environ.get('HOST_HOME') if self.ssh_pub_key else None
+        self.host_user_home_file = f'{self.data_volume}/.host_user_home'
+        if os.path.exists(self.host_user_home_file):
+            with open(self.host_user_home_file) as userhome:
+                self.installation_home = userhome.read().strip()
+        else:
+            self.installation_home = os.environ.get('HOST_HOME')
+
+            if not self.installation_home:
+                logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
+            else:
+                with open(self.host_user_home_file, 'w') as userhome:
+                    userhome.write(self.installation_home)
 
         # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
         # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
