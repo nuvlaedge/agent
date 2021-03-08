@@ -35,6 +35,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
+        self.ssh_flag = f"{data_volume}/.ssh"
 
     @staticmethod
     def get_swarm_tokens():
@@ -457,3 +458,57 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     # maybe something went wrong, just recommission
                     logging.error("Trying to fix local VPN client by recommissioning...")
                     self.write_file(self.vpn_infra_file, vpn_is_id)
+
+    def set_immutable_ssh_key(self, ssh_pub_key: str):
+        """
+        Takes a public SSH key from env and adds it to the installing host user.
+        This is only done once, at installation time.
+
+        :param ssh_pub_key: public SSH key
+        :return:
+        """
+
+        if path.exists(self.ssh_flag):
+            logging.debug("Immutable SSH key has already been processed at installation time")
+            return
+
+        event = {
+            "category": "action",
+            "content": {
+                "resource": {
+                    "href": self.nuvlabox_id
+                },
+                "state": f"Unknown problem while setting immutable SSH key"
+            },
+            "severity": "high"
+        }
+        if self.ssh_pub_key and self.installation_home:
+            ssh_folder = f"{self.hostfs}{self.installation_home}/.ssh"
+            if not path.exists(ssh_folder):
+                event['content']['state'] = f"Cannot set immutable SSH key because {ssh_folder} does not exist"
+
+                self.push_event(event)
+                return
+
+            cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
+
+            logging.info(f'Setting immutable SSH key {self.ssh_pub_key} for {self.installation_home}')
+            try:
+                with NuvlaBoxCommon.timeout(10):
+                    self.docker_client.containers.run('alpine',
+                                                      remove=True,
+                                                      command=cmd,
+                                                      environment={
+                                                          'SSH_PUB': self.ssh_pub_key
+                                                      },
+                                                      volumes={
+                                                          f'{self.installation_home}/.ssh': {
+                                                              'bind': ssh_folder
+                                                          }
+                                                      }
+                                                      )
+            except Exception as e:
+                msg = f'An error occurred while setting immutable SSH key: {str(e)}'
+                logging.error(msg)
+                event['content']['state'] = msg
+                self.push_event(event)

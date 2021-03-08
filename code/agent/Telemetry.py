@@ -274,9 +274,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
-            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint(),
             "docker-plugins": self.get_docker_plugins()
         }
+
+        mgmt_api = self.get_nuvlabox_api_endpoint()
+        if mgmt_api:
+            status_for_nuvla["nuvlabox-api-endpoint"] = mgmt_api
 
         if node_id:
             status_for_nuvla["swarm-node-id"] = node_id

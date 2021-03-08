@@ -179,8 +179,6 @@ if __name__ == "__main__":
 
     nuvlabox_status_id = activation.update_nuvlabox_resource()
 
-    # start telemetry
-    logging.info("Starting telemetry...")
     telemetry = Telemetry(data_volume, nuvlabox_status_id)
     infra = Infrastructure(data_volume)
 
@@ -194,6 +192,8 @@ if __name__ == "__main__":
     monitoring_thread.daemon = True
     monitoring_thread.start()
 
+    # start telemetry
+    logging.info("Starting telemetry...")
     while True:
         nuvlabox_resource = activation.get_nuvlabox_info()
         if nuvlabox_info_updated_date != nuvlabox_resource['updated']:

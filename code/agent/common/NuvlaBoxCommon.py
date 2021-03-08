@@ -186,6 +186,9 @@ class NuvlaBoxCommon():
         if 'NUVLABOX_ENGINE_VERSION' in os.environ and os.environ['NUVLABOX_ENGINE_VERSION']:
             self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
 
+        self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
+        self.installation_home = os.environ.get('HOST_HOME') if self.ssh_pub_key else None
+
         # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
         # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
         self.nvidia_software_power_consumption_model = {
@@ -225,6 +228,19 @@ class NuvlaBoxCommon():
 
         return Api(endpoint='https://{}'.format(self.nuvla_endpoint),
                    insecure=self.nuvla_endpoint_insecure, reauthenticate=True)
+
+    def push_event(self, data):
+        """
+        Push an event resource to Nuvla
+
+        :param data: JSON payload
+        :return:
+        """
+
+        try:
+            self.api().add('event', data=data)
+        except Exception as e:
+            logging.error(f'Unable to push event to Nuvla: {data}. Reason: {str(e)}')
 
     @staticmethod
     def authenticate(api_instance, api_key, secret_key):
