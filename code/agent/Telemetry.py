@@ -46,6 +46,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.first_net_stats = {}
         self.status = {'resources': None,
                        'status': None,
+                       'status-notes': None,
                        'nuvlabox-api-endpoint': None,
                        'operating-system': None,
                        'architecture': None,
@@ -57,7 +58,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'nuvlabox-engine-version': None,
                        'inferred-location': None,
                        'vulnerabilities': None,
-                       'swarm-node-id': None,
+                       'node-id': None,
+                       'cluster-id': None,
+                       'cluster-nodes': None,
+                       'cluster-node-role': None,
                        'installation-parameters': None,
                        'swarm-node-cert-expiry-date': None,
                        'host-user-home': None
@@ -293,6 +297,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if node_id and node_id in [rm.get('NodeID') for rm in docker_info.get('RemoteManagers', [])]:
             status_for_nuvla["cluster-node-role"] = "manager"
+            cluster_nodes = []
+            for node in self.docker_client.nodes.list():
+                if node not in cluster_nodes:
+                    try:
+                        cluster_nodes.append(node.id)
+                    except AttributeError:
+                        continue
+
+            if len(cluster_nodes) > 0:
+                status_for_nuvla['cluster-nodes'] = cluster_nodes
         else:
             if node_id:
                 status_for_nuvla["cluster-node-role"] = "worker"
