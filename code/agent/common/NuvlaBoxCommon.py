@@ -108,6 +108,7 @@ class NuvlaBoxCommon():
         self.swarm_worker_token_file = "swarm-worker-token"
         self.commissioning_file = ".commission"
         self.status_file = ".status"
+        self.status_notes_file = ".status_notes"
         self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
         self.nuvlabox_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
         self.ip_file = ".ip"
@@ -289,6 +290,17 @@ class NuvlaBoxCommon():
             self.set_local_operational_status(operational_status)
 
         return operational_status
+
+    def get_operational_status_notes(self) -> list:
+        """ Retrieves the operational status notes of the NuvlaBox from the .status_notes file """
+
+        notes = []
+        try:
+            notes = open(f"{self.data_volume}/{self.status_notes_file}").read().split()
+        except Exception as e:
+            logging.warning(f"Error while reading operational status notes: {str(e)}")
+
+        return notes
 
     def set_local_operational_status(self, operational_status):
         """ Write the operational status into the .status file

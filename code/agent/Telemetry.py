@@ -235,8 +235,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # get status for Nuvla
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
+        operational_status_notes = self.get_operational_status_notes()
         docker_info = self.get_docker_info()
         node_id = docker_info.get("Swarm", {}).get("NodeID")
+        cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -275,6 +277,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
+            "status-notes": operational_status_notes,
             "docker-plugins": self.get_docker_plugins()
         }
 
@@ -283,7 +286,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla["nuvlabox-api-endpoint"] = mgmt_api
 
         if node_id:
-            status_for_nuvla["swarm-node-id"] = node_id
+            status_for_nuvla["node-id"] = node_id
+
+        if cluster_id:
+            status_for_nuvla["cluster-id"] = cluster_id
+
+        if node_id and node_id in [rm.get('NodeID') for rm in docker_info.get('RemoteManagers', [])]:
+            status_for_nuvla["cluster-node-role"] = "manager"
+        else:
+            if node_id:
+                status_for_nuvla["cluster-node-role"] = "worker"
 
         installation_params = self.get_installation_parameters()
         if installation_params:
