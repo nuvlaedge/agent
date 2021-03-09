@@ -64,7 +64,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'cluster-node-role': None,
                        'installation-parameters': None,
                        'swarm-node-cert-expiry-date': None,
-                       'host-user-home': None
+                       'host-user-home': None,
+                       'orchestrator': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -241,7 +242,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         operational_status = self.get_operational_status()
         operational_status_notes = self.get_operational_status_notes()
         docker_info = self.get_docker_info()
-        node_id = docker_info.get("Swarm", {}).get("NodeID")
+        swarm_node_id = docker_info.get("Swarm", {}).get("NodeID")
         cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
 
         cpu_sample = {
@@ -289,8 +290,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if mgmt_api:
             status_for_nuvla["nuvlabox-api-endpoint"] = mgmt_api
 
-        if node_id:
-            status_for_nuvla["node-id"] = node_id
+        if swarm_node_id:
+            status_for_nuvla["node-id"] = swarm_node_id
+            status_for_nuvla["orchestrator"] = "swarm"
 
         if cluster_id:
             status_for_nuvla["cluster-id"] = cluster_id
