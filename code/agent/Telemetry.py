@@ -297,7 +297,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if cluster_id:
             status_for_nuvla["cluster-id"] = cluster_id
 
-        if node_id and node_id in [rm.get('NodeID') for rm in docker_info.get('RemoteManagers', [])]:
+        if swarm_node_id and swarm_node_id in [rm.get('NodeID') for rm in docker_info.get('RemoteManagers', [])]:
             status_for_nuvla["cluster-node-role"] = "manager"
             cluster_nodes = []
             for node in self.docker_client.nodes.list():
@@ -310,7 +310,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             if len(cluster_nodes) > 0:
                 status_for_nuvla['cluster-nodes'] = cluster_nodes
         else:
-            if node_id:
+            if swarm_node_id:
                 status_for_nuvla["cluster-node-role"] = "worker"
 
         installation_params = self.get_installation_parameters()
