@@ -301,7 +301,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 swarm_node_id in [rm.get('NodeID') for rm in docker_info.get('Swarm', {}).get('RemoteManagers', [])]:
             status_for_nuvla["cluster-node-role"] = "manager"
             cluster_nodes = []
-            for node in self.docker_client.nodes.list(filters={'membership': 'accepted'}):
+            for node in self.docker_client.nodes.list():
                 if node not in cluster_nodes and node.attrs.get('Status', {}).get('State', '').lower() == 'ready':
 
                     try:
