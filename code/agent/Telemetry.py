@@ -60,6 +60,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'vulnerabilities': None,
                        'node-id': None,
                        'cluster-id': None,
+                       'cluster-managers': None,
                        'cluster-nodes': None,
                        'cluster-node-role': None,
                        'installation-parameters': None,
@@ -244,6 +245,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         docker_info = self.get_docker_info()
         swarm_node_id = docker_info.get("Swarm", {}).get("NodeID")
         cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
+        cluster_managers = [rm.get('NodeID') for rm in docker_info.get('Swarm', {}).get('RemoteManagers', [])]
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -297,8 +299,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if cluster_id:
             status_for_nuvla["cluster-id"] = cluster_id
 
-        if swarm_node_id and \
-                swarm_node_id in [rm.get('NodeID') for rm in docker_info.get('Swarm', {}).get('RemoteManagers', [])]:
+        if cluster_managers:
+            status_for_nuvla["cluster-managers"] = cluster_managers
+
+        if swarm_node_id and swarm_node_id in cluster_managers:
             status_for_nuvla["cluster-node-role"] = "manager"
             cluster_nodes = []
             for node in self.docker_client.nodes.list():
