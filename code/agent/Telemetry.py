@@ -66,7 +66,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'installation-parameters': None,
                        'swarm-node-cert-expiry-date': None,
                        'host-user-home': None,
-                       'orchestrator': None
+                       'orchestrator': None,
+                       'cluster-join-address': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -301,6 +302,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if cluster_managers:
             status_for_nuvla["cluster-managers"] = cluster_managers
+            if swarm_node_id:
+                for manager in cluster_managers:
+                    if swarm_node_id == manager.get('NodeID', ''):
+                        try:
+                            status_for_nuvla["cluster-join-address"] = manager['Addr']
+                            break
+                        except KeyError:
+                            logging.warning(f'Unable to infer cluster-join-address attribute: {manager}')
 
         if swarm_node_id and swarm_node_id in cluster_managers:
             status_for_nuvla["cluster-node-role"] = "manager"
