@@ -303,7 +303,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if cluster_managers:
             status_for_nuvla["cluster-managers"] = cluster_managers
             if swarm_node_id:
-                for manager in cluster_managers:
+                for manager in docker_info.get('Swarm', {}).get('RemoteManagers', []):
                     if swarm_node_id == manager.get('NodeID', ''):
                         try:
                             status_for_nuvla["cluster-join-address"] = manager['Addr']
