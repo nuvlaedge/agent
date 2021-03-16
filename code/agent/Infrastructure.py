@@ -256,14 +256,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         has changed wrt to the previous one
 
         :param current_conf: current commissioning data
-        :return False when commissioning is not needed, or the changed attributes otherwise
+        :return (commissioning payload, deleted attributes)
         """
 
         try:
             with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
                 old_conf = json.loads(r.read())
                 if current_conf == old_conf:
-                    return False
+                    return {}, []
                 else:
                     diff_conf = {}
                     for key, value in current_conf.items():
@@ -273,10 +273,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
                         diff_conf[key] = value
 
-                    return diff_conf
+                    return diff_conf, list(set(old_conf) - set(diff_conf))
         except FileNotFoundError:
             logging.info("Auto-commissioning the NuvlaBox for the first time...")
-            return current_conf
+            return current_conf, []
 
     def has_nuvla_job_pull(self):
         """ Checks if the job-engine-lite has been deployed alongside the NBE
@@ -336,6 +336,21 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return True
 
+    def get_node_role_from_status(self) -> str or None:
+        """
+        Look up the local nuvlabox-status file and take the cluster-node-role value from there
+
+        :return: node role
+        """
+
+        try:
+            with open(self.nuvlabox_status_file) as ns:
+                role = json.load(ns).get('cluster-node-role')
+        except FileNotFoundError:
+            role = None
+
+        return role
+
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
@@ -369,10 +384,23 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         tags = self.get_labels()
         commission_payload["tags"] = tags
 
-        minimum_commission_payload = self.needs_commission(commission_payload)
+        minimum_commission_payload, delete_attrs = self.needs_commission(commission_payload)
+
+        # if this node is a worker, them we must force remove some assets
+        node_role = self.get_node_role_from_status()
+        if node_role and node_role.lower() == 'worker':
+            delete_attrs += ['swarm-token-manager',
+                             'swarm-token-worker',
+                             'swarm-client-key',
+                             'swarm-endpoint']
+
+            delete_attrs = list(set(delete_attrs))
+
+        removed = {'removed': delete_attrs} if delete_attrs else {}
+
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
-            if self.do_commission(minimum_commission_payload):
+            if self.do_commission({**minimum_commission_payload, **removed}):
                 self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
                                 commission_payload,
                                 is_json=True)
