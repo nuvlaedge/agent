@@ -280,7 +280,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
                     if removed:
                         # if there are still attributes to be removed then they must be merged with the current conf
-                        diff_conf['removed'] = list(set(diff_conf['removed'] + removed))
+                        diff_conf['removed'] = list(set(diff_conf.get('removed', []) + removed))
 
                     return diff_conf
         except FileNotFoundError:
