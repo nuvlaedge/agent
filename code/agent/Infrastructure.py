@@ -280,7 +280,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
                     if removed:
                         # if there are still attributes to be removed then they must be merged with the current conf
-                        diff_conf.update({'removed': removed})
+                        diff_conf['removed'] = list(set(diff_conf['removed'] + removed))
 
                     return diff_conf
         except FileNotFoundError:
@@ -406,6 +406,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if delete_attrs:
             commission_payload['removed'] = delete_attrs
+            for attr in delete_attrs:
+                try:
+                    commission_payload.pop(attr)
+                except KeyError:
+                    pass
 
         minimum_commission_payload = self.needs_commission(commission_payload)
 
