@@ -246,7 +246,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         docker_info = self.get_docker_info()
         swarm_node_id = docker_info.get("Swarm", {}).get("NodeID")
         cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
-        cluster_managers = [rm.get('NodeID') for rm in docker_info.get('Swarm', {}).get('RemoteManagers', [])]
+        remote_managers = docker_info.get('Swarm', {}).get('RemoteManagers')
+        cluster_managers = []
+        if remote_managers and isinstance(remote_managers, list):
+            cluster_managers = [rm.get('NodeID') for rm in remote_managers]
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -303,7 +306,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if cluster_managers:
             status_for_nuvla["cluster-managers"] = cluster_managers
             if swarm_node_id:
-                for manager in docker_info.get('Swarm', {}).get('RemoteManagers', []):
+                for manager in remote_managers:
                     if swarm_node_id == manager.get('NodeID', ''):
                         try:
                             status_for_nuvla["cluster-join-address"] = manager['Addr']
