@@ -413,7 +413,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
             if self.do_commission(minimum_commission_payload):
                 self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
-                                minimum_commission_payload,
+                                commission_payload,
                                 is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
