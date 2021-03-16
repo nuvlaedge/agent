@@ -826,6 +826,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
+        if delete_attributes:
+            logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
         try:
             r = self.api().edit(self.nb_status_id,
                                 data=updated_status,
@@ -833,7 +835,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except:
             logging.exception("Unable to update NuvlaBox status in Nuvla")
             return {}
-        finally:
+        else:
             # write all status into the shared volume for the other components to re-use if necessary
             with open(self.nuvlabox_status_file, 'w') as nbsf:
                 nbsf.write(json.dumps(all_status))
