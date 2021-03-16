@@ -273,15 +273,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
                         diff_conf[key] = value
 
-                    removed = list(set(old_conf) - set(diff_conf))
-                    if 'removed' in removed:
-                        # this is a pseudo field, not to be tracked
-                        removed.remove('removed')
-
-                    if removed:
-                        # if there are still attributes to be removed then they must be merged with the current conf
-                        diff_conf['removed'] = list(set(diff_conf.get('removed', []) + removed))
-
                     return diff_conf
         except FileNotFoundError:
             logging.info("Auto-commissioning the NuvlaBox for the first time...")
@@ -397,12 +388,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         node_role = self.get_node_role_from_status()
         delete_attrs = []
         if node_role and node_role.lower() == 'worker':
-            delete_attrs += ['swarm-token-manager',
-                             'swarm-token-worker',
-                             'swarm-client-key',
-                             'swarm-endpoint']
-
-            delete_attrs = list(set(delete_attrs))
+            delete_attrs = ['swarm-token-manager',
+                            'swarm-token-worker',
+                            'swarm-client-key',
+                            'swarm-endpoint']
 
         if delete_attrs:
             commission_payload['removed'] = delete_attrs

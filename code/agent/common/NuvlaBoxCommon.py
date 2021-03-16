@@ -296,7 +296,7 @@ class NuvlaBoxCommon():
 
         notes = []
         try:
-            notes = open(f"{self.data_volume}/{self.status_notes_file}").read().split()
+            notes = open(f"{self.data_volume}/{self.status_notes_file}").read().rstrip().split('\n')
         except Exception as e:
             logging.warning(f"Error while reading operational status notes: {str(e)}")
 
