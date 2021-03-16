@@ -391,6 +391,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             delete_attrs = ['swarm-token-manager',
                             'swarm-token-worker',
                             'swarm-client-key',
+                            'swarm-client-ca',
+                            'swarm-client-cert',
                             'swarm-endpoint']
 
         if delete_attrs:
