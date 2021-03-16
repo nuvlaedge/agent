@@ -256,14 +256,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         has changed wrt to the previous one
 
         :param current_conf: current commissioning data
-        :return (commissioning payload, deleted attributes)
+        :return commissioning payload
         """
 
         try:
             with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
                 old_conf = json.loads(r.read())
                 if current_conf == old_conf:
-                    return {}, []
+                    return {}
                 else:
                     diff_conf = {}
                     for key, value in current_conf.items():
@@ -273,10 +273,19 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
                         diff_conf[key] = value
 
-                    return diff_conf, list(set(old_conf) - set(diff_conf))
+                    removed = list(set(old_conf) - set(diff_conf))
+                    if 'removed' in removed:
+                        # this is a pseudo field, not to be tracked
+                        removed.remove('removed')
+
+                    if removed:
+                        # if there are still attributes to be removed then they must be merged with the current conf
+                        diff_conf.update({'removed': removed})
+
+                    return diff_conf
         except FileNotFoundError:
             logging.info("Auto-commissioning the NuvlaBox for the first time...")
-            return current_conf, []
+            return current_conf
 
     def has_nuvla_job_pull(self):
         """ Checks if the job-engine-lite has been deployed alongside the NBE
@@ -384,10 +393,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         tags = self.get_labels()
         commission_payload["tags"] = tags
 
-        minimum_commission_payload, delete_attrs = self.needs_commission(commission_payload)
-
         # if this node is a worker, them we must force remove some assets
         node_role = self.get_node_role_from_status()
+        delete_attrs = []
         if node_role and node_role.lower() == 'worker':
             delete_attrs += ['swarm-token-manager',
                              'swarm-token-worker',
@@ -396,13 +404,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
             delete_attrs = list(set(delete_attrs))
 
-        removed = {'removed': delete_attrs} if delete_attrs else {}
+        if delete_attrs:
+            commission_payload['removed'] = delete_attrs
+
+        minimum_commission_payload = self.needs_commission(commission_payload)
 
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
-            if self.do_commission({**minimum_commission_payload, **removed}):
+            if self.do_commission(minimum_commission_payload):
                 self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
-                                commission_payload,
+                                minimum_commission_payload,
                                 is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
