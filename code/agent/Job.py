@@ -109,3 +109,10 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
                                                   'mode': 'ro'
                                               }
                                           })
+
+        try:
+            # for some jobs (like clustering), it is better if the job container is also in the default bridge
+            # network, so it doesn't get affected by network changes in the NuvlaBox
+            self.docker_client.api.connect_container_to_network(self.job_id_clean, 'bridge')
+        except Exception as e:
+            logging.warning(f'Could not attach {self.job_id_clean} to bridge network: {str(e)}')
