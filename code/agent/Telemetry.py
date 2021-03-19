@@ -317,13 +317,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if swarm_node_id and swarm_node_id in cluster_managers:
             status_for_nuvla["cluster-node-role"] = "manager"
             cluster_nodes = []
-            for node in self.docker_client.nodes.list():
-                if node not in cluster_nodes and node.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+            try:
+                for node in self.docker_client.nodes.list():
+                    if node not in cluster_nodes and node.attrs.get('Status', {}).get('State', '').lower() == 'ready':
 
-                    try:
-                        cluster_nodes.append(node.id)
-                    except AttributeError:
-                        continue
+                        try:
+                            cluster_nodes.append(node.id)
+                        except AttributeError:
+                            continue
+            except docker.errors.APIError as e:
+                logging.error(f'Cannot get cluster nodes: {str(e)}')
 
             if len(cluster_nodes) > 0:
                 status_for_nuvla['cluster-nodes'] = cluster_nodes
