@@ -814,7 +814,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 if old_status[key] != new_status[key]:
                     minimal_update[key] = new_status[key]
             else:
-                if old_status[key] and any(old_status.values()):
+                if any(old_status.values()):
                     delete_attributes.append(key)
         return minimal_update, delete_attributes
 
