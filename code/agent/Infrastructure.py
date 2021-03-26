@@ -458,7 +458,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 logging.info("NuvlaBox is in the process of commissioning, so VPN credential should get here soon")
                 return None
 
-            self.write_file(self.vpn_infra_file, vpn_is_id)
+            self.commission_vpn()
         else:
             vpn_credential_nuvla = self.api()._cimi_get(credential_id)
 
@@ -472,7 +472,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     logging.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
                                     .format(vpn_credential_nuvla['updated']))
                     # Recommission
-                    self.write_file(self.vpn_infra_file, vpn_is_id)
+                    self.commission_vpn()
                     remove(self.vpn_credential)
                     return None
                     # else, do nothing cause nothing has changed
@@ -497,7 +497,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
                     # maybe something went wrong, just recommission
                     logging.error("Trying to fix local VPN client by recommissioning...")
-                    self.write_file(self.vpn_infra_file, vpn_is_id)
+                    self.commission_vpn()
 
     def set_immutable_ssh_key(self):
         """

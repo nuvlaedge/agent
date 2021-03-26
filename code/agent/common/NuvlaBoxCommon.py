@@ -15,7 +15,9 @@ import logging
 import argparse
 import sys
 import docker
+import requests
 import signal
+import string
 from contextlib import contextmanager
 from nuvla.api import Api
 from subprocess import PIPE, Popen
@@ -121,10 +123,14 @@ class NuvlaBoxCommon():
         self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
         self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.vpn_folder = "{}/vpn".format(self.data_volume)
+
+        if not os.path.isdir(self.vpn_folder):
+            os.makedirs(self.vpn_folder)
+
         self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
-        self.vpn_infra_file = "{}/vpn-is".format(self.vpn_folder)
         self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
         self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
+        self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
         self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
         self.mqtt_broker_host = "data-gateway"
         self.mqtt_broker_port = 1883
@@ -311,6 +317,109 @@ class NuvlaBoxCommon():
 
         with open("{}/{}".format(self.data_volume, self.status_file), 'w') as s:
             s.write(operational_status)
+
+    def write_vpn_conf(self, values):
+        """ Write VPN configuration into a file
+
+        :param values: map of values for the VPN conf template
+        """
+        tpl = string.Template("""client
+
+dev ${vpn_interface_name}
+dev-type tun
+
+# Certificate Configuration
+# CA certificate
+<ca>
+${vpn_ca_certificate}
+${vpn_intermediate_ca_is}
+${vpn_intermediate_ca}
+</ca>
+
+# Client Certificate
+<cert>
+${vpn_certificate}
+</cert>
+
+# Client Key
+<key>
+${nuvlabox_vpn_key}
+</key>
+
+# Shared key
+<tls-crypt>
+${vpn_shared_key}
+</tls-crypt>
+
+remote-cert-tls server
+
+verify-x509-name "${vpn_common_name_prefix}" name-prefix
+
+script-security 2
+up /opt/nuvlabox/scripts/get_ip.sh
+
+auth-nocache
+auth-retry nointeract
+
+ping 60
+ping-restart 120
+compress lz4
+
+${vpn_endpoints_mapped}
+""")
+
+        with open(self.vpn_client_conf_file, 'w') as vpnf:
+            vpnf.write(tpl.substitute(values))
+
+    def prepare_vpn_certificates(self):
+        nuvlabox_vpn_key = f'{self.vpn_folder}/nuvlabox-vpn.key'
+        nuvlabox_vpn_csr = f'{self.vpn_folder}/nuvlabox-vpn.csr'
+
+        cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:secp521r1',
+               '-keyout', nuvlabox_vpn_key, '-out', nuvlabox_vpn_csr, '-subj', f'/CN={self.nuvlabox_id}']
+
+        r = self.shell_execute(cmd)
+
+        with open(nuvlabox_vpn_csr) as csr:
+            vpn_csr = csr.read()
+
+        with open(nuvlabox_vpn_key) as key:
+            vpn_key = key.read()
+
+        return vpn_csr, vpn_key
+
+    def commission_vpn(self):
+        """ (re)Commissions the NB via the agent API
+
+        :return:
+        """
+
+        vpn_csr, vpn_key = self.prepare_vpn_certificates()
+
+        try:
+            vpn_conf_fields = requests.post("http://localhost/api/commission", json={"vpn-csr": vpn_csr}).json()
+        except Exception as e:
+            logging.error(f'Unable to setup VPN connection: {str(e)}')
+            return False
+
+        logging.info(f'VPN configuration fields: {vpn_conf_fields}')
+
+        vpn_values = {
+            'vpn_certificate': vpn_conf_fields['vpn-certificate'],
+            'vpn_intermediate_ca': vpn_conf_fields['vpn-intermediate-ca'],
+            'vpn_ca_certificate': vpn_conf_fields['vpn-ca-certificate'],
+            'vpn_intermediate_ca_is': vpn_conf_fields['vpn-intermediate-ca-is'],
+            'vpn_shared_key': vpn_conf_fields['vpn-shared-key'],
+            'vpn_common_name_prefix': vpn_conf_fields['vpn-common-name-prefix'],
+            'vpn_endpoints_mapped': vpn_conf_fields['vpn-endpoints-mapped'],
+            'vpn_interface_name': self.vpn_interface_name,
+            'nuvlabox_vpn_key': vpn_key
+        }
+
+        self.write_vpn_conf(vpn_values)
+        return True
+
+
 
 
 

@@ -104,8 +104,8 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
             logging.info('VPN Server ID has been added/changed in Nuvla: {}. Triggering Network Manager...'
                          .format(nuvlabox_resource.get("vpn-server-id")))
-            with open(self.vpn_infra_file, 'w') as v:
-                v.write(nuvlabox_resource.get("vpn-server-id"))
+
+            self.commission_vpn()
 
     def get_nuvlabox_info(self):
         """ Retrieves the respective resource from Nuvla """
