@@ -38,15 +38,19 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
 
-    @staticmethod
-    def get_swarm_tokens():
+    def get_swarm_tokens(self):
         """ Retrieve Swarm tokens """
 
-        if docker.from_env().swarm.attrs:
-            return docker.from_env().swarm.attrs['JoinTokens']['Manager'], \
-                   docker.from_env().swarm.attrs['JoinTokens']['Worker']
-        else:
-            return None
+        try:
+            if docker.from_env().swarm.attrs:
+                return docker.from_env().swarm.attrs['JoinTokens']['Manager'], \
+                       docker.from_env().swarm.attrs['JoinTokens']['Worker']
+        except docker.errors.APIError as e:
+            if self.lost_quorum_hint in str(e):
+                # quorum is lost
+                logging.warning(f'Quorum is lost. This node will no longer support Service and Cluster management')
+
+        return None
 
     @staticmethod
     def write_file(file, content, is_json=False):
