@@ -102,7 +102,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             cw.write(json.dumps(nuvlabox_resource))
 
         if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
-            logging.info('VPN Server ID has been added/changed in Nuvla: {}. Triggering Network Manager...'
+            logging.info('VPN Server ID has been added/changed in Nuvla: {}'
                          .format(nuvlabox_resource.get("vpn-server-id")))
 
             self.commission_vpn()

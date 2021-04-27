@@ -37,6 +37,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
+        self.vpn_commission_attempts = 0
 
     def get_swarm_tokens(self):
         """ Retrieve Swarm tokens """
@@ -454,8 +455,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             # the 1st time
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
                 logging.warning("VPN credential exists locally, so it was removed from Nuvla. Recommissioning...")
+            elif self.vpn_commission_attempts > 3:
+                logging.warning("Waiting for VPN commissioning for too long...forcing new recommission")
+                self.vpn_commission_attempts = 0
             else:
                 logging.info("NuvlaBox is in the process of commissioning, so VPN credential should get here soon")
+                self.vpn_commission_attempts += 1
                 return None
 
             self.commission_vpn()

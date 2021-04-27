@@ -18,6 +18,7 @@ import docker
 import requests
 import signal
 import string
+import time
 from contextlib import contextmanager
 from nuvla.api import Api
 from subprocess import PIPE, Popen
@@ -376,15 +377,27 @@ ${vpn_endpoints_mapped}
         nuvlabox_vpn_csr = f'{self.vpn_folder}/nuvlabox-vpn.csr'
 
         cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:secp521r1',
-               '-keyout', nuvlabox_vpn_key, '-out', nuvlabox_vpn_csr, '-subj', f'/CN={self.nuvlabox_id}']
+               '-keyout', nuvlabox_vpn_key, '-out', nuvlabox_vpn_csr, '-subj', f'/CN={self.nuvlabox_id.split("/")[-1]}']
 
         r = self.shell_execute(cmd)
 
-        with open(nuvlabox_vpn_csr) as csr:
-            vpn_csr = csr.read()
+        if r.get('returncode', -1) != 0:
+            logging.error(f'Cannot generate certificates for VPN connection: {r.get("stdout")} | {r.get("stderr")}')
+            return None, None
 
-        with open(nuvlabox_vpn_key) as key:
-            vpn_key = key.read()
+        try:
+            with timeout(5):
+                while not os.path.exists(nuvlabox_vpn_csr) and not os.path.exists(nuvlabox_vpn_key):
+                    time.sleep(0.2)
+
+                with open(nuvlabox_vpn_csr) as csr:
+                    vpn_csr = csr.read()
+
+                with open(nuvlabox_vpn_key) as key:
+                    vpn_key = key.read()
+        except TimeoutError:
+            logging.error(f'Unable to lookup {nuvlabox_vpn_key} and {nuvlabox_vpn_csr}')
+            return None, None
 
         return vpn_csr, vpn_key
 
@@ -396,11 +409,18 @@ ${vpn_endpoints_mapped}
 
         vpn_csr, vpn_key = self.prepare_vpn_certificates()
 
+        if not vpn_key or not vpn_csr:
+            return False
+
         try:
             vpn_conf_fields = requests.post("http://localhost/api/commission", json={"vpn-csr": vpn_csr}).json()
         except Exception as e:
             logging.error(f'Unable to setup VPN connection: {str(e)}')
             return False
+        else:
+            if not vpn_conf_fields:
+                logging.error(f'Invalid response from VPN commissioning...cannot continue')
+                return False
 
         logging.info(f'VPN configuration fields: {vpn_conf_fields}')
 
