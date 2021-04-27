@@ -19,6 +19,7 @@ import socket
 import threading
 import json
 import agent.AgentApi as AgentApi
+import time
 from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
@@ -197,6 +198,7 @@ if __name__ == "__main__":
     # start telemetry
     logging.info("Starting telemetry...")
     while True:
+        start_cycle = time.time()
         nuvlabox_resource = activation.get_nuvlabox_info()
         if nuvlabox_info_updated_date != nuvlabox_resource['updated']:
             refresh_interval = nuvlabox_resource['refresh-interval']
@@ -224,4 +226,10 @@ if __name__ == "__main__":
                     logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
 
         infra.try_commission()
-        e.wait(timeout=refresh_interval/2)
+
+        end_cycle = time.time()
+        cycle_duration = end_cycle - start_cycle
+        # formula is R-2T, where
+        next_cycle_in = refresh_interval - 2 * cycle_duration
+
+        e.wait(timeout=next_cycle_in)
