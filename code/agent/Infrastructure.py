@@ -356,6 +356,37 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return role
 
+    def get_cluster_info(self):
+        """
+        Get information about the underlying cluster, if any
+        :return: dict with cluster info
+        """
+
+        d_info = self.docker_client.info()
+        swarm_info = d_info['Swarm']
+
+        if swarm_info.get('ControlAvailable'):
+            orchestrator = 'swarm'
+            cluster_id = swarm_info.get('Cluster', {}).get('ID')
+            managers = []
+            workers = []
+            for manager in self.docker_client.nodes.list(filters={'role': 'manager'}):
+                if manager not in managers and manager.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+                    managers.append(manager.id)
+
+            for worker in self.docker_client.nodes.list(filters={'role': 'worker'}):
+                if worker not in workers and worker.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+                    workers.append(worker.id)
+
+            return {
+                'cluster-id': cluster_id,
+                'cluster-orchestrator': orchestrator,
+                'cluster-managers': managers,
+                'cluster-workers': workers
+            }
+        else:
+            return {}
+
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
@@ -366,6 +397,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             self.token_diff(swarm_tokens[0], swarm_tokens[1])
             commission_payload['swarm-token-manager'] = swarm_tokens[0]
             commission_payload['swarm-token-worker'] = swarm_tokens[1]
+
+        commission_payload.update(self.get_cluster_info())
 
         tls_keys = self.get_tls_keys()
         if tls_keys:
