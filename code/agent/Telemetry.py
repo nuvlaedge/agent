@@ -253,7 +253,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
-            "load": float(psutil.getloadavg()[2])
+            "load": float(psutil.getloadavg()[2]),
+            "load-1": float(psutil.getloadavg()[0]),
+            "load-5": float(psutil.getloadavg()[1]),
+            "context-switches": int(psutil.cpu_stats().ctx_switches),
+            "interrupts": int(psutil.cpu_stats().interrupts),
+            "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
+            "system-calls": int(psutil.cpu_stats().syscalls)
         }
 
         ram_sample = {
