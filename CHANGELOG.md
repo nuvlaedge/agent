@@ -1,4 +1,10 @@
 # Changelog
+## [2.0.0] - 2021-04-30
+### Added 
+ - support for clustering 
+ - VPN credential management
+### Changed
+ - extended telemetry
 ## [1.15.2] - 2021-02-15
 ### Added
 ### Changed
