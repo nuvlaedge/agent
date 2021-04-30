@@ -14,6 +14,8 @@ services:
       - NUVLABOX_UUID=${NUVLABOX_UUID}
       - NUVLA_ENDPOINT=${NUVLA_ENDPOINT:-nuvla.io}
       - NUVLA_ENDPOINT_INSECURE=False
+      - NUVLABOX_IMMUTABLE_SSH_PUB_KEY=${NUVLABOX_SSH_PUB_KEY}
+      - HOST_HOME=${HOME}
     labels:
       - nuvlabox.component=True
       - nuvlabox.deployment=production

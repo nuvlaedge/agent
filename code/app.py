@@ -65,6 +65,21 @@ def set_status():
     return "to be implemented"
 
 
+@app.route('/api/find-data-gateway')
+def find_data_gateway():
+    """
+    Returns 200 or 404, depending on whether the data-gateway is reachable or not
+
+    :return: 200 or 404
+    """
+
+    try:
+        socket.gethostbyname('data-gateway')
+        return jsonify('success'), 200
+    except socket.gaierror as e:
+        return jsonify(str(e)), 404
+
+
 @app.route('/api/commission', methods=['POST'])
 def trigger_commission():
     """ API endpoint to let other components trigger a commissioning
@@ -86,6 +101,14 @@ def healthcheck():
     """
 
     return jsonify(True)
+
+
+@app.route('/api/agent-container-id', methods=['GET'])
+def get_agent_container_id():
+    """ Static endpoint just for clients to get the Agent container Docker ID
+    """
+
+    return jsonify(socket.gethostname())
 
 
 @app.route('/api/peripheral', defaults={'identifier': None}, methods=['POST', 'GET'])
@@ -157,10 +180,10 @@ if __name__ == "__main__":
 
     nuvlabox_status_id = activation.update_nuvlabox_resource()
 
-    # start telemetry
-    logging.info("Starting telemetry...")
     telemetry = Telemetry(data_volume, nuvlabox_status_id)
     infra = Infrastructure(data_volume)
+
+    infra.set_immutable_ssh_key()
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
@@ -172,6 +195,8 @@ if __name__ == "__main__":
     monitoring_thread.daemon = True
     monitoring_thread.start()
 
+    # start telemetry
+    logging.info("Starting telemetry...")
     while True:
         start_cycle = time.time()
         nuvlabox_resource = activation.get_nuvlabox_info()

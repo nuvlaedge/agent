@@ -46,6 +46,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.first_net_stats = {}
         self.status = {'resources': None,
                        'status': None,
+                       'status-notes': None,
                        'nuvlabox-api-endpoint': None,
                        'operating-system': None,
                        'architecture': None,
@@ -57,9 +58,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'nuvlabox-engine-version': None,
                        'inferred-location': None,
                        'vulnerabilities': None,
-                       'swarm-node-id': None,
+                       'node-id': None,
+                       'cluster-id': None,
+                       'cluster-managers': None,
+                       'cluster-nodes': None,
+                       'cluster-node-role': None,
                        'installation-parameters': None,
-                       'swarm-node-cert-expiry-date': None
+                       'swarm-node-cert-expiry-date': None,
+                       'host-user-home': None,
+                       'orchestrator': None,
+                       'cluster-join-address': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -234,12 +242,24 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # get status for Nuvla
         disk_usage = self.get_disks_usage()
         operational_status = self.get_operational_status()
+        operational_status_notes = self.get_operational_status_notes()
         docker_info = self.get_docker_info()
-        node_id = self.docker_client.info()["Swarm"]["NodeID"]
+        swarm_node_id = docker_info.get("Swarm", {}).get("NodeID")
+        cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
+        remote_managers = docker_info.get('Swarm', {}).get('RemoteManagers')
+        cluster_managers = []
+        if remote_managers and isinstance(remote_managers, list):
+            cluster_managers = [rm.get('NodeID') for rm in remote_managers]
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
-            "load": float(psutil.getloadavg()[2])
+            "load": float(psutil.getloadavg()[2]),
+            "load-1": float(psutil.getloadavg()[0]),
+            "load-5": float(psutil.getloadavg()[1]),
+            "context-switches": int(psutil.cpu_stats().ctx_switches),
+            "interrupts": int(psutil.cpu_stats().interrupts),
+            "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
+            "system-calls": int(psutil.cpu_stats().syscalls)
         }
 
         ram_sample = {
@@ -274,10 +294,51 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "docker-server-version": self.docker_client.version()["Version"],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
-            "nuvlabox-api-endpoint": self.get_nuvlabox_api_endpoint(),
-            "docker-plugins": self.get_docker_plugins(),
-            "swarm-node-id": node_id
+            "status-notes": operational_status_notes,
+            "docker-plugins": self.get_docker_plugins()
         }
+
+        mgmt_api = self.get_nuvlabox_api_endpoint()
+        if mgmt_api:
+            status_for_nuvla["nuvlabox-api-endpoint"] = mgmt_api
+
+        if swarm_node_id:
+            status_for_nuvla["node-id"] = swarm_node_id
+            status_for_nuvla["orchestrator"] = "swarm"
+
+        if cluster_id:
+            status_for_nuvla["cluster-id"] = cluster_id
+
+        if cluster_managers:
+            status_for_nuvla["cluster-managers"] = cluster_managers
+            if swarm_node_id:
+                for manager in remote_managers:
+                    if swarm_node_id == manager.get('NodeID', ''):
+                        try:
+                            status_for_nuvla["cluster-join-address"] = manager['Addr']
+                            break
+                        except KeyError:
+                            logging.warning(f'Unable to infer cluster-join-address attribute: {manager}')
+
+        if swarm_node_id and swarm_node_id in cluster_managers:
+            status_for_nuvla["cluster-node-role"] = "manager"
+            cluster_nodes = []
+            try:
+                for node in self.docker_client.nodes.list():
+                    if node not in cluster_nodes and node.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+
+                        try:
+                            cluster_nodes.append(node.id)
+                        except AttributeError:
+                            continue
+            except docker.errors.APIError as e:
+                logging.error(f'Cannot get cluster nodes: {str(e)}')
+
+            if len(cluster_nodes) > 0:
+                status_for_nuvla['cluster-nodes'] = cluster_nodes
+        else:
+            if swarm_node_id:
+                status_for_nuvla["cluster-node-role"] = "worker"
 
         installation_params = self.get_installation_parameters()
         if installation_params:
@@ -286,6 +347,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         net_stats = self.get_network_info()
         if net_stats:
             status_for_nuvla['resources']['net-stats'] = net_stats
+
+        if self.installation_home:
+            status_for_nuvla['host-user-home'] = self.installation_home
 
         try:
             swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()
@@ -745,18 +809,22 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             return output_fallback
 
-    def diff(self, old_status, new_status):
+    @staticmethod
+    def diff(old_status, new_status):
         """ Compares the previous status with the new one and discover the minimal changes """
 
         minimal_update = {}
         delete_attributes = []
-        for key in self.status.keys():
+        for key in old_status.keys():
             if key in new_status:
                 if new_status[key] is None:
                     delete_attributes.append(key)
                     continue
                 if old_status[key] != new_status[key]:
                     minimal_update[key] = new_status[key]
+            else:
+                if any(old_status.values()):
+                    delete_attributes.append(key)
         return minimal_update, delete_attributes
 
     def update_status(self):
@@ -767,13 +835,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
         logging.info('Refresh status: %s' % updated_status)
+        if delete_attributes:
+            logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
         try:
             r = self.api().edit(self.nb_status_id,
-                                data=updated_status)  # should also include ", select=delete_attributes)" but CIMI does not allow
+                                data=updated_status,
+                                select=delete_attributes)
         except:
             logging.exception("Unable to update NuvlaBox status in Nuvla")
             return {}
-        finally:
+        else:
             # write all status into the shared volume for the other components to re-use if necessary
             with open(self.nuvlabox_status_file, 'w') as nbsf:
                 nbsf.write(json.dumps(all_status))
@@ -853,7 +924,27 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
                 ip = str(open(self.vpn_ip_file).read().splitlines()[0])
             else:
-                ip = self.docker_client.info()["Swarm"]["NodeAddr"]
+                ip = self.docker_client.info().get("Swarm", {}).get("NodeAddr")
+                if not ip:
+                    # then probably this isn't running in Swarm mode
+                    try:
+                        ip = None
+                        with open(f'{self.hostfs}/proc/net/tcp') as ipfile:
+                            ips = ipfile.readlines()
+                            for line in ips[1:]:
+                                cols = line.strip().split(' ')
+                                if cols[1].startswith('00000000') or cols[2].startswith('00000000'):
+                                    continue
+                                hex_ip = cols[1].split(':')[0]
+                                ip = f'{int(hex_ip[len(hex_ip)-2:],16)}.' \
+                                    f'{int(hex_ip[len(hex_ip)-4:len(hex_ip)-2],16)}.' \
+                                    f'{int(hex_ip[len(hex_ip)-6:len(hex_ip)-4],16)}.' \
+                                    f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
+                                break
+                        if not ip:
+                            raise Exception('Cannot infer IP')
+                    except:
+                        ip = '127.0.0.1'
         else:
             logging.warning("Cannot infer the NuvlaBox IP!")
             return None

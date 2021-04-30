@@ -10,9 +10,11 @@ and respective credentials in Nuvla
 import logging
 import docker
 import json
+import requests
 import time
 from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
+from datetime import datetime
 from os import path, stat, remove
 
 
@@ -32,12 +34,24 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         super().__init__(shared_data_volume=data_volume)
         self.telemetry_instance = Telemetry(data_volume, None)
+        self.compute_api = 'compute-api'
+        self.compute_api_port = '5000'
+        self.ssh_flag = f"{data_volume}/.ssh"
+        self.vpn_commission_attempts = 0
 
-    @staticmethod
-    def get_swarm_tokens():
+    def get_swarm_tokens(self):
         """ Retrieve Swarm tokens """
 
-        return docker.from_env().swarm.attrs['JoinTokens']['Manager'], docker.from_env().swarm.attrs['JoinTokens']['Worker']
+        try:
+            if docker.from_env().swarm.attrs:
+                return docker.from_env().swarm.attrs['JoinTokens']['Manager'], \
+                       docker.from_env().swarm.attrs['JoinTokens']['Worker']
+        except docker.errors.APIError as e:
+            if self.lost_quorum_hint in str(e):
+                # quorum is lost
+                logging.warning(f'Quorum is lost. This node will no longer support Service and Cluster management')
+
+        return None
 
     @staticmethod
     def write_file(file, content, is_json=False):
@@ -229,8 +243,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             node_id = self.docker_client.info()["Swarm"]["NodeID"]
             container_labels = self.docker_client.api.inspect_node(node_id)["Spec"]["Labels"]
-        except docker.errors.APIError:
-            logging.exception("Cannot get node labels")
+        except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
+            if not "node is not a swarm manager" in str(e).lower():
+                logging.debug(f"Cannot get node labels: {str(e)}")
             return nuvla_tags
 
         for label, value in container_labels.items():
@@ -246,14 +261,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         has changed wrt to the previous one
 
         :param current_conf: current commissioning data
-        :return False when commissioning is not needed, or the changed attributes otherwise
+        :return commissioning payload
         """
 
         try:
             with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
                 old_conf = json.loads(r.read())
                 if current_conf == old_conf:
-                    return False
+                    return {}
                 else:
                     diff_conf = {}
                     for key, value in current_conf.items():
@@ -304,15 +319,86 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         if self.has_nuvla_job_pull():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
+    def compute_api_is_running(self) -> bool:
+        """
+        Pokes ate the compute-api endpoint to see if it is up and running
+
+        :return: True or False
+        """
+
+        compute_api_url = f'https://{self.compute_api}:{self.compute_api_port}'
+
+        try:
+            if docker.from_env().containers.get(self.compute_api).status != 'running':
+                return False
+            with NuvlaBoxCommon.timeout(3):
+                requests.get(compute_api_url)
+        except requests.exceptions.SSLError:
+            # this is expected. It means it is up, we just weren't authorized
+            pass
+        except Exception as e:
+            return False
+
+        return True
+
+    def get_node_role_from_status(self) -> str or None:
+        """
+        Look up the local nuvlabox-status file and take the cluster-node-role value from there
+
+        :return: node role
+        """
+
+        try:
+            with open(self.nuvlabox_status_file) as ns:
+                role = json.load(ns).get('cluster-node-role')
+        except FileNotFoundError:
+            role = None
+
+        return role
+
+    def get_cluster_info(self):
+        """
+        Get information about the underlying cluster, if any
+        :return: dict with cluster info
+        """
+
+        d_info = self.docker_client.info()
+        swarm_info = d_info['Swarm']
+
+        if swarm_info.get('ControlAvailable'):
+            orchestrator = 'swarm'
+            cluster_id = swarm_info.get('Cluster', {}).get('ID')
+            managers = []
+            workers = []
+            for manager in self.docker_client.nodes.list(filters={'role': 'manager'}):
+                if manager not in managers and manager.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+                    managers.append(manager.id)
+
+            for worker in self.docker_client.nodes.list(filters={'role': 'worker'}):
+                if worker not in workers and worker.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+                    workers.append(worker.id)
+
+            return {
+                'cluster-id': cluster_id,
+                'cluster-orchestrator': orchestrator,
+                'cluster-managers': managers,
+                'cluster-workers': workers
+            }
+        else:
+            return {}
+
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
 
         commission_payload = {}
         swarm_tokens = self.get_swarm_tokens()
-        self.token_diff(swarm_tokens[0], swarm_tokens[1])
-        commission_payload['swarm-token-manager'] = swarm_tokens[0]
-        commission_payload['swarm-token-worker'] = swarm_tokens[1]
+        if swarm_tokens:
+            self.token_diff(swarm_tokens[0], swarm_tokens[1])
+            commission_payload['swarm-token-manager'] = swarm_tokens[0]
+            commission_payload['swarm-token-worker'] = swarm_tokens[1]
+
+        commission_payload.update(self.get_cluster_info())
 
         tls_keys = self.get_tls_keys()
         if tls_keys:
@@ -320,8 +406,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             commission_payload["swarm-client-cert"] = tls_keys[1]
             commission_payload["swarm-client-key"] = tls_keys[2]
 
-        my_ip = self.telemetry_instance.get_ip()
-        commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
+        if self.compute_api_is_running():
+            my_ip = self.telemetry_instance.get_ip()
+            commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
 
         k8s_config = self.is_kubernetes_running()
         if k8s_config:
@@ -335,7 +422,27 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         tags = self.get_labels()
         commission_payload["tags"] = tags
 
+        # if this node is a worker, them we must force remove some assets
+        node_role = self.get_node_role_from_status()
+        delete_attrs = []
+        if node_role and node_role.lower() == 'worker':
+            delete_attrs = ['swarm-token-manager',
+                            'swarm-token-worker',
+                            'swarm-client-key',
+                            'swarm-client-ca',
+                            'swarm-client-cert',
+                            'swarm-endpoint']
+
+        if delete_attrs:
+            commission_payload['removed'] = delete_attrs
+            for attr in delete_attrs:
+                try:
+                    commission_payload.pop(attr)
+                except KeyError:
+                    pass
+
         minimum_commission_payload = self.needs_commission(commission_payload)
+
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
             if self.do_commission(minimum_commission_payload):
@@ -381,11 +488,15 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             # the 1st time
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
                 logging.warning("VPN credential exists locally, so it was removed from Nuvla. Recommissioning...")
+            elif self.vpn_commission_attempts > 3:
+                logging.warning("Waiting for VPN commissioning for too long...forcing new recommission")
+                self.vpn_commission_attempts = 0
             else:
                 logging.info("NuvlaBox is in the process of commissioning, so VPN credential should get here soon")
+                self.vpn_commission_attempts += 1
                 return None
 
-            self.write_file(self.vpn_infra_file, vpn_is_id)
+            self.commission_vpn()
         else:
             vpn_credential_nuvla = self.api()._cimi_get(credential_id)
 
@@ -399,7 +510,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     logging.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
                                     .format(vpn_credential_nuvla['updated']))
                     # Recommission
-                    self.write_file(self.vpn_infra_file, vpn_is_id)
+                    self.commission_vpn()
                     remove(self.vpn_credential)
                     return None
                     # else, do nothing cause nothing has changed
@@ -424,4 +535,71 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
                     # maybe something went wrong, just recommission
                     logging.error("Trying to fix local VPN client by recommissioning...")
-                    self.write_file(self.vpn_infra_file, vpn_is_id)
+                    self.commission_vpn()
+
+    def set_immutable_ssh_key(self):
+        """
+        Takes a public SSH key from env and adds it to the installing host user.
+        This is only done once, at installation time.
+
+        :return:
+        """
+
+        if path.exists(self.ssh_flag):
+            logging.debug("Immutable SSH key has already been processed at installation time")
+            with open(self.ssh_flag) as sshf:
+                original_ssh_key = sshf.read()
+                if self.ssh_pub_key != original_ssh_key:
+                    logging.warning(f'Received new SSH key but the original {original_ssh_key} is immutable. Ignoring')
+            return
+
+        event = {
+            "category": "action",
+            "content": {
+                "resource": {
+                    "href": self.nuvlabox_id
+                },
+                "state": f"Unknown problem while setting immutable SSH key"
+            },
+            "severity": "high",
+            "timestamp": datetime.utcnow().strftime(self.nuvla_timestamp_format)
+        }
+        if self.ssh_pub_key and self.installation_home:
+            ssh_folder = f"{self.hostfs}{self.installation_home}/.ssh"
+            if not path.exists(ssh_folder):
+                event['content']['state'] = f"Cannot set immutable SSH key because {ssh_folder} does not exist"
+
+                self.push_event(event)
+                return
+
+            with open(f'{self.data_volume}/{self.context}') as nb:
+                nb_owner = json.load(nb).get('owner')
+
+            event_owners = [nb_owner, self.nuvlabox_id] if nb_owner else [self.nuvlabox_id]
+            event['acl'] = {'owners': event_owners}
+
+            cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
+
+            logging.info(f'Setting immutable SSH key {self.ssh_pub_key} for {self.installation_home}')
+            try:
+                with NuvlaBoxCommon.timeout(10):
+                    self.docker_client.containers.run('alpine',
+                                                      remove=True,
+                                                      command=cmd,
+                                                      environment={
+                                                          'SSH_PUB': self.ssh_pub_key
+                                                      },
+                                                      volumes={
+                                                          f'{self.installation_home}/.ssh': {
+                                                              'bind': ssh_folder
+                                                          }
+                                                      }
+                                                      )
+            except Exception as e:
+                msg = f'An error occurred while setting immutable SSH key: {str(e)}'
+                logging.error(msg)
+                event['content']['state'] = msg
+                self.push_event(event)
+
+            with open(self.ssh_flag, 'w') as sshfw:
+                sshfw.write(self.ssh_pub_key)
