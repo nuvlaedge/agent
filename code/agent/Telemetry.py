@@ -17,11 +17,141 @@ import psutil
 import re
 import requests
 import paho.mqtt.client as mqtt
+import queue
 
 from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from pydoc import locate
+from threading import Thread
+
+
+class ContainerMonitoring(Thread):
+    """ A special thread used to asynchronously fetch the stats from all containers in the system
+
+    Attributes:
+        q: queue object where to put the monitoring results (JSON)
+        save_to: an optional string pointing to a file where to persist the JSON output
+        log: a logging object
+    """
+
+    def __init__(self, q: queue.Queue, save_to: str = None, log: logging = logging):
+        Thread.__init__(self)
+        self.q = q
+        self.save_to = save_to
+        self.docker_client = docker.from_env()
+        self.log = log
+
+    def run(self):
+        """
+        Runs, on an infinite loop, through all the containers in the system and retrieves the stats for each one,
+        saving them in a file (if needed), and putting them in a messaging queue for other processes in the system
+        to fetch
+
+        :return:
+        """
+
+        while True:
+            docker_stats = []
+
+            all_containers = self.docker_client.containers.list()
+            for container in all_containers:
+                docker_stats.append(self.docker_client.api.stats(container.id))
+
+            # get first samples (needed for cpu monitoring)
+            old_cpu = []
+            for c_stat in docker_stats:
+                container_stats = json.loads(next(c_stat))
+
+                old_cpu.append((float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
+                                float(container_stats["cpu_stats"]["system_cpu_usage"])))
+
+            # now the actual monitoring
+            out = {}
+            for i, c_stat in enumerate(docker_stats):
+                container = all_containers[i]
+                container_stats = json.loads(next(c_stat))
+
+                #
+                # -----------------
+                # CPU
+                try:
+                    cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
+                    cpu_system = float(container_stats["cpu_stats"]["system_cpu_usage"])
+
+                    online_cpus = container_stats["cpu_stats"] \
+                        .get("online_cpus", len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", -1)))
+
+                    cpu_delta = cpu_total - old_cpu[i][0]
+                    system_delta = cpu_system - old_cpu[i][1]
+
+                    cpu_percent = 0.0
+                    if system_delta > 0.0 and online_cpus > -1:
+                        cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+                except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
+                    self.log.error(f"Cannot get CPU stats for container {container.name}: {str(e)}. Moving on")
+                    cpu_percent = 0.0
+
+                #
+                # -----------------
+                # MEM
+                try:
+                    mem_usage = float(container_stats["memory_stats"]["usage"] / 1024 / 1024)
+                    mem_limit = float(container_stats["memory_stats"]["limit"] / 1024 / 1024)
+                    if round(mem_limit, 2) == 0.00:
+                        mem_percent = 0.00
+                    else:
+                        mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
+                except (IndexError, KeyError, ValueError) as e:
+                    self.log.error(f"Cannot get Mem stats for container {container.name}: {str(e)}. Moving on")
+                    mem_percent = mem_usage = mem_limit = 0.00
+
+                #
+                # -----------------
+                # NET
+                net_in = net_out = 0.0
+                if "networks" in container_stats:
+                    net_in = sum(container_stats["networks"][iface]["rx_bytes"]
+                                 for iface in container_stats["networks"]) / 1000 / 1000
+                    net_out = sum(container_stats["networks"][iface]["tx_bytes"]
+                                  for iface in container_stats["networks"]) / 1000 / 1000
+
+                #
+                # -----------------
+                # BLOCK
+                try:
+                    blk_in = float(container_stats.get("blkio_stats",
+                                                       {}).get("io_service_bytes_recursive",
+                                                               [{"value": 0}])[0]["value"] / 1000 / 1000)
+                except Exception as e:
+                    self.log.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
+                    blk_in = 0.0
+
+                try:
+                    blk_out = float(container_stats.get("blkio_stats",
+                                                        {}).get("io_service_bytes_recursive",
+                                                                [0, {"value": 0}])[1]["value"] / 1000 / 1000)
+                except Exception as e:
+                    self.log.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
+                    blk_out = 0.0
+
+                # -----------------
+                out[container.id] = {
+                    'name': container.name,
+                    'status': container.status,
+                    'cpu': "%.2f" % round(cpu_percent, 2),
+                    'mem_usage_limit': "%sMiB / %sGiB" % (round(mem_usage, 2), round(mem_limit / 1024, 2)),
+                    'mem': "%.2f" % mem_percent,
+                    'net_in_out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
+                    'blk_in_out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
+                    'restart_count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
+                }
+
+                self.q.put(out)
+
+                if self.save_to:
+                    with open(self.save_to, 'w') as f:
+                        f.write(json.dumps(out))
 
 
 class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
@@ -44,6 +174,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.nb_status_id = nuvlabox_status_id
         self.docker_client = docker.from_env()
         self.first_net_stats = {}
+        self.docker_stats_queue = queue.Queue()
+        self.docker_stats_monitor = ContainerMonitoring(self.docker_stats_queue, self.docker_stats_json_file)
+        self.docker_stats_monitor.start()
+
         self.status = {'resources': None,
                        'status': None,
                        'status-notes': None,
@@ -67,7 +201,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'swarm-node-cert-expiry-date': None,
                        'host-user-home': None,
                        'orchestrator': None,
-                       'cluster-join-address': None
+                       'cluster-join-address': None,
+                       'container-stats': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -297,6 +432,17 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "status-notes": operational_status_notes,
             "docker-plugins": self.get_docker_plugins()
         }
+
+        container_stats = self.status.get('container-stats')
+        try:
+            container_stats = self.docker_stats_queue.get(block=False)
+        except queue.Empty:
+            if not self.docker_stats_monitor.is_alive():
+                self.docker_stats_monitor = ContainerMonitoring(self.docker_stats_queue, self.docker_stats_json_file)
+                self.docker_stats_monitor.start()
+
+        if container_stats:
+            status_for_nuvla['container-stats'] = container_stats
 
         mgmt_api = self.get_nuvlabox_api_endpoint()
         if mgmt_api:
@@ -727,7 +873,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         "bytes-received-carry": previous_net_stats.get(interface, {}).get('bytes-received', 0),
                     }
                 else:
-                    # then counters are still going. In this case we just need to do -> current - first + carry
+                    # then counters are still going. In this case we just need to do
+                    #
+                    # current - first + carry
                     rx_bytes_report = rx_bytes - \
                                       self.first_net_stats[interface].get('bytes-received', 0) + \
                                       self.first_net_stats[interface].get('bytes-received-carry', 0)
