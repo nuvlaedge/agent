@@ -18,6 +18,7 @@ import re
 import requests
 import paho.mqtt.client as mqtt
 import queue
+import time
 
 from agent.common import NuvlaBoxCommon
 from os import path, stat
@@ -67,7 +68,7 @@ class ContainerMonitoring(Thread):
                                 float(container_stats["cpu_stats"]["system_cpu_usage"])))
 
             # now the actual monitoring
-            out = {}
+            out = []
             for i, c_stat in enumerate(docker_stats):
                 container = all_containers[i]
                 container_stats = json.loads(next(c_stat))
@@ -119,39 +120,42 @@ class ContainerMonitoring(Thread):
                 #
                 # -----------------
                 # BLOCK
-                try:
-                    blk_in = float(container_stats.get("blkio_stats",
-                                                       {}).get("io_service_bytes_recursive",
-                                                               [{"value": 0}])[0]["value"] / 1000 / 1000)
-                except Exception as e:
-                    self.log.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
-                    blk_in = 0.0
+                io_bytes_recursive = container_stats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
+                if io_bytes_recursive:
+                    try:
+                        blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
+                    except Exception as e:
+                        self.log.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
+                        blk_in = 0.0
 
-                try:
-                    blk_out = float(container_stats.get("blkio_stats",
-                                                        {}).get("io_service_bytes_recursive",
-                                                                [0, {"value": 0}])[1]["value"] / 1000 / 1000)
-                except Exception as e:
-                    self.log.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
-                    blk_out = 0.0
+                    try:
+                        blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
+                    except Exception as e:
+                        self.log.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
+                        blk_out = 0.0
+                else:
+                    blk_out = blk_in = 0.0
 
                 # -----------------
-                out[container.id] = {
+                out.append({
+                    'id': container.id,
                     'name': container.name,
-                    'status': container.status,
-                    'cpu': "%.2f" % round(cpu_percent, 2),
-                    'mem_usage_limit': "%sMiB / %sGiB" % (round(mem_usage, 2), round(mem_limit / 1024, 2)),
-                    'mem': "%.2f" % mem_percent,
-                    'net_in_out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
-                    'blk_in_out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
-                    'restart_count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
-                }
+                    'container-status': container.status,
+                    'cpu-percent': "%.2f" % round(cpu_percent, 2),
+                    'mem-usage-limit': "%sMiB / %sGiB" % (round(mem_usage, 2), round(mem_limit / 1024, 2)),
+                    'mem-percent': "%.2f" % mem_percent,
+                    'net-in-out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
+                    'blk-in-out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
+                    'restart-count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
+                })
 
                 self.q.put(out)
 
                 if self.save_to:
                     with open(self.save_to, 'w') as f:
                         f.write(json.dumps(out))
+
+            time.sleep(5)
 
 
 class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
@@ -201,8 +205,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'swarm-node-cert-expiry-date': None,
                        'host-user-home': None,
                        'orchestrator': None,
-                       'cluster-join-address': None,
-                       'container-stats': None
+                       'cluster-join-address': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -420,6 +423,17 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if disks:
             resources['disks'] = disks
 
+        container_stats = self.status.get('container-stats')
+        try:
+            container_stats = self.docker_stats_queue.get(block=False)
+        except queue.Empty:
+            if not self.docker_stats_monitor.is_alive():
+                self.docker_stats_monitor = ContainerMonitoring(self.docker_stats_queue, self.docker_stats_json_file)
+                self.docker_stats_monitor.start()
+
+        if container_stats:
+            resources['container-stats'] = container_stats
+
         status_for_nuvla = {
             'resources': resources,
             'operating-system': docker_info["OperatingSystem"],
@@ -432,17 +446,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "status-notes": operational_status_notes,
             "docker-plugins": self.get_docker_plugins()
         }
-
-        container_stats = self.status.get('container-stats')
-        try:
-            container_stats = self.docker_stats_queue.get(block=False)
-        except queue.Empty:
-            if not self.docker_stats_monitor.is_alive():
-                self.docker_stats_monitor = ContainerMonitoring(self.docker_stats_queue, self.docker_stats_json_file)
-                self.docker_stats_monitor.start()
-
-        if container_stats:
-            status_for_nuvla['container-stats'] = container_stats
 
         mgmt_api = self.get_nuvlabox_api_endpoint()
         if mgmt_api:
