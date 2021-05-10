@@ -116,14 +116,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
-    def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, temperature=None, energy=None):
+    def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
         :param nuvlabox_status: full dump of the NB status {}
         :param cpu: tuple (capacity, load)
         :param ram: tuple (capacity, used)
         :param disk: list of {device: partition_name, capacity: value, used: value}
-        :param temperature: {thermal_zone: value}
         :param energy: energy consumption metric
         """
 
@@ -168,11 +167,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
                                                                      "disks",
                                                                      json.dumps(dsk)))
-
-        if temperature:
-            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                 "temperature",
-                                                                 json.dumps(temperature)))
                                                                  
         if energy:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
