@@ -167,7 +167,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
                                                                      "disks",
                                                                      json.dumps(dsk)))
-                                                                 
+
         if energy:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
             # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
@@ -176,8 +176,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                                                  "energy",
                                                                  json.dumps(energy)))
                 
-        
-
         # self.mqtt_telemetry.disconnect()
 
     def get_installation_parameters(self):
@@ -406,7 +404,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage, temperature)
+        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage)
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
