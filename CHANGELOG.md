@@ -1,4 +1,8 @@
 # Changelog
+## [2.0.1] - 2021-05-10
+### Added 
+ - preemptive check for NuvlaBox status before running telemetry cycle
+### Changed
 ## [2.0.0] - 2021-04-30
 ### Added 
  - support for clustering 

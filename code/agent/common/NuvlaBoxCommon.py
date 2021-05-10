@@ -243,6 +243,8 @@ class NuvlaBoxCommon():
             }
         }
 
+        self.docker_stats_json_file = f"{self.data_volume}/docker_stats.json"
+
     def api(self):
         """ Returns an Api object """
 
