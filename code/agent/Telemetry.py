@@ -116,13 +116,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
-    def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
+    def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, temperature=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
         :param nuvlabox_status: full dump of the NB status {}
         :param cpu: tuple (capacity, load)
         :param ram: tuple (capacity, used)
         :param disk: list of {device: partition_name, capacity: value, used: value}
+        :param temperature: {thermal_zone: value}
         :param energy: energy consumption metric
         """
 
@@ -168,6 +169,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                                                      "disks",
                                                                      json.dumps(dsk)))
 
+        if temperature:
+            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
+                                                                 "temperature",
+                                                                 json.dumps(temperature)))
+                                                                 
         if energy:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
             # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
@@ -175,6 +181,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
                                                                  "energy",
                                                                  json.dumps(energy)))
+                
+        
 
         # self.mqtt_telemetry.disconnect()
 
@@ -284,6 +292,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         }
         if disks:
             resources['disks'] = disks
+
+        if temperature:
+            resources['temperature'] = self.get_temperature()
+        else:
+            resources['temperature'] = psutil.sensors_temperatures()
 
         status_for_nuvla = {
             'resources': resources,
@@ -399,7 +412,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage)
+        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage, temperature)
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
@@ -414,6 +427,29 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         })
 
         return status_for_nuvla, all_status
+
+    def get_temperature(self):
+        """ Attempts to retrieve temperature information, if it exists. The keys will vary depending on the
+        underlying host system.
+
+        :return: JSON with temperatures values for each Thermal Zone founded. 
+        Example: {"acpitz": <float in Celsius>, ... } for x86_64
+                 {"Tboard_tegra": <float in Celsius>, ... } for aarch64
+        """
+
+        output = {}
+
+        command_thermal_zone = "cat /sys/devices/virtual/thermal/thermal_zone*/type"
+        command_temperatures = "cat /sys/devices/virtual/thermal/thermal_zone*/temp"
+        r_thermal_zone = run(command_thermal_zone, stdout=PIPE, stderr=STDOUT, encoding='UTF-8', shell=True)
+        r_temperatures = run(command_temperatures, stdout=PIPE, stderr=STDOUT, encoding='UTF-8', shell=True)
+
+        temperatures_list = r_temperatures.stdout.split()
+        thermal_zone_list = r_thermal_zone.stdout.split()
+
+        output = {thermal_zone_list[i]: float(temperatures_list[i])/1000 for i in range(len(thermal_zone_list))}
+
+        return output
 
     def get_power_consumption(self):
         """ Attempts to retrieve power monitoring information, if it exists. It is highly dependant on the
