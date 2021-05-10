@@ -149,13 +149,13 @@ class ContainerMonitoring(Thread):
                     'restart-count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
                 })
 
-                self.q.put(out)
+            self.q.put(out)
 
-                if self.save_to:
-                    with open(self.save_to, 'w') as f:
-                        f.write(json.dumps(out))
+            if self.save_to:
+                with open(self.save_to, 'w') as f:
+                    f.write(json.dumps(out))
 
-            time.sleep(5)
+            time.sleep(10)
 
 
 class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
@@ -423,7 +423,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if disks:
             resources['disks'] = disks
 
-        container_stats = self.status.get('container-stats')
+        container_stats = None
         try:
             container_stats = self.docker_stats_queue.get(block=False)
         except queue.Empty:
