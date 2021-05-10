@@ -200,6 +200,10 @@ if __name__ == "__main__":
     while True:
         start_cycle = time.time()
         nuvlabox_resource = activation.get_nuvlabox_info()
+        if nuvlabox_resource.get('state', '').startswith('DECOMMISSION'):
+            logging.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. Exiting...')
+            break
+
         if nuvlabox_info_updated_date != nuvlabox_resource['updated']:
             refresh_interval = nuvlabox_resource['refresh-interval']
             logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
