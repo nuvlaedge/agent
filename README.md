@@ -1,12 +1,12 @@
 # NuvlaBox Agent
 
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg?style=for-the-badge)](https://github.com/nuvlabox/agent/graphs/commit-activity)
-
-
-[![CI](https://img.shields.io/travis/com/nuvlabox/agent?style=for-the-badge&logo=travis-ci&logoColor=white)](https://travis-ci.com/nuvlabox/agent)
 [![GitHub issues](https://img.shields.io/github/issues/nuvlabox/agent?style=for-the-badge&logo=github&logoColor=white)](https://GitHub.com/nuvlabox/agent/issues/)
 [![Docker pulls](https://img.shields.io/docker/pulls/nuvlabox/agent?style=for-the-badge&logo=Docker&logoColor=white)](https://cloud.docker.com/u/nuvlabox/repository/docker/nuvlabox/agent)
 [![Docker image size](https://img.shields.io/microbadger/image-size/nuvlabox/agent?style=for-the-badge&logo=Docker&logoColor=white)](https://cloud.docker.com/u/nuvlabox/repository/docker/nuvlabox/agent)
+
+![CI Build](https://github.com/nuvlabox/agent/actions/workflows/main.yml/badge.svg)
+![CI Release](https://github.com/nuvlabox/agent/actions/workflows/release.yml/badge.svg)
 
 
 **This repository contains the source code for the NuvlaBox Agent - the microservice which is responsible for the [NuvlaBox](https://sixsq.com/products-and-services/nuvlabox/overview) activation, categorization and telemetry.**
