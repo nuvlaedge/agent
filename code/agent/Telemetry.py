@@ -564,6 +564,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return status_for_nuvla, all_status
 
+    @staticmethod
     def get_temperature(self):
         """ Attempts to retrieve temperature information, if it exists. The keys will vary depending on the
         underlying host system.
@@ -575,15 +576,41 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         output = {}
 
-        command_thermal_zone = "cat /sys/devices/virtual/thermal/thermal_zone*/type"
-        command_temperatures = "cat /sys/devices/virtual/thermal/thermal_zone*/temp"
-        r_thermal_zone = run(command_thermal_zone, stdout=PIPE, stderr=STDOUT, encoding='UTF-8', shell=True)
-        r_temperatures = run(command_temperatures, stdout=PIPE, stderr=STDOUT, encoding='UTF-8', shell=True)
+        thermal_fs_path = f'{self.hostfs}/sys/devices/virtual/thermal'
 
-        temperatures_list = r_temperatures.stdout.split()
-        thermal_zone_list = r_thermal_zone.stdout.split()
+        if not os.path.exists(thermal_fs_path):
+            return psutil.sensors_temperatures()
 
-        output = {thermal_zone_list[i]: float(temperatures_list[i])/1000 for i in range(len(thermal_zone_list))}
+        for subdirs in os.listdir(thermal_fs_path):
+            if subdirs.startswith("thermal"):
+                thermal_zone_file = f'{thermal_fs_path}/{subdirs}/type'
+                temperature_file = f'{thermal_fs_path}/{subdirs}/temp'
+                if not os.path.exists(thermal_zone_file) or not os.path.exists(temperature_file):
+                    logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file}) values do not complement each other')
+                    continue
+
+                with open(thermal_zone_file) as t:
+                    try:
+                        metric_basename = t.read().split()[0]
+                    except:
+                        logging.warning(f'Cannot read thermal zone at {thermal_zone_file}')
+                        continue
+                
+                with open(temperature_file) as t:
+                    try:
+                        temperature_value = t.read().split()[0]
+                    except:
+                        logging.warning(f'Cannot read temperature at {temperature_file}')
+                        continue
+
+                if not metric_basename or not temperature_value:
+                    logging.warning(f'Thermal zone {thermal_zone_file} or temperature {temperature_file} value is missing')
+                    continue
+
+                try:
+                    output[metric_basename] = float(temperature_value)/1000
+                except ValueError:
+                    logging.warning(f'Cannot convert temperature at {temperature_file}')
 
         return output
 
