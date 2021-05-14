@@ -564,7 +564,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return status_for_nuvla, all_status
 
-    @staticmethod
     def get_temperature(self):
         """ Attempts to retrieve temperature information, if it exists. The keys will vary depending on the
         underlying host system.
@@ -589,16 +588,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file}) values do not complement each other')
                     continue
 
-                with open(thermal_zone_file) as t:
+                with open(thermal_zone_file) as tzf:
                     try:
-                        metric_basename = t.read().split()[0]
+                        metric_basename = tzf.read().split()[0]
                     except:
                         logging.warning(f'Cannot read thermal zone at {thermal_zone_file}')
                         continue
                 
-                with open(temperature_file) as t:
+                with open(temperature_file) as tf:
                     try:
-                        temperature_value = t.read().split()[0]
+                        temperature_value = tf.read().split()[0]
                     except:
                         logging.warning(f'Cannot read temperature at {temperature_file}')
                         continue
@@ -609,8 +608,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
                 try:
                     output[metric_basename] = float(temperature_value)/1000
-                except ValueError:
-                    logging.warning(f'Cannot convert temperature at {temperature_file}')
+                except (ValueError, TypeError) as e:
+                    logging.warning(f'Cannot convert temperature at {temperature_file}. Reason: {str(e)}')
 
         return output
 
