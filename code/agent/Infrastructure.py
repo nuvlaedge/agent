@@ -398,7 +398,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             commission_payload['swarm-token-manager'] = swarm_tokens[0]
             commission_payload['swarm-token-worker'] = swarm_tokens[1]
 
-        commission_payload.update(self.get_cluster_info())
+        cluster_info = self.get_cluster_info()
+        commission_payload.update(cluster_info)
 
         tls_keys = self.get_tls_keys()
         if tls_keys:
@@ -442,6 +443,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                     pass
 
         minimum_commission_payload = self.needs_commission(commission_payload)
+        if cluster_info and any([cluster_key in minimum_commission_payload for cluster_key in cluster_info]):
+            # if some cluster info is going for commissioning, then pass all of it anyway
+            minimum_commission_payload.update(cluster_info)
 
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
