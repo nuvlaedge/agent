@@ -4,3 +4,4 @@ nuvla-api
 psutil==5.6.6
 Flask==1.0.0
 paho-mqtt
+six
