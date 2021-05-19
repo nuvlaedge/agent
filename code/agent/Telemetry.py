@@ -205,7 +205,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'swarm-node-cert-expiry-date': None,
                        'host-user-home': None,
                        'orchestrator': None,
-                       'cluster-join-address': None
+                       'cluster-join-address': None,
+                       'temperatures': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -515,6 +516,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except:
             logging.exception("Unable to retrieve power consumption metrics")
 
+        temperatures = self.get_temperature()
+        if temperatures:
+            status_for_nuvla['temperatures'] = temperatures
+
         if self.gpio_utility:
             # Get GPIO pins status
             gpio_pins = self.get_gpio_pins()
@@ -569,11 +574,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         underlying host system.
 
         :return: JSON with temperatures values for each Thermal Zone founded. 
-        Example: {"acpitz": <float in Celsius>, ... } for x86_64
-                 {"Tboard_tegra": <float in Celsius>, ... } for aarch64
+        Example: [{"thermal-zone": "acpitz", "value": <float in Celsius> for x86_64}]
         """
 
-        output = {}
+        output = []
 
         thermal_fs_path = f'{self.hostfs}/sys/devices/virtual/thermal'
 
@@ -607,7 +611,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     continue
 
                 try:
-                    output[metric_basename] = float(temperature_value)/1000
+                    output.append({
+                        "thermal-zone": metric_basename,
+                        "value": float(temperature_value)/1000})
                 except (ValueError, TypeError) as e:
                     logging.warning(f'Cannot convert temperature at {temperature_file}. Reason: {str(e)}')
 
