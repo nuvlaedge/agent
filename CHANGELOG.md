@@ -1,4 +1,9 @@
 # Changelog
+## [2.1.0] - 2021-06-11
+### Added 
+ - add temperature metrics
+### Changed
+ - fix cluster commissioning params
 ## [2.0.1] - 2021-05-10
 ### Added 
  - preemptive check for NuvlaBox status before running telemetry cycle
