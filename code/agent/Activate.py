@@ -110,7 +110,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
     def get_nuvlabox_info(self):
         """ Retrieves the respective resource from Nuvla """
 
-        return self.api()._cimi_get(self.nuvlabox_id)
+        return self.api().get(self.nuvlabox_id)
 
     def update_nuvlabox_resource(self):
         """ Updates the static information about the NuvlaBox
