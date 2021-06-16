@@ -380,9 +380,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # get status for Nuvla
         disk_usage = self.get_disks_usage()
-        operational_status = self.get_operational_status()
         operational_status_notes = self.get_operational_status_notes()
+        operational_status = self.get_operational_status()
+
         docker_info = self.get_docker_info()
+
+        if docker_info.get('Swarm', {}).get('Error'):
+            operational_status_notes.append(docker_info.get('Swarm', {}).get('Error'))
+            operational_status = 'DEGRADED'
+
+        if docker_info.get('Warnings'):
+            operational_status_notes += docker_info.get('Warnings')
+
         swarm_node_id = docker_info.get("Swarm", {}).get("NodeID")
         cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
         remote_managers = docker_info.get('Swarm', {}).get('RemoteManagers')
