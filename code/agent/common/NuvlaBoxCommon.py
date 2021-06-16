@@ -14,7 +14,6 @@ import struct
 import logging
 import argparse
 import sys
-import docker
 import requests
 import signal
 import string
@@ -22,6 +21,15 @@ import time
 from contextlib import contextmanager
 from nuvla.api import Api
 from subprocess import PIPE, Popen
+
+KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
+if KUBERNETES_SERVICE_HOST:
+    from kubernetes import client, config
+    ORCHESTRATOR = 'kubernetes'
+else:
+
+    import docker
+    ORCHESTRATOR = 'docker'
 
 
 def get_mac_address(ifname, separator=':'):
@@ -102,9 +110,20 @@ class NuvlaBoxCommon():
     def __init__(self, shared_data_volume="/srv/nuvlabox/shared"):
         """ Constructs an Infrastructure object, with a status placeholder
 
-        :param shared_data_volume: shared Docker volume target path
+        :param shared_data_volume: shared volume target path
         """
-        self.docker_client = docker.from_env()
+
+        self.docker_socket_file = '/var/run/docker.sock'
+
+        if ORCHESTRATOR == 'kubernetes':
+            config.load_incluster_config()
+            self.container_client = client.CoreV1Api()
+        else:
+            if os.path.exists(self.docker_socket_file):
+                self.container_client = docker.from_env()
+            else:
+                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
+
         self.data_volume = shared_data_volume
         self.activation_flag = "{}/.activated".format(self.data_volume)
         self.swarm_manager_token_file = "swarm-manager-token"
@@ -183,7 +202,11 @@ class NuvlaBoxCommon():
         if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
             self.nuvlabox_id = os.environ['NUVLABOX_UUID']
         elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
-            self.nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
+            try:
+                self.nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
+            except json.decoder.JSONDecodeError as e:
+                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
+                                f'{self.data_volume}/{self.context}: {str(e)}')
         else:
             # self.nuvlabox_id = get_mac_address('eth0', '')
             raise Exception(f'NUVLABOX_UUID not provided')
