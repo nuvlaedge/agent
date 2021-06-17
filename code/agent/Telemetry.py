@@ -457,10 +457,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "docker-plugins": self.get_docker_plugins()
         }
 
-        mgmt_api = self.get_nuvlabox_api_endpoint()
-        if mgmt_api:
-            status_for_nuvla["nuvlabox-api-endpoint"] = mgmt_api
-
         if swarm_node_id:
             status_for_nuvla["node-id"] = swarm_node_id
             status_for_nuvla["orchestrator"] = "swarm"
@@ -1084,84 +1080,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.set_local_operational_status(status)
 
-    def get_nuvlabox_api_endpoint(self):
-        """ Double checks that the NuvlaBox API is online
+    def get_vpn_ip(self):
+        """ Discovers the NuvlaBox VPN IP  """
 
-        :returns URL for the NuvlaBox API endpoint
-        """
-
-        nb_ext_endpoint = "https://{}:5001/api".format(self.get_ip())
-        nb_int_endpoint = "https://management-api:5001/api"
-
-        try:
-            requests.get(nb_int_endpoint, verify=False)
-        except requests.exceptions.SSLError:
-            # the API endpoint exists, we simply did not authenticate
-            return nb_ext_endpoint
-        except requests.exceptions.ConnectionError:
-            return None
-        except:
-            # let's assume it doesn't exist either
-            return None
-
-        return nb_int_endpoint
-
-    def get_ip(self):
-        """ Discovers the NuvlaBox IP (aka endpoint) """
-
-        # NOTE: This code does not work on Ubuntu 18.04.
-        # with open("/proc/self/cgroup", 'r') as f:
-        #    docker_id = f.readlines()[0].replace('\n', '').split("/")[-1]
-
-        # Docker sets the hostname to be the short version of the container id.
-        # This method of getting the container id works on both Ubuntu 16 and 18.
-        docker_id = socket.gethostname()
-
-        deployment_scenario = self.docker_client.containers.get(docker_id).labels["nuvlabox.deployment"]
-
-        if deployment_scenario == "localhost":
-            # Get the Docker IP within the shared Docker network
-
-            # ip = self.docker_client.info()["Swarm"]["NodeAddr"]
-
-            ip = socket.gethostbyname(socket.gethostname())
-        elif deployment_scenario == "onpremise":
-            # Get the local network IP
-            # Hint: look at the local Nuvla IP, and scan the host network interfaces for an IP within the same subnet
-            # You might need to launch a new container from here, in host mode, just to run `ifconfig`, something like:
-            #       docker run --rm --net host alpine ip addr
-
-            # FIXME: Review whether this is the correct impl. for this case.
-            ip = self.docker_client.info()["Swarm"]["NodeAddr"]
-        elif deployment_scenario == "production":
-            # Get either the public IP (via an online service) or use the VPN IP
-
-            if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
-                ip = str(open(self.vpn_ip_file).read().splitlines()[0])
-            else:
-                ip = self.docker_client.info().get("Swarm", {}).get("NodeAddr")
-                if not ip:
-                    # then probably this isn't running in Swarm mode
-                    try:
-                        ip = None
-                        with open(f'{self.hostfs}/proc/net/tcp') as ipfile:
-                            ips = ipfile.readlines()
-                            for line in ips[1:]:
-                                cols = line.strip().split(' ')
-                                if cols[1].startswith('00000000') or cols[2].startswith('00000000'):
-                                    continue
-                                hex_ip = cols[1].split(':')[0]
-                                ip = f'{int(hex_ip[len(hex_ip)-2:],16)}.' \
-                                    f'{int(hex_ip[len(hex_ip)-4:len(hex_ip)-2],16)}.' \
-                                    f'{int(hex_ip[len(hex_ip)-6:len(hex_ip)-4],16)}.' \
-                                    f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
-                                break
-                        if not ip:
-                            raise Exception('Cannot infer IP')
-                    except:
-                        ip = '127.0.0.1'
+        if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
+            ip = str(open(self.vpn_ip_file).read().splitlines()[0])
         else:
-            logging.warning("Cannot infer the NuvlaBox IP!")
+            logging.warning("Cannot infer the NuvlaBox VPN IP!")
             return None
 
         return ip

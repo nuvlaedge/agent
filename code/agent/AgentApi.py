@@ -106,14 +106,12 @@ def post(payload):
         payload['parent'] = NB.nuvlabox_id
 
     if 'version' not in payload:
-        if os.path.exists("{}/{}".format(NB.data_volume, NB.context)):
+        if NB.nuvlabox_engine_version:
+            version = int(NB.nuvlabox_engine_version.split('.')[0])
+        elif os.path.exists("{}/{}".format(NB.data_volume, NB.context)):
             version = json.loads(open("{}/{}".format(NB.data_volume, NB.context)).read())['version']
         else:
-            try:
-                tag = NB.docker_client.api.inspect_container(socket.gethostname())['Config']['Labels']['git.branch']
-                version = int(tag.split('.')[0])
-            except (KeyError, ValueError, IndexError):
-                version = 1
+            version = 2
 
         payload['version'] = version
 

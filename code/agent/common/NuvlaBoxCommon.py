@@ -18,6 +18,7 @@ import requests
 import signal
 import string
 import time
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from nuvla.api import Api
 from subprocess import PIPE, Popen
@@ -104,6 +105,267 @@ def timeout(time):
         signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
+class ContainerRuntimeClient(ABC):
+    """
+    Base abstract class for the Docker and Kubernetes clients
+    """
+
+    @abstractmethod
+    def __init__(self, host_node_name, host_rootfs):
+        self.client = None
+        self.host_node_name = host_node_name
+        self.hostfs = host_rootfs
+        self.job_engine_lite_component = "nuvlabox-job-engine-lite"
+        self.job_engine_lite_image = None
+
+    @abstractmethod
+    def get_node_info(self):
+        """
+        Get high level info about the hosting node
+        """
+        pass
+
+    def get_host_os(self):
+        """
+        Get operating system of the hosting node
+        """
+        pass
+
+    def get_join_tokens(self):
+        """
+        Get token for joining this node
+        """
+        pass
+
+    def list_nodes(self, optional_filter={}):
+        """
+        List all the nodes in the cluster
+        """
+        pass
+
+    def get_cluster_info(self, default_cluster_name=None):
+        """
+        Get information about the cluster
+        """
+        pass
+
+    def get_api_ip_port(self):
+        """
+        Get the full API endpoint
+        """
+        pass
+
+    def has_pull_job_capability(self):
+        """
+        Checks if NuvlaBox supports pull mode for jobs
+        """
+        pass
+
+
+class KubernetesClient(ContainerRuntimeClient):
+    """
+    Kubernetes client
+    """
+
+    def __init__(self, host_node_name, host_rootfs):
+        config.load_incluster_config()
+        self.client = client.CoreV1Api()
+        self.client_apps = client.AppsV1Api()
+
+        super().__init__(host_node_name, host_rootfs)
+
+    def get_node_info(self):
+        if self.host_node_name:
+            this_node = self.client.read_node(self.host_node_name)
+            try:
+                return this_node.status.node_info
+            except AttributeError:
+                logging.warning(f'Cannot infer node information for node "{self.host_node_name}"')
+
+        return None
+
+    def get_host_os(self):
+        node_info = self.get_node_info()
+        if node_info:
+            return f"{node_info.os_image} {node_info.kernel_version}"
+
+        return None
+
+    def get_join_tokens(self):
+        # NOTE: I don't think we can get the cluster join token from the API
+        # it needs to come from the cluster mgmt tool (i.e. k0s, k3s, kubeadm, etc.)
+        return None
+
+    def list_nodes(self, optional_filter={}):
+        return self.client.list_node().items
+
+    def get_cluster_info(self, default_cluster_name=None):
+        node_info = self.get_node_info()
+
+        orchestrator = 'kubernetes'
+        cluster_id = default_cluster_name
+        if node_info:
+            cluster_name = node_info.metadata.cluster_name
+            if cluster_name:
+                cluster_id = cluster_name
+
+        nodes = self.list_nodes()
+        managers = []
+        workers = []
+        for n in nodes:
+            for label in n.metadata.labels:
+                if 'node-role' in label and 'master' in label:
+                    managers.append(n.metadata.name)
+                else:
+                    workers.append(n.metadata.name)
+
+        return {
+            'cluster-id': cluster_id,
+            'cluster-orchestrator': orchestrator,
+            'cluster-managers': managers,
+            'cluster-workers': workers
+        }
+
+    def get_api_ip_port(self):
+        endpoints = self.client.list_endpoints_for_all_namespaces().items
+
+        ip = None
+        ip_port = 6443
+        for endpoint in endpoints:
+            if endpoint.metadata.name.lower() == 'kubernetes':
+                for subset in endpoint.subsets:
+                    for addr in subset.addresses:
+                        if addr.ip:
+                            ip = addr.ip
+                            break
+
+                    for port in subset.ports:
+                        if port.name == 'https' and port.protocol == 'TCP':
+                            ip_port = port.port
+                            break
+
+                    if ip and ip_port:
+                        break
+
+                break
+
+        if ip:
+            return ip, ip_port
+
+        return None, None
+
+    def has_pull_job_capability(self):
+
+
+
+class DockerClient(ContainerRuntimeClient):
+    """
+    Docker client
+    """
+
+    def __init__(self, host_rootfs):
+        self.client = docker.from_env()
+        self.lost_quorum_hint = 'possible that too few managers are online'
+
+        super().__init__(None, host_rootfs)
+
+    def get_node_info(self):
+        return self.client.info()
+
+    def get_host_os(self):
+        node_info = self.get_node_info()
+        return f"{node_info['OperatingSystem']} {node_info['KernelVersion']}"
+
+    def get_join_tokens(self):
+        try:
+            if self.client.swarm.attrs:
+                return self.client.swarm.attrs['JoinTokens']['Manager'], \
+                       self.client.swarm.attrs['JoinTokens']['Worker']
+        except docker.errors.APIError as e:
+            if self.lost_quorum_hint in str(e):
+                # quorum is lost
+                logging.warning(f'Quorum is lost. This node will no longer support Service and Cluster management')
+
+        return None
+
+    def list_nodes(self, optional_filter={}):
+        return self.client.nodes.list(filters=optional_filter)
+
+    def get_cluster_info(self, default_cluster_name=None):
+        node_info = self.get_node_info()
+        swarm_info = node_info['Swarm']
+
+        if swarm_info.get('ControlAvailable'):
+            orchestrator = 'swarm'
+            cluster_id = swarm_info.get('Cluster', {}).get('ID')
+            managers = []
+            workers = []
+            for manager in self.list_nodes(optional_filter={'role': 'manager'}):
+                if manager not in managers and manager.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+                    managers.append(manager.id)
+
+            for worker in self.list_nodes(optional_filter={'role': 'worker'}):
+                if worker not in workers and worker.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+                    workers.append(worker.id)
+
+            return {
+                'cluster-id': cluster_id,
+                'cluster-orchestrator': orchestrator,
+                'cluster-managers': managers,
+                'cluster-workers': workers
+            }
+        else:
+            return {}
+
+    def get_api_ip_port(self):
+        node_info = self.get_node_info()
+
+        ip = node_info.get("Swarm", {}).get("NodeAddr")
+        if not ip:
+            # then probably this isn't running in Swarm mode
+            try:
+                ip = None
+                with open(f'{self.hostfs}/proc/net/tcp') as ipfile:
+                    ips = ipfile.readlines()
+                    for line in ips[1:]:
+                        cols = line.strip().split(' ')
+                        if cols[1].startswith('00000000') or cols[2].startswith('00000000'):
+                            continue
+                        hex_ip = cols[1].split(':')[0]
+                        ip = f'{int(hex_ip[len(hex_ip)-2:],16)}.' \
+                            f'{int(hex_ip[len(hex_ip)-4:len(hex_ip)-2],16)}.' \
+                            f'{int(hex_ip[len(hex_ip)-6:len(hex_ip)-4],16)}.' \
+                            f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
+                        break
+                if not ip:
+                    raise Exception('Cannot infer IP')
+            except:
+                ip = '127.0.0.1'
+            else:
+                logging.warning("Cannot infer the NuvlaBox API IP!")
+                return None, None
+
+        return ip, 5000
+
+    def has_pull_job_capability(self):
+        try:
+            container = self.client.containers.get(self.job_engine_lite_component)
+        except docker.errors.NotFound:
+            return False
+        except Exception as e:
+            logging.error(f"Unable to search for container {self.job_engine_lite_component}. Reason: {str(e)}")
+            return False
+
+        try:
+            if container.status.lower() == "paused":
+                self.job_engine_lite_image = container.attrs['Config']['Image']
+                return True
+        except (AttributeError, KeyError):
+            return False
+
+        return False
+
+# --------------------
 class NuvlaBoxCommon():
     """ Common set of methods and variables for the NuvlaBox agent
     """
@@ -114,13 +376,14 @@ class NuvlaBoxCommon():
         """
 
         self.docker_socket_file = '/var/run/docker.sock'
+        self.host_node_name = os.getenv('HOST_NODE_NAME')
+        self.hostfs = "/rootfs"
 
         if ORCHESTRATOR == 'kubernetes':
-            config.load_incluster_config()
-            self.container_client = client.CoreV1Api()
+            self.container_runtime = KubernetesClient()
         else:
             if os.path.exists(self.docker_socket_file):
-                self.container_client = docker.from_env()
+                self.container_runtime = DockerClient()
             else:
                 raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
 
@@ -155,11 +418,8 @@ class NuvlaBoxCommon():
         self.mqtt_broker_host = "data-gateway"
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
-        self.hostfs = "/rootfs"
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
         self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
-        self.job_engine_lite_image = None
-        self.lost_quorum_hint = 'possible that too few managers are online'
 
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None
