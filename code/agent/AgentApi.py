@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import glob
-import socket
 import nuvla.api
 
 from agent.common import NuvlaBoxCommon
@@ -285,3 +284,14 @@ def get(identifier):
     else:
         return {"error": "Peripheral not found"}, 404
 
+
+def save_vpn_ip(ip):
+    """
+    Take the IP as a string and writes it into the shared volume
+
+    :param ip: string
+    :return:
+    """
+
+    with open(NB.vpn_ip_file, 'w') as vpnip:
+        vpnip.write(str(ip))

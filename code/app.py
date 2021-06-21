@@ -95,6 +95,19 @@ def trigger_commission():
     return jsonify(commissioning_response)
 
 
+@app.route('/api/set-vpn-ip', methods=['POST'])
+def set_vpn_ip():
+    """ API endpoint to let other components define the NB VPN IP
+    """
+
+    payload = request.data
+
+    logging.info('Received request to set VPN IP to %s ' % payload)
+
+    AgentApi.save_vpn_ip(payload)
+    return jsonify(True), 201
+
+
 @app.route('/api/healthcheck', methods=['GET'])
 def healthcheck():
     """ Static endpoint just for clients to check if API/Agent is up and running
@@ -216,10 +229,10 @@ if __name__ == "__main__":
 
         response = telemetry.update_status()
 
-        if isinstance(response.get('jobs'), list) and infra.job_engine_lite_image and response.get('jobs'):
+        if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             for job_id in response['jobs']:
-                job = Job(data_volume, job_id, infra.job_engine_lite_image)
+                job = Job(data_volume, job_id, infra.container_runtime.job_engine_lite_image)
                 if job.do_nothing:
                     continue
 

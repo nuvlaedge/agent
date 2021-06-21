@@ -36,11 +36,12 @@ class ContainerMonitoring(Thread):
         log: a logging object
     """
 
-    def __init__(self, q: queue.Queue, save_to: str = None, log: logging = logging):
+    def __init__(self, q: queue.Queue, cr: NuvlaBoxCommon.ContainerRuntimeClient,
+                 save_to: str = None, log: logging = logging):
         Thread.__init__(self)
         self.q = q
         self.save_to = save_to
-        self.docker_client = docker.from_env()
+        self.container_runtime = cr
         self.log = log
 
     def run(self):
@@ -53,102 +54,7 @@ class ContainerMonitoring(Thread):
         """
 
         while True:
-            docker_stats = []
-
-            all_containers = self.docker_client.containers.list()
-            for container in all_containers:
-                docker_stats.append(self.docker_client.api.stats(container.id))
-
-            # get first samples (needed for cpu monitoring)
-            old_cpu = []
-            for c_stat in docker_stats:
-                container_stats = json.loads(next(c_stat))
-
-                old_cpu.append((float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
-                                float(container_stats["cpu_stats"]["system_cpu_usage"])))
-
-            # now the actual monitoring
-            out = []
-            for i, c_stat in enumerate(docker_stats):
-                container = all_containers[i]
-                container_stats = json.loads(next(c_stat))
-
-                #
-                # -----------------
-                # CPU
-                try:
-                    cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
-                    cpu_system = float(container_stats["cpu_stats"]["system_cpu_usage"])
-
-                    online_cpus = container_stats["cpu_stats"] \
-                        .get("online_cpus", len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", -1)))
-
-                    cpu_delta = cpu_total - old_cpu[i][0]
-                    system_delta = cpu_system - old_cpu[i][1]
-
-                    cpu_percent = 0.0
-                    if system_delta > 0.0 and online_cpus > -1:
-                        cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
-                except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
-                    self.log.error(f"Cannot get CPU stats for container {container.name}: {str(e)}. Moving on")
-                    cpu_percent = 0.0
-
-                #
-                # -----------------
-                # MEM
-                try:
-                    mem_usage = float(container_stats["memory_stats"]["usage"] / 1024 / 1024)
-                    mem_limit = float(container_stats["memory_stats"]["limit"] / 1024 / 1024)
-                    if round(mem_limit, 2) == 0.00:
-                        mem_percent = 0.00
-                    else:
-                        mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
-                except (IndexError, KeyError, ValueError) as e:
-                    self.log.error(f"Cannot get Mem stats for container {container.name}: {str(e)}. Moving on")
-                    mem_percent = mem_usage = mem_limit = 0.00
-
-                #
-                # -----------------
-                # NET
-                net_in = net_out = 0.0
-                if "networks" in container_stats:
-                    net_in = sum(container_stats["networks"][iface]["rx_bytes"]
-                                 for iface in container_stats["networks"]) / 1000 / 1000
-                    net_out = sum(container_stats["networks"][iface]["tx_bytes"]
-                                  for iface in container_stats["networks"]) / 1000 / 1000
-
-                #
-                # -----------------
-                # BLOCK
-                io_bytes_recursive = container_stats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
-                if io_bytes_recursive:
-                    try:
-                        blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
-                    except Exception as e:
-                        self.log.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
-                        blk_in = 0.0
-
-                    try:
-                        blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
-                    except Exception as e:
-                        self.log.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
-                        blk_out = 0.0
-                else:
-                    blk_out = blk_in = 0.0
-
-                # -----------------
-                out.append({
-                    'id': container.id,
-                    'name': container.name,
-                    'container-status': container.status,
-                    'cpu-percent': "%.2f" % round(cpu_percent, 2),
-                    'mem-usage-limit': "%sMiB / %sGiB" % (round(mem_usage, 2), round(mem_limit / 1024, 2)),
-                    'mem-percent': "%.2f" % mem_percent,
-                    'net-in-out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
-                    'blk-in-out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
-                    'restart-count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
-                })
-
+            out = self.container_runtime.collect_container_metrics()
             self.q.put(out)
 
             if self.save_to:
@@ -176,11 +82,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
-        self.docker_client = docker.from_env()
         self.first_net_stats = {}
-        self.docker_stats_queue = queue.Queue()
-        self.docker_stats_monitor = ContainerMonitoring(self.docker_stats_queue, self.docker_stats_json_file)
-        self.docker_stats_monitor.start()
+        self.container_stats_queue = queue.Queue()
+        self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
+                                                        self.container_runtime,
+                                                        self.container_stats_json_file)
+        self.container_stats_monitor.start()
 
         self.status = {'resources': None,
                        'status': None,
@@ -435,11 +342,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         container_stats = None
         try:
-            container_stats = self.docker_stats_queue.get(block=False)
+            container_stats = self.container_stats_queue.get(block=False)
         except queue.Empty:
-            if not self.docker_stats_monitor.is_alive():
-                self.docker_stats_monitor = ContainerMonitoring(self.docker_stats_queue, self.docker_stats_json_file)
-                self.docker_stats_monitor.start()
+            if not self.container_stats_monitor.is_alive():
+                self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
+                                                                self.container_runtime,
+                                                                self.container_stats_json_file)
+                self.container_stats_monitor.start()
 
         if container_stats:
             resources['container-stats'] = container_stats

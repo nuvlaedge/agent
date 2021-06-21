@@ -111,12 +111,13 @@ class ContainerRuntimeClient(ABC):
     """
 
     @abstractmethod
-    def __init__(self, host_node_name, host_rootfs):
+    def __init__(self, host_rootfs, host_home):
         self.client = None
-        self.host_node_name = host_node_name
         self.hostfs = host_rootfs
         self.job_engine_lite_component = "nuvlabox-job-engine-lite"
         self.job_engine_lite_image = None
+        self.vpn_client_component = 'vpn-client'
+        self.host_home = host_home
 
     @abstractmethod
     def get_node_info(self):
@@ -125,39 +126,114 @@ class ContainerRuntimeClient(ABC):
         """
         pass
 
+    @abstractmethod
     def get_host_os(self):
         """
         Get operating system of the hosting node
         """
         pass
 
+    @abstractmethod
     def get_join_tokens(self):
         """
         Get token for joining this node
         """
         pass
 
+    @abstractmethod
     def list_nodes(self, optional_filter={}):
         """
         List all the nodes in the cluster
         """
         pass
 
+    @abstractmethod
     def get_cluster_info(self, default_cluster_name=None):
         """
         Get information about the cluster
         """
         pass
 
+    @abstractmethod
     def get_api_ip_port(self):
         """
         Get the full API endpoint
         """
         pass
 
+    @abstractmethod
     def has_pull_job_capability(self):
         """
         Checks if NuvlaBox supports pull mode for jobs
+        """
+        pass
+
+    @abstractmethod
+    def get_node_labels(self):
+        """
+        Collects the labels from the hosting node
+        """
+        pass
+
+    @staticmethod
+    def cast_dict_to_list(key_value_dict):
+        """
+        Parses a set of key value pairs in a dict, into a list of strings
+        :param key_value_dict: something like {'key': value, 'novalue': None, ...}
+        :return: ["key=value", "novalue", ...]
+        """
+
+        final_list = []
+        for label, value in key_value_dict.items():
+            if value:
+                final_list.append("{}={}".format(label, value))
+            else:
+                final_list.append(label)
+
+        return final_list
+
+    @abstractmethod
+    def is_vpn_client_running(self):
+        """
+        Checks if the vpn-client component is up and running
+        """
+        pass
+
+    @abstractmethod
+    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+        """
+        Takes an SSH public key and adds it to the host's HOME authorized keys (aka ssh_folder)
+        """
+        pass
+
+    @abstractmethod
+    def is_nuvla_job_running(self, job_id, job_execution_id):
+        """
+        Finds if a job is still running
+        :param job_id: nuvla ID of the job
+        :param job_execution_id: container ID of the job
+        """
+        pass
+
+    @abstractmethod
+    def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None):
+        """
+        Launches a new job
+        :param job_id: nuvla ID of the job
+        :param job_execution_id: name of the container/pod
+        :param nuvla_endpoint: Nuvla endpoint
+        :param nuvla_endpoint_insecure: whether to use TLS or not
+        :param api_key: API key credential for the job to access Nuvla
+        :param api_secret: secret for the api_key
+        """
+        pass
+
+    @abstractmethod
+    def collect_container_metrics(self):
+        """
+        Scans all visible containers and reports their resource consumption
+        :return:
         """
         pass
 
@@ -167,12 +243,17 @@ class KubernetesClient(ContainerRuntimeClient):
     Kubernetes client
     """
 
-    def __init__(self, host_node_name, host_rootfs):
+    def __init__(self, host_rootfs, host_home):
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
+        self.namespace = os.getenv('MY_NAMESPACE', 'nuvlabox')
+        self.job_engine_lite_image = os.getenv('NUVLABOX_JOB_ENGINE_LITE_IMAGE')
+        self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
+        self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
+        self.vpn_client_component = os.getenv('NUVLABOX_VPN_COMPONENT_NAME', 'vpn-client')
 
-        super().__init__(host_node_name, host_rootfs)
+        super().__init__(host_rootfs, host_home)
 
     def get_node_info(self):
         if self.host_node_name:
@@ -229,45 +310,235 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_api_ip_port(self):
         endpoints = self.client.list_endpoints_for_all_namespaces().items
 
-        ip = None
         ip_port = 6443
-        for endpoint in endpoints:
-            if endpoint.metadata.name.lower() == 'kubernetes':
-                for subset in endpoint.subsets:
-                    for addr in subset.addresses:
-                        if addr.ip:
-                            ip = addr.ip
-                            break
+        if self.host_node_ip:
+            return self.host_node_ip, ip_port
+        else:
+            for endpoint in endpoints:
+                if endpoint.metadata.name.lower() == 'kubernetes':
+                    for subset in endpoint.subsets:
+                        for addr in subset.addresses:
+                            if addr.ip:
+                                self.host_node_ip = addr.ip
+                                break
 
-                    for port in subset.ports:
-                        if port.name == 'https' and port.protocol == 'TCP':
-                            ip_port = port.port
-                            break
+                        for port in subset.ports:
+                            if port.name == 'https' and port.protocol == 'TCP':
+                                ip_port = port.port
+                                break
 
-                    if ip and ip_port:
-                        break
+                        if self.host_node_ip and ip_port:
+                            return self.host_node_ip, ip_port
 
-                break
-
-        if ip:
-            return ip, ip_port
+                    break
 
         return None, None
 
     def has_pull_job_capability(self):
+        if self.job_engine_lite_image:
+            return True
+        else:
+            return False
+
+    def get_node_labels(self):
+        node = self.get_node_info()
+        node_labels = node.metadata.labels
+
+        return self.cast_dict_to_list(node_labels)
+
+    def is_vpn_client_running(self):
+        vpn_pod = self.client.list_pod_for_all_namespaces(label_selector=f"component={self.vpn_client_component}").items
+
+        if len(vpn_pod) < 1:
+            return False
+
+        for res in vpn_pod:
+            for container in res.status.container_statuses:
+                if container.name == self.vpn_client_component and container.ready:
+                    return True
+
+        return False
+
+    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+        name = 'nuvlabox-ssh-installer'
+        try:
+            existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                # this is good, we can proceed
+                pass
+            else:
+                raise
+        else:
+            if existing_pod.status.phase.lower() not in ['succeeded', 'running']:
+                logging.warning(f'Found old {name} with state {existing_pod.status.phase}. Trying to relaunch it...')
+                self.client.delete_namespaced_pod(namespace=self.namespace, name=name)
+            else:
+                logging.info(f'SSH key installer "{name}" has already been launched in the past. Skipping this step')
+                return False
+
+        cmd = ["sh", "-c", "echo -e \"${SSH_PUB}\" >> %s" % f'{ssh_folder}/authorized_keys']
+        volume_name = f'{name}-volume'
+        pod_body = client.V1Pod(
+            kind='Pod',
+            metadata=client.V1ObjectMeta(name=name),
+            spec=client.V1PodSpec(
+                node_name=self.host_node_name,
+                volumes=[
+                    client.V1Volume(
+                        name=volume_name,
+                        host_path=client.V1HostPathVolumeSource(
+                            path=f'{self.host_home}/.ssh'
+                        )
+                    )
+                ],
+                restart_policy='Never',
+                containers=[
+                    client.V1Container(
+                        name=name,
+                        image='alpine',
+                        env=[
+                            client.V1EnvVar(
+                                name='SSH_PUB',
+                                value=ssh_pub_key
+                            )
+                        ],
+                        volume_mounts=[
+                            client.V1VolumeMount(
+                                name=volume_name,
+                                mount_path=ssh_folder
+                            )
+                        ],
+                        command=cmd
+                    )
+                ]
+            )
+        )
+
+        self.client.create_namespaced_pod(namespace=self.namespace, body=pod_body)
+
+        return True
+
+    def is_nuvla_job_running(self, job_id, job_execution_id):
+        try:
+            job = self.client.read_namespaced_pod(namespace=self.namespace, name=job_execution_id)
+        except client.exceptions.ApiException as e:
+            if e.status == 404:
+                return False
+            else:
+                logging.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
+                # assume it is running so we don't mess anything
+                return True
+
+        try:
+            if job.status.phase.lower() == 'running':
+                logging.info(f'Job {job_id} is already running in pod {job.metadata.name}, with UID {job.metadata.uid}')
+                return True
+            elif job.status.phase.lower() == 'pending':
+                logging.warning(f'Job {job_id} was created and still pending')
+                # TODO: maybe we should run a cleanup for pending jobs after X hours
+            else:
+                if job.status.phase.lower() == 'succeeded':
+                    logging.info(f'Job {job_id} has already finished successfully. Deleting the pod...')
+                # then it is probably UNKNOWN or in an undesired state
+                self.client.delete_namespaced_pod(namespace=self.namespace, name=job_execution_id)
+        except AttributeError:
+            # assume it is running so we don't mess anything
+            return True
+        except client.exceptions.ApiException as e:
+            # this exception can only happen if we tried to delete the pod and couldn't
+            # log it and don't let another job come in
+            logging.error(f'Failed to handle job {job_id} due to pod management error: {str(e)}')
+            return True
+
+        return False
+
+    def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None):
+
+        cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
+            f'--api-key {api_key} ' \
+            f'--api-secret {api_secret} ' \
+            f'--job-id {job_id}'
+
+        if nuvla_endpoint_insecure:
+            cmd = f'{cmd} --api-insecure'
+
+        logging.info(f'Starting job {job_id} from {self.job_engine_lite_image}, with command: "{cmd}"')
+
+        pod_body = client.V1Pod(
+            kind='Pod',
+            metadata=client.V1ObjectMeta(name=job_execution_id),
+            spec=client.V1PodSpec(
+                node_name=self.host_node_name,
+                restart_policy='Never',
+                containers=[
+                    client.V1Container(
+                        name=job_execution_id,
+                        image=self.job_engine_lite_image,
+                        command=cmd
+                    )
+                ]
+            )
+        )
+
+        self.client.create_namespaced_pod(namespace=self.namespace, body=pod_body)
+
+    def collect_container_metrics(self):
+        pods_here = self.client.list_pod_for_all_namespaces(field_selector=f'spec.nodeName={self.host_node_name}')
+        pods_here_per_name = {f'{p.metadata.namespace}/{p.metadata.name}': p for p in pods_here.items}
+
+        this_node_capacity = self.get_node_info().status.capacity
+        node_cpu_capacity = int(this_node_capacity['cpu'])
+        node_mem_capacity = int(this_node_capacity['memory'].rstrip('Ki'))
+
+        out = []
+        pod_metrics_list = client.CustomObjectsApi().list_cluster_custom_object("metrics.k8s.io", "v1beta1", "pods")
+
+        items = pod_metrics_list.get('items', [])
+        for pod in items:
+            short_identifier = f"{pod['metadata']['namespace']}/{pod['metadata']['name']}"
+            if short_identifier not in pods_here_per_name:
+                continue
+
+            for container in pod.get('containers', []):
+                metrics = {
+                    'id': pod['metadata']['selfLink'],
+                    'name': container['name']
+                }
+                container_cpu_usage = int(container['usage']['cpu'].rstrip('n'))
+                # units come in nanocores
+                metrics['cpu-percent'] = "%.2f" % round(container_cpu_usage*100/(node_cpu_capacity*1000000000), 2)
+
+                container_mem_usage = int(container['usage']['memory'].rstrip('Ki'))
+                # units come in Ki
+                metrics['mem-percent'] = "%.2f" % round(container_mem_usage*100/node_mem_capacity, 2)
+
+                for cstat in pods_here_per_name[short_identifier].status.container_statuses:
+                    if cstat.name == container['name']:
+                        for k, v in cstat.state.to_dict().items():
+                            if v:
+                                metrics['container-status'] = k
+                                break
+
+                        container['restart-count'] = int(cstat.restart_count)
+
+                out.append(metrics)
+
+        return out
 
 
-
+#
 class DockerClient(ContainerRuntimeClient):
     """
     Docker client
     """
 
-    def __init__(self, host_rootfs):
+    def __init__(self, host_rootfs, host_home):
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
 
-        super().__init__(None, host_rootfs)
+        super().__init__(host_rootfs, host_home)
 
     def get_node_info(self):
         return self.client.info()
@@ -365,6 +636,212 @@ class DockerClient(ContainerRuntimeClient):
 
         return False
 
+    def get_node_labels(self):
+        try:
+            node_id = self.get_node_info()["Swarm"]["NodeID"]
+            node_labels = self.client.api.inspect_node(node_id)["Spec"]["Labels"]
+        except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
+            if not "node is not a swarm manager" in str(e).lower():
+                logging.debug(f"Cannot get node labels: {str(e)}")
+            return []
+
+        return self.cast_dict_to_list(node_labels)
+
+    def is_vpn_client_running(self):
+        vpn_client_running = True if self.client.containers.get("vpn-client").status == 'running' else False
+        return vpn_client_running
+
+    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+        cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
+
+        self.client.containers.run('alpine',
+                                   remove=True,
+                                   command=cmd,
+                                   environment={
+                                       'SSH_PUB': ssh_pub_key
+                                   },
+                                   volumes={
+                                       f'{self.host_home}/.ssh': {
+                                           'bind': ssh_folder
+                                       }})
+
+        return True
+
+    def is_nuvla_job_running(self, job_id, job_execution_id):
+        try:
+            job_container = self.client.containers.get(job_execution_id)
+        except docker.errors.NotFound:
+            return False
+        except Exception as e:
+            logging.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
+            # assume it is running so we don't mess anything
+            return True
+
+        try:
+            if job_container.status.lower() in ['running', 'restarting']:
+                logging.info(f'Job {job_id} is already running in container {job_container.name}')
+                return True
+            elif job_container.status.lower() in ['created']:
+                logging.warning(f'Job {job_id} was created by not started. Removing it and starting a new one')
+                job_container.remove()
+            else:
+                # then it is stopped or dead. force kill it and re-initiate
+                job_container.kill()
+        except AttributeError:
+            # assume it is running so we don't mess anything
+            return True
+        except docker.errors.NotFound:
+            # then it stopped by itself...maybe it ran already and just finished
+            # let's not do anything just in case this is a late coming job. In the next telemetry cycle, if job is there
+            # again, then we run it because this container is already gone
+            return True
+
+        return False
+
+    def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None):
+        # Get the compute-api network
+        try:
+            compute_api = self.client.containers.get('compute-api')
+            local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
+        except:
+            logging.error(f'Cannot infer compute-api network for local job {job_id}')
+            return
+
+        cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
+            f'--api-key {api_key} ' \
+            f'--api-secret {api_secret} ' \
+            f'--job-id {job_id}'
+
+        if nuvla_endpoint_insecure:
+            cmd = f'{cmd} --api-insecure'
+
+        logging.info(f'Starting job {job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
+
+        self.client.containers.run(self.job_engine_lite_image,
+                                   command=cmd,
+                                   detach=True,
+                                   name=job_execution_id,
+                                   hostname=job_execution_id,
+                                   remove=True,
+                                   network=local_net,
+                                   volumes={
+                                       '/var/run/docker.sock': {
+                                           'bind': '/var/run/docker.sock',
+                                           'mode': 'ro'
+                                       }
+                                   })
+
+        try:
+            # for some jobs (like clustering), it is better if the job container is also in the default bridge
+            # network, so it doesn't get affected by network changes in the NuvlaBox
+            self.client.api.connect_container_to_network(job_execution_id, 'bridge')
+        except Exception as e:
+            logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
+
+    def collect_container_metrics(self):
+        docker_stats = []
+
+        all_containers = self.client.containers.list()
+        for container in all_containers:
+            docker_stats.append(self.client.api.stats(container.id))
+
+        # get first samples (needed for cpu monitoring)
+        old_cpu = []
+        for c_stat in docker_stats:
+            container_stats = json.loads(next(c_stat))
+
+            try:
+                old_cpu.append((float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
+                                float(container_stats["cpu_stats"]["system_cpu_usage"])))
+            except KeyError:
+                old_cpu.append((0.0, 0.0))
+
+        # now the actual monitoring
+        out = []
+        for i, c_stat in enumerate(docker_stats):
+            container = all_containers[i]
+            container_stats = json.loads(next(c_stat))
+
+            #
+            # -----------------
+            # CPU
+            try:
+                cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
+                cpu_system = float(container_stats["cpu_stats"]["system_cpu_usage"])
+
+                online_cpus = container_stats["cpu_stats"] \
+                    .get("online_cpus", len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", -1)))
+
+                cpu_delta = cpu_total - old_cpu[i][0]
+                system_delta = cpu_system - old_cpu[i][1]
+
+                cpu_percent = 0.0
+                if system_delta > 0.0 and online_cpus > -1:
+                    cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+            except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
+                logging.error(f"Cannot get CPU stats for container {container.name}: {str(e)}. Moving on")
+                cpu_percent = 0.0
+
+            #
+            # -----------------
+            # MEM
+            try:
+                mem_usage = float(container_stats["memory_stats"]["usage"] / 1024 / 1024)
+                mem_limit = float(container_stats["memory_stats"]["limit"] / 1024 / 1024)
+                if round(mem_limit, 2) == 0.00:
+                    mem_percent = 0.00
+                else:
+                    mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
+            except (IndexError, KeyError, ValueError) as e:
+                logging.error(f"Cannot get Mem stats for container {container.name}: {str(e)}. Moving on")
+                mem_percent = mem_usage = mem_limit = 0.00
+
+            #
+            # -----------------
+            # NET
+            net_in = net_out = 0.0
+            if "networks" in container_stats:
+                net_in = sum(container_stats["networks"][iface]["rx_bytes"]
+                             for iface in container_stats["networks"]) / 1000 / 1000
+                net_out = sum(container_stats["networks"][iface]["tx_bytes"]
+                              for iface in container_stats["networks"]) / 1000 / 1000
+
+            #
+            # -----------------
+            # BLOCK
+            io_bytes_recursive = container_stats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
+            if io_bytes_recursive:
+                try:
+                    blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
+                except Exception as e:
+                    logging.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
+                    blk_in = 0.0
+
+                try:
+                    blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
+                except Exception as e:
+                    logging.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
+                    blk_out = 0.0
+            else:
+                blk_out = blk_in = 0.0
+
+            # -----------------
+            out.append({
+                'id': container.id,
+                'name': container.name,
+                'container-status': container.status,
+                'cpu-percent': "%.2f" % round(cpu_percent, 2),
+                'mem-usage-limit': "%sMiB / %sGiB" % (round(mem_usage, 2), round(mem_limit / 1024, 2)),
+                'mem-percent': "%.2f" % mem_percent,
+                'net-in-out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
+                'blk-in-out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
+                'restart-count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
+            })
+
+        return out
+
+
 # --------------------
 class NuvlaBoxCommon():
     """ Common set of methods and variables for the NuvlaBox agent
@@ -375,51 +852,22 @@ class NuvlaBoxCommon():
         :param shared_data_volume: shared volume target path
         """
 
-        self.docker_socket_file = '/var/run/docker.sock'
-        self.host_node_name = os.getenv('HOST_NODE_NAME')
-        self.hostfs = "/rootfs"
-
-        if ORCHESTRATOR == 'kubernetes':
-            self.container_runtime = KubernetesClient()
-        else:
-            if os.path.exists(self.docker_socket_file):
-                self.container_runtime = DockerClient()
-            else:
-                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
-
         self.data_volume = shared_data_volume
-        self.activation_flag = "{}/.activated".format(self.data_volume)
-        self.swarm_manager_token_file = "swarm-manager-token"
-        self.swarm_worker_token_file = "swarm-worker-token"
-        self.commissioning_file = ".commission"
-        self.status_file = ".status"
-        self.status_notes_file = ".status_notes"
-        self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
-        self.nuvlabox_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
-        self.ip_file = ".ip"
-        self.ip_geolocation_file = "{}/.ipgeolocation".format(self.data_volume)
-        self.vulnerabilities_file = "{}/vulnerabilities".format(self.data_volume)
-        self.ca = "ca.pem"
-        self.cert = "cert.pem"
-        self.key = "key.pem"
-        self.context = ".context"
-        self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
-        self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
-        self.vpn_folder = "{}/vpn".format(self.data_volume)
+        self.docker_socket_file = '/var/run/docker.sock'
+        self.hostfs = "/rootfs"
+        self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
+        self.host_user_home_file = f'{self.data_volume}/.host_user_home'
+        if os.path.exists(self.host_user_home_file):
+            with open(self.host_user_home_file) as userhome:
+                self.installation_home = userhome.read().strip()
+        else:
+            self.installation_home = os.environ.get('HOST_HOME')
 
-        if not os.path.isdir(self.vpn_folder):
-            os.makedirs(self.vpn_folder)
-
-        self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
-        self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
-        self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
-        self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
-        self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
-        self.mqtt_broker_host = "data-gateway"
-        self.mqtt_broker_port = 1883
-        self.mqtt_broker_keep_alive = 90
-        self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
-        self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
+            if not self.installation_home:
+                logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
+            else:
+                with open(self.host_user_home_file, 'w') as userhome:
+                    userhome.write(self.installation_home)
 
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None
@@ -459,6 +907,47 @@ class NuvlaBoxCommon():
 
         self.nuvla_endpoint_insecure = nuvla_endpoint_insecure_raw
 
+        if ORCHESTRATOR == 'kubernetes':
+            self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
+        else:
+            if os.path.exists(self.docker_socket_file):
+                self.container_runtime = DockerClient(self.hostfs, self.installation_home)
+            else:
+                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
+
+        self.activation_flag = "{}/.activated".format(self.data_volume)
+        self.swarm_manager_token_file = "swarm-manager-token"
+        self.swarm_worker_token_file = "swarm-worker-token"
+        self.commissioning_file = ".commission"
+        self.status_file = ".status"
+        self.status_notes_file = ".status_notes"
+        self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
+        self.nuvlabox_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
+        self.ip_file = ".ip"
+        self.ip_geolocation_file = "{}/.ipgeolocation".format(self.data_volume)
+        self.vulnerabilities_file = "{}/vulnerabilities".format(self.data_volume)
+        self.ca = "ca.pem"
+        self.cert = "cert.pem"
+        self.key = "key.pem"
+        self.context = ".context"
+        self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
+        self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
+        self.vpn_folder = "{}/vpn".format(self.data_volume)
+
+        if not os.path.isdir(self.vpn_folder):
+            os.makedirs(self.vpn_folder)
+
+        self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
+        self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
+        self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
+        self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
+        self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
+        self.mqtt_broker_host = "data-gateway"
+        self.mqtt_broker_port = 1883
+        self.mqtt_broker_keep_alive = 90
+        self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
+        self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
+
         if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
             self.nuvlabox_id = os.environ['NUVLABOX_UUID']
         elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
@@ -477,20 +966,6 @@ class NuvlaBoxCommon():
         self.nuvlabox_engine_version = None
         if 'NUVLABOX_ENGINE_VERSION' in os.environ and os.environ['NUVLABOX_ENGINE_VERSION']:
             self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
-
-        self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
-        self.host_user_home_file = f'{self.data_volume}/.host_user_home'
-        if os.path.exists(self.host_user_home_file):
-            with open(self.host_user_home_file) as userhome:
-                self.installation_home = userhome.read().strip()
-        else:
-            self.installation_home = os.environ.get('HOST_HOME')
-
-            if not self.installation_home:
-                logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
-            else:
-                with open(self.host_user_home_file, 'w') as userhome:
-                    userhome.write(self.installation_home)
 
         # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
         # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
@@ -526,7 +1001,7 @@ class NuvlaBoxCommon():
             }
         }
 
-        self.docker_stats_json_file = f"{self.data_volume}/docker_stats.json"
+        self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
     def api(self):
         """ Returns an Api object """

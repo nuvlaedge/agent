@@ -35,35 +35,7 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
     def check_job_is_running(self):
         """ Checks if the job is already running """
 
-        try:
-            job_container = self.docker_client.containers.get(self.job_id_clean)
-        except docker.errors.NotFound:
-            return False
-        except Exception as e:
-            logging.error(f'Cannot handle job {self.job_id}. Reason: {str(e)}')
-            # assume it is running so we don't mess anything
-            return True
-
-        try:
-            if job_container.status.lower() in ['running', 'restarting']:
-                logging.info(f'Job {self.job_id} is already running in container {job_container.name}')
-                return True
-            elif job_container.status.lower() in ['created']:
-                logging.warning(f'Job {self.job_id} was created by not started. Removing it and starting a new one')
-                job_container.remove()
-            else:
-                # then it is stopped or dead. force kill it and re-initiate
-                job_container.kill()
-        except AttributeError:
-            # assume it is running so we don't mess anything
-            return True
-        except docker.errors.NotFound:
-            # then it stopped by itself...maybe it ran already and just finished
-            # let's not do anything just in case this is a late coming job. In the next telemetry cycle, if job is there
-            # again, then we run it because this container is already gone
-            return True
-
-        return False
+        return self.container_runtime.is_nuvla_job_running(self.job_id, self.job_id_clean)
 
     def launch(self):
         """ Starts a Job Engine Lite container with this job
@@ -78,41 +50,5 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.error(f'Cannot find NuvlaBox API key for job {self.job_id}')
             return
 
-        # Get the compute-api network
-        try:
-            compute_api = self.docker_client.containers.get('compute-api')
-            local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
-        except:
-            logging.error(f'Cannot infer compute-api network for local job {self.job_id}')
-            return
-
-        cmd = f'-- /app/job_executor.py --api-url https://{self.nuvla_endpoint} ' \
-            f'--api-key {user_info["api-key"]} ' \
-            f'--api-secret {user_info["secret-key"]} ' \
-            f'--job-id {self.job_id}'
-
-        if self.nuvla_endpoint_insecure:
-            cmd = f'{cmd} --api-insecure'
-
-        logging.info(f'Starting job {self.job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
-
-        self.docker_client.containers.run(self.job_engine_lite_image,
-                                          command=cmd,
-                                          detach=True,
-                                          name=self.job_id_clean,
-                                          hostname=self.job_id_clean,
-                                          remove=True,
-                                          network=local_net,
-                                          volumes={
-                                              '/var/run/docker.sock': {
-                                                  'bind': '/var/run/docker.sock',
-                                                  'mode': 'ro'
-                                              }
-                                          })
-
-        try:
-            # for some jobs (like clustering), it is better if the job container is also in the default bridge
-            # network, so it doesn't get affected by network changes in the NuvlaBox
-            self.docker_client.api.connect_container_to_network(self.job_id_clean, 'bridge')
-        except Exception as e:
-            logging.warning(f'Could not attach {self.job_id_clean} to bridge network: {str(e)}')
+        self.container_runtime.launch_job(self.job_id, self.job_id_clean, self.nuvla_endpoint,
+                                          self.nuvla_endpoint_insecure, user_info["api-key"], user_info["secret-key"])

@@ -76,67 +76,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return False
 
-    def is_kubernetes_running(self):
-        """ Tries to infer whether there is a k8s cluster running in the host
-        and if so, it tries to retrieve its API endpoint and client certificates
-
-        :returns dict {:endpoint, :ca, :cert, :key}"""
-
-        k8s_apiserver_container_label = "io.kubernetes.container.name=kube-apiserver"
-        k8s_apiservers = self.docker_client.containers.list(filters={"label": k8s_apiserver_container_label})
-
-        k8s_cluster_info = {}
-        if not k8s_apiservers:
-            return k8s_cluster_info
-
-        arg_address = "advertise-address"
-        arg_port = "secure-port"
-        arg_ca = "client-ca-file"
-        arg_cert = "kubelet-client-certificate"
-        arg_key = "kubelet-client-key"
-        # just in case there is more than one k8s config, we want to get the first one that looks healthy
-        for api in k8s_apiservers:
-            try:
-                inspect = self.docker_client.api.inspect_container(api.id)
-            except docker.errors.NotFound:
-                logging.warning(f'Error inspecting container {api.id} while looking up for k8s cluster')
-                continue
-
-            args_list = inspect.get('Args', [])
-            # convert list to dict
-            try:
-                args = { args_list[i].split('=')[0].lstrip("--"): args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
-            except IndexError:
-                logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
-                continue
-
-            try:
-                k8s_endpoint = f'https://{args[arg_address]}:{args[arg_port]}' \
-                    if not args[arg_address].startswith("http") else f'{args[arg_address]}:{args[arg_port]}'
-
-                with open(f'{self.hostfs}{args[arg_ca]}') as ca:
-                    k8s_client_ca = ca.read()
-
-                with open(f'{self.hostfs}{args[arg_cert]}') as cert:
-                    k8s_client_cert = cert.read()
-
-                with open(f'{self.hostfs}{args[arg_key]}') as key:
-                    k8s_client_key = key.read()
-
-                k8s_cluster_info.update({
-                    'endpoint': k8s_endpoint,
-                    'ca': k8s_client_ca,
-                    'cert': k8s_client_cert,
-                    'key': k8s_client_key
-                })
-                # if we got here, then it's very likely that the k8s cluster is up and running, no need to go further
-                break
-            except (KeyError, FileNotFoundError) as e:
-                logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
-                continue
-
-        return k8s_cluster_info
-
     def get_tls_keys(self):
         """ Finds and returns the Container orchestration API client TLS keys """
 
@@ -221,26 +160,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             return vpn_fields
 
         return True
-
-    def get_labels(self):
-        """ Gets all the Docker node labels """
-        nuvla_tags = []
-
-        try:
-            node_id = self.docker_client.info()["Swarm"]["NodeID"]
-            container_labels = self.docker_client.api.inspect_node(node_id)["Spec"]["Labels"]
-        except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
-            if not "node is not a swarm manager" in str(e).lower():
-                logging.debug(f"Cannot get node labels: {str(e)}")
-            return nuvla_tags
-
-        for label, value in container_labels.items():
-            if value:
-                nuvla_tags.append("{}={}".format(label, value))
-            else:
-                nuvla_tags.append(label)
-
-        return nuvla_tags
 
     def needs_commission(self, current_conf):
         """ Check whether the current commission data structure
@@ -344,6 +263,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             if container_api_ip and container_api_port:
                 api_endpoint = f"https://{container_api_ip}:{container_api_port}"
 
+        commission_payload["tags"] = self.container_runtime.get_node_labels()
+
+        # if this node is a worker, them we must force remove some assets
+        node_role = self.get_node_role_from_status()
+        delete_attrs = []
+
         if NuvlaBoxCommon.ORCHESTRATOR == 'kubernetes':
             if tls_keys:
                 commission_payload["kubernetes-client-ca"] = tls_keys[0]
@@ -352,6 +277,15 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
             if api_endpoint:
                 commission_payload["kubernetes-endpoint"] = api_endpoint
+
+            # TODO: is this is a k8s worker, something similar should happen
+            # if node_role and node_role.lower() == 'worker':
+            #     delete_attrs = ['swarm-token-manager',
+            #                     'swarm-token-worker',
+            #                     'swarm-client-key',
+            #                     'swarm-client-ca',
+            #                     'swarm-client-cert',
+            #                     'swarm-endpoint']
         else:
             if cluster_join_tokens and len(cluster_join_tokens) > 1:
                 self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
@@ -369,20 +303,15 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             if api_endpoint and self.compute_api_is_running(container_api_port):
                 commission_payload["swarm-endpoint"] = api_endpoint
 
-        tags = self.get_labels()
-        commission_payload["tags"] = tags
+            if node_role and node_role.lower() == 'worker':
+                delete_attrs = ['swarm-token-manager',
+                                'swarm-token-worker',
+                                'swarm-client-key',
+                                'swarm-client-ca',
+                                'swarm-client-cert',
+                                'swarm-endpoint']
 
-        # if this node is a worker, them we must force remove some assets
-        node_role = self.get_node_role_from_status()
-        delete_attrs = []
-        if node_role and node_role.lower() == 'worker':
-            delete_attrs = ['swarm-token-manager',
-                            'swarm-token-worker',
-                            'swarm-client-key',
-                            'swarm-client-ca',
-                            'swarm-client-cert',
-                            'swarm-endpoint']
-
+        # remove the keys from the commission payload, to avoid confusion on the server side
         if delete_attrs:
             commission_payload['removed'] = delete_attrs
             for attr in delete_attrs:
@@ -472,9 +401,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 #     - IF the vpn-client is already running, then all is good, just save the VPN credential locally
                 logging.warning("VPN credential exists in Nuvla, but not locally")
 
-                dc = docker.from_env()
                 try:
-                    vpn_client_running = True if dc.containers.get("vpn-client").status == 'running' else False
+                    vpn_client_running = self.container_runtime.is_vpn_client_running()
                 except docker.errors.NotFound as e:
                     vpn_client_running = False
                     logging.info("VPN client is not running")
@@ -531,23 +459,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             event_owners = [nb_owner, self.nuvlabox_id] if nb_owner else [self.nuvlabox_id]
             event['acl'] = {'owners': event_owners}
 
-            cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
-
             logging.info(f'Setting immutable SSH key {self.ssh_pub_key} for {self.installation_home}')
             try:
                 with NuvlaBoxCommon.timeout(10):
-                    self.docker_client.containers.run('alpine',
-                                                      remove=True,
-                                                      command=cmd,
-                                                      environment={
-                                                          'SSH_PUB': self.ssh_pub_key
-                                                      },
-                                                      volumes={
-                                                          f'{self.installation_home}/.ssh': {
-                                                              'bind': ssh_folder
-                                                          }
-                                                      }
-                                                      )
+                    if not self.container_runtime.install_ssh_key(self.ssh_pub_key, ssh_folder):
+                        return
             except Exception as e:
                 msg = f'An error occurred while setting immutable SSH key: {str(e)}'
                 logging.error(msg)
