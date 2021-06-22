@@ -16,9 +16,10 @@ from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
 from datetime import datetime
 from os import path, stat, remove
+from threading import Thread
 
 
-class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
+class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
     """ The Infrastructure class includes all methods and
     properties necessary update the infrastructure services
     and respective credentials in Nuvla, whenever the local
@@ -26,18 +27,20 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
     """
 
-    def __init__(self, data_volume):
+    def __init__(self, data_volume, refresh_period=15):
         """ Constructs an Infrastructure object, with a status placeholder
 
         :param data_volume: shared volume
         """
 
-        super().__init__(shared_data_volume=data_volume)
+        NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
+        Thread.__init__(self)
         self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.vpn_commission_attempts = 0
+        self.refresh_period = refresh_period
 
     @staticmethod
     def write_file(file, content, is_json=False):
@@ -472,3 +475,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
             with open(self.ssh_flag, 'w') as sshfw:
                 sshfw.write(self.ssh_pub_key)
+
+    def run(self):
+        """
+        Threads the commissioning cycles, so that they don't interfere with the main telemetry cycle
+        """
+        while True:
+            self.try_commission()
+            time.sleep(self.refresh_period)

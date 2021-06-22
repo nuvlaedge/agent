@@ -47,6 +47,25 @@ def init():
     return logger, params
 
 
+def manage_pull_jobs(job_list, job_image_name):
+    """
+    Handles the pull jobs one by one, sequentially
+
+    :param job_list: list of job IDs
+    :param job_image_name: Docker Image to be used for the job-engine
+    """
+    for job_id in job_list:
+        job = Job(data_volume, job_id, job_image_name)
+        if job.do_nothing:
+            continue
+
+        try:
+            job.launch()
+        except Exception as ex:
+            # catch all
+            logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
+
+
 @app.route('/api/status')
 def set_status():
     """ API endpoint to let other components set the NuvlaBox status """
@@ -186,6 +205,7 @@ def manage_peripheral(identifier):
     return jsonify(message), return_code
 
 
+
 if __name__ == "__main__":
     logging, args = init()
 
@@ -220,9 +240,9 @@ if __name__ == "__main__":
     app.config["telemetry"] = telemetry
     app.config["infra"] = infra
 
-    monitoring_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": "80"})
-    monitoring_thread.daemon = True
-    monitoring_thread.start()
+    api_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": "80"})
+    api_thread.daemon = True
+    api_thread.start()
 
     # start telemetry
     logging.info("Starting telemetry...")
@@ -237,28 +257,22 @@ if __name__ == "__main__":
             refresh_interval = nuvlabox_resource['refresh-interval']
             logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
-            activation.create_nb_document_file(nuvlabox_resource)
+            threading.Thread(target=activation.create_nb_document_file, args=(nuvlabox_resource,)).start()
 
         # if there's a mention to the VPN server, then watch the VPN credential
         if nuvlabox_resource.get("vpn-server-id"):
-            infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
+            threading.Thread(target=infra.watch_vpn_credential, args=(nuvlabox_resource.get("vpn-server-id"),)).start()
 
         response = telemetry.update_status()
 
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
-            for job_id in response['jobs']:
-                job = Job(data_volume, job_id, infra.container_runtime.job_engine_lite_image)
-                if job.do_nothing:
-                    continue
+            threading.Thread(target=manage_pull_jobs,
+                             args=(response['jobs'], infra.container_runtime.job_engine_lite_image,)).start()
 
-                try:
-                    job.launch()
-                except Exception as ex:
-                    # catch all
-                    logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
-
-        infra.try_commission()
+        if not infra.is_alive():
+            infra = Infrastructure(data_volume, refresh_period=refresh_interval)
+            infra.start()
 
         end_cycle = time.time()
         cycle_duration = end_cycle - start_cycle
