@@ -95,6 +95,22 @@ def trigger_commission():
     return jsonify(commissioning_response)
 
 
+@app.route('/api/set-vulnerabilities', methods=['POST'])
+def set_vulnerabilities():
+    """ API endpoint to let other components send and save the scanned vulnerabilities
+
+    The request.data is the payload
+    """
+
+    payload = json.loads(request.data)
+
+    logging.info('Saving vulnerabilities received via the API: %s ' % payload)
+
+    AgentApi.save_vulnerabilities(payload)
+
+    return jsonify(True), 201
+
+
 @app.route('/api/set-vpn-ip', methods=['POST'])
 def set_vpn_ip():
     """ API endpoint to let other components define the NB VPN IP

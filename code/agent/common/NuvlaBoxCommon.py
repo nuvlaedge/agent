@@ -237,6 +237,85 @@ class ContainerRuntimeClient(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_installation_parameters(self, search_label):
+        """
+        Scans all the NuvlaBox components and returns all parameters that are relevant to the installation of the NB
+        :param search_label: label to be used for searching the components
+        """
+        pass
+
+    @abstractmethod
+    def read_system_issues(self, node_info):
+        """
+        Checks if the underlying container management system is reporting any errors or warnings
+        :param node_info: the result of self.get_node_info()
+        """
+        pass
+
+    @abstractmethod
+    def get_node_id(self, node_info):
+        """
+        Retrieves the node ID
+        :param node_info: the result of self.get_node_info()
+        """
+        pass
+
+    @abstractmethod
+    def get_cluster_id(self, node_info, default_cluster_name=None):
+        """
+        Gets the cluster ID
+        :param node_info: the result of self.get_node_info()
+        :param default_cluster_name: default cluster name in case an ID is not found
+        """
+        pass
+
+    @abstractmethod
+    def get_cluster_managers(self):
+        """
+        Retrieves the cluster manager nodes
+        """
+        pass
+
+    @abstractmethod
+    def get_host_architecture(self, node_info):
+        """
+        Retrieves the host system arch
+        :param node_info: the result of self.get_node_info()
+        """
+        pass
+
+    @abstractmethod
+    def get_hostname(self, node_info=None):
+        """
+        Retrieves the hostname
+        :param node_info: the result of self.get_node_info()
+        """
+        pass
+
+    @abstractmethod
+    def get_cluster_join_address(self, node_id):
+        """
+        Retrieved the IP address of a manager that can be joined for clustering actions
+        :param node_id: ID of the node
+        """
+        pass
+
+    @abstractmethod
+    def is_node_active(self, node):
+        """
+        Checks if a cluster node is ready/active
+        :param node: Node object, from self.list_nodes()
+        """
+        pass
+
+    @abstractmethod
+    def get_container_plugins(self):
+        """
+        Lists the container plugins installed in the system
+        """
+        pass
+
 
 class KubernetesClient(ContainerRuntimeClient):
     """
@@ -284,11 +363,7 @@ class KubernetesClient(ContainerRuntimeClient):
         node_info = self.get_node_info()
 
         orchestrator = 'kubernetes'
-        cluster_id = default_cluster_name
-        if node_info:
-            cluster_name = node_info.metadata.cluster_name
-            if cluster_name:
-                cluster_id = cluster_name
+        cluster_id = self.get_cluster_id(node_info, default_cluster_name)
 
         nodes = self.list_nodes()
         managers = []
@@ -526,6 +601,83 @@ class KubernetesClient(ContainerRuntimeClient):
                 out.append(metrics)
 
         return out
+
+    def get_installation_parameters(self, search_label):
+        nuvlabox_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
+                                                                           label_selector=search_label).items
+
+        environment = []
+        for dep in nuvlabox_deployments:
+            dep_containers = dep.spec.template.spec.containers
+            for container in dep_containers:
+                try:
+                    env = container.env
+                    for env_var in env:
+                        if env_var.value_from:
+                            # this is a templated var. No need to report it
+                            continue
+
+                        environment.append(f'{env_var.name}={env_var.value}')
+                except AttributeError:
+                    continue
+
+        unique_env = list(filter(None, set(environment)))
+
+        return {'project-name': self.namespace,
+                'environment': unique_env}
+
+    def read_system_issues(self, node_info):
+        errors = []
+        warnings = []
+        # TODO: is there a way to get any system errors from the k8s API?
+        # The cluster-info dump reports a lot of stuff but is all verbose
+
+        return errors, warnings
+
+    def get_node_id(self, node_info):
+        return node_info.metadata.name
+
+    def get_cluster_id(self, node_info, default_cluster_name=None):
+        cluster_id = default_cluster_name
+        cluster_name = node_info.metadata.cluster_name
+        if cluster_name:
+            cluster_id = cluster_name
+
+        return cluster_id
+
+    def get_cluster_managers(self):
+        managers = []
+        for n in self.list_nodes():
+            for label in n.metadata.labels:
+                if 'node-role' in label and 'master' in label:
+                    managers.append(n.metadata.name)
+
+        return managers
+
+    def get_host_architecture(self, node_info):
+        return node_info.status.node_info.architecture
+
+    def get_hostname(self, node_info=None):
+        return self.host_node_name
+
+    def get_kubelet_version(self):
+        # IMPORTANT: this is only implemented for this k8s client class
+        return self.get_node_info().status.node_info.kubelet_version
+
+    def get_cluster_join_address(self, node_id):
+        # NOT IMPLEMENTED for k8s installations
+        pass
+
+    def is_node_active(self, node):
+        if any(list(map(lambda n: n.type == 'Ready' and n.status == 'True', node.status.conditions))):
+            return node.metadata.name
+
+        return None
+
+    def get_container_plugins(self):
+        # TODO
+        # doesn't seem to be available from the API
+        return []
 
 
 #
@@ -840,6 +992,95 @@ class DockerClient(ContainerRuntimeClient):
             })
 
         return out
+
+    def get_installation_parameters(self, search_label):
+        nuvlabox_containers = self.client.containers.list(filters={'label': search_label})
+
+        try:
+            myself = self.client.containers.get(socket.gethostname())
+        except docker.errors.NotFound:
+            logging.error(f'Cannot find this container by hostname: {socket.gethostname()}. Cannot proceed')
+            raise
+
+        config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
+        working_dir = myself.labels['com.docker.compose.project.working_dir']
+        project_name = myself.labels['com.docker.compose.project']
+        environment = myself.attrs.get('Config', {}).get('Env', [])
+        for container in nuvlabox_containers:
+            c_labels = container.labels
+            if c_labels.get('com.docker.compose.project', '') == project_name and \
+                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir and \
+                    container.id != myself.id:
+                config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
+                environment += container.attrs.get('Config', {}).get('Env', [])
+
+        unique_config_files = list(filter(None, set(config_files)))
+        unique_env = list(filter(None, set(environment)))
+
+        if working_dir and project_name and unique_config_files:
+            return {'project-name': project_name,
+                    'working-dir': working_dir,
+                    'config-files': unique_config_files,
+                    'environment': unique_env}
+        else:
+            return None
+
+    def read_system_issues(self, node_info):
+        errors = []
+        warnings = []
+        if node_info.get('Swarm', {}).get('Error'):
+            errors.append(node_info.get('Swarm', {}).get('Error'))
+
+        if node_info.get('Warnings'):
+            warnings += node_info.get('Warnings')
+
+        return errors, warnings
+
+    def get_node_id(self, node_info):
+        return node_info.get("Swarm", {}).get("NodeID")
+
+    def get_cluster_id(self, node_info, default_cluster_name=None):
+        return node_info.get('Swarm', {}).get('Cluster', {}).get('ID')
+
+    def get_cluster_managers(self):
+        remote_managers = self.get_node_info().get('Swarm', {}).get('RemoteManagers')
+        cluster_managers = []
+        if remote_managers and isinstance(remote_managers, list):
+            cluster_managers = [rm.get('NodeID') for rm in remote_managers]
+
+        return cluster_managers
+
+    def get_host_architecture(self, node_info):
+        return node_info["Architecture"]
+
+    def get_hostname(self, node_info=None):
+        return node_info["Name"]
+
+    def get_cluster_join_address(self, node_id):
+        for manager in self.get_node_info().get('Swarm', {}).get('RemoteManagers'):
+            if node_id == manager.get('NodeID', ''):
+                try:
+                    return manager['Addr']
+                except KeyError:
+                    logging.warning(f'Unable to infer cluster-join-address attribute: {manager}')
+
+        return None
+
+    def is_node_active(self, node):
+        if node.attrs.get('Status', {}).get('State', '').lower() == 'ready':
+            return node.id
+
+        return None
+
+    def get_container_plugins(self):
+        all_plugins = self.client.plugins.list()
+
+        enabled_plugins = []
+        for plugin in all_plugins:
+            if plugin.enabled:
+                enabled_plugins.append(plugin.name)
+
+        return enabled_plugins
 
 
 # --------------------

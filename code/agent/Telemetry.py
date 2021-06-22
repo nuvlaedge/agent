@@ -113,7 +113,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'host-user-home': None,
                        'orchestrator': None,
                        'cluster-join-address': None,
-                       'temperatures': None
+                       'temperatures': None,
+                       'container-plugins': None,
+                       'kubelet-version': None
                        }
 
         self.mqtt_telemetry = mqtt.Client()
@@ -231,36 +233,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         filter_label = "nuvlabox.component=True"
-        nuvlabox_containers = self.docker_client.containers.list(filters={'label': filter_label})
 
-        try:
-            myself = self.docker_client.containers.get(socket.gethostname())
-        except docker.errors.NotFound:
-            logging.error(f'Cannot find this container by hostname: {socket.gethostname()}. Cannot proceed')
-            raise
-
-        config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
-        working_dir = myself.labels['com.docker.compose.project.working_dir']
-        project_name = myself.labels['com.docker.compose.project']
-        environment = myself.attrs.get('Config', {}).get('Env', [])
-        for container in nuvlabox_containers:
-            c_labels = container.labels
-            if c_labels.get('com.docker.compose.project', '') == project_name and \
-                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir and \
-                    container.id != myself.id:
-                config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
-                environment += container.attrs.get('Config', {}).get('Env', [])
-
-        unique_config_files = list(filter(None, set(config_files)))
-        unique_env = list(filter(None, set(environment)))
-
-        if working_dir and project_name and unique_config_files:
-            return {'project-name': project_name,
-                    'working-dir': working_dir,
-                    'config-files': unique_config_files,
-                    'environment': unique_env}
-        else:
-            return None
+        return self.container_runtime.get_installation_parameters(filter_label)
 
     def get_swarm_node_cert_expiration_date(self):
         """ If the docker swarm certs can be found, try to infer their expiration date
@@ -290,21 +264,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         operational_status_notes = self.get_operational_status_notes()
         operational_status = self.get_operational_status()
 
-        docker_info = self.get_docker_info()
+        node_info = self.container_runtime.get_node_info()
 
-        if docker_info.get('Swarm', {}).get('Error'):
-            operational_status_notes.append(docker_info.get('Swarm', {}).get('Error'))
+        system_errors, system_warnings = self.container_runtime.read_system_issues(node_info)
+
+        operational_status_notes += system_errors + system_warnings
+        if system_errors:
             operational_status = 'DEGRADED'
 
-        if docker_info.get('Warnings'):
-            operational_status_notes += docker_info.get('Warnings')
+        node_id = self.container_runtime.get_node_id(node_info)
+        cluster_id = self.container_runtime.get_cluster_id(node_info, f'cluster_{self.nuvlabox_id}')
 
-        swarm_node_id = docker_info.get("Swarm", {}).get("NodeID")
-        cluster_id = docker_info.get('Swarm', {}).get('Cluster', {}).get('ID')
-        remote_managers = docker_info.get('Swarm', {}).get('RemoteManagers')
-        cluster_managers = []
-        if remote_managers and isinstance(remote_managers, list):
-            cluster_managers = [rm.get('NodeID') for rm in remote_managers]
+        cluster_managers = self.container_runtime.get_cluster_managers()
 
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
@@ -353,55 +324,67 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if container_stats:
             resources['container-stats'] = container_stats
 
+        ip = self.get_vpn_ip()
+
         status_for_nuvla = {
             'resources': resources,
-            'operating-system': docker_info["OperatingSystem"],
-            "architecture": docker_info["Architecture"],
-            "hostname": docker_info["Name"],
-            "ip": self.get_ip(),
-            "docker-server-version": self.docker_client.version()["Version"],
+            'operating-system': self.container_runtime.get_host_os(),
+            "architecture": self.container_runtime.get_host_architecture(node_info),
+            "hostname": self.container_runtime.get_hostname(node_info),
+            "ip": ip if ip else self.container_runtime.get_api_ip_port()[0],
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
             "status-notes": operational_status_notes,
-            "docker-plugins": self.get_docker_plugins()
+            "container-plugins": self.container_runtime.get_container_plugins()
         }
 
-        if swarm_node_id:
-            status_for_nuvla["node-id"] = swarm_node_id
-            status_for_nuvla["orchestrator"] = "swarm"
+        docker_server_version = self.get_docker_server_version()
+        if docker_server_version:
+            status_for_nuvla['docker-server-version'] = docker_server_version
+
+        try:
+            kubelet_version = self.container_runtime.get_kubelet_version()
+            if kubelet_version:
+                status_for_nuvla['kubelet-version'] = kubelet_version
+        except NameError:
+            # method not implemented - meaning this is a Docker installation. Just ignore it
+            pass
+
+        if node_id:
+            status_for_nuvla["node-id"] = node_id
+            status_for_nuvla["orchestrator"] = NuvlaBoxCommon.ORCHESTRATOR
 
         if cluster_id:
             status_for_nuvla["cluster-id"] = cluster_id
 
         if cluster_managers:
             status_for_nuvla["cluster-managers"] = cluster_managers
-            if swarm_node_id:
-                for manager in remote_managers:
-                    if swarm_node_id == manager.get('NodeID', ''):
-                        try:
-                            status_for_nuvla["cluster-join-address"] = manager['Addr']
-                            break
-                        except KeyError:
-                            logging.warning(f'Unable to infer cluster-join-address attribute: {manager}')
+            if node_id:
+                cluster_join_addr = self.container_runtime.get_cluster_join_address(node_id)
+                if cluster_join_addr:
+                    status_for_nuvla["cluster-join-address"] = cluster_join_addr
 
-        if swarm_node_id and swarm_node_id in cluster_managers:
+        if node_id and node_id in cluster_managers:
             status_for_nuvla["cluster-node-role"] = "manager"
+
             cluster_nodes = []
             try:
-                for node in self.docker_client.nodes.list():
-                    if node not in cluster_nodes and node.attrs.get('Status', {}).get('State', '').lower() == 'ready':
-
+                all_cluster_nodes = self.container_runtime.list_nodes()
+            except docker.errors.APIError as e:
+                logging.error(f'Cannot get Docker cluster nodes: {str(e)}')
+            else:
+                for node in all_cluster_nodes:
+                    active_node_id = self.container_runtime.is_node_active(node)
+                    if active_node_id and active_node_id not in cluster_nodes:
                         try:
                             cluster_nodes.append(node.id)
                         except AttributeError:
                             continue
-            except docker.errors.APIError as e:
-                logging.error(f'Cannot get cluster nodes: {str(e)}')
 
             if len(cluster_nodes) > 0:
                 status_for_nuvla['cluster-nodes'] = cluster_nodes
         else:
-            if swarm_node_id:
+            if node_id:
                 status_for_nuvla["cluster-node-role"] = "worker"
 
         installation_params = self.get_installation_parameters()
@@ -415,12 +398,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if self.installation_home:
             status_for_nuvla['host-user-home'] = self.installation_home
 
-        try:
-            swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()
-            if swarm_cert_expiration:
-                status_for_nuvla['swarm-node-cert-expiry-date'] = swarm_cert_expiration
-        except Exception as e:
-            logging.warning(f"Cannot infer Docker Swarm cert expiration date. Reason: {str(e)}")
+        if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
+            # can only infer this for Docker, cause for K8s, the certificates might be on different folders,
+            # depending on the installation tool (k0s vs k3s vs kubeadm ...)
+            try:
+                swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()
+                if swarm_cert_expiration:
+                    status_for_nuvla['swarm-node-cert-expiry-date'] = swarm_cert_expiration
+            except Exception as e:
+                logging.warning(f"Cannot infer Docker Swarm cert expiration date. Reason: {str(e)}")
 
         power_consumption = None
         try:
@@ -482,6 +468,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         })
 
         return status_for_nuvla, all_status
+
+    @staticmethod
+    def get_docker_server_version():
+        try:
+            return docker.from_env().version()["Version"],
+        except:
+            return None
 
     def get_temperature(self):
         """ Attempts to retrieve temperature information, if it exists. The keys will vary depending on the
@@ -767,28 +760,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return inferred_location
 
-    def get_docker_plugins(self):
-        """ Gets the list of all Docker plugins that are installed and enabled
-
-        :returns list of strings (plugin names) """
-
-        all_plugins = self.docker_client.plugins.list()
-
-        enabled_plugins = []
-        for plugin in all_plugins:
-            if plugin.enabled:
-                enabled_plugins.append(plugin.name)
-
-        return enabled_plugins
-
-    def get_docker_info(self):
-        """ Invokes the command docker info
-
-        :returns JSON structure with all the Docker informations
-        """
-
-        return self.docker_client.info()
-
     def get_network_info(self):
         """ Gets the list of net ifaces and corresponding rxbytes and txbytes
 
@@ -914,7 +885,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                             if capacity <= 0:
                                 continue
 
-                            used = round(int(dev['fsused'])/1024/1024/1024)
+                            fused = dev['fsused'] if dev.get('fsused') else "0"
+                            used = round(fused/1024/1024/1024)
                             output.append({
                                 'device': dev['name'],
                                 'capacity': capacity,

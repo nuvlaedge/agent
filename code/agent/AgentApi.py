@@ -295,3 +295,15 @@ def save_vpn_ip(ip):
 
     with open(NB.vpn_ip_file, 'w') as vpnip:
         vpnip.write(str(ip))
+
+
+def save_vulnerabilities(vulnerabilities):
+    """
+    Dumps vulnerabilities into a file
+
+    :param vulnerabilities: as JSON
+    :return:
+    """
+
+    with open(NB.vulnerabilities_file, 'w') as vf:
+        vf.write(json.dumps(vulnerabilities))
