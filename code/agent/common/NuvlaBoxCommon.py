@@ -1386,15 +1386,19 @@ ${vpn_endpoints_mapped}
             return None, None
 
         try:
-            with timeout(5):
-                while not os.path.exists(nuvlabox_vpn_csr) and not os.path.exists(nuvlabox_vpn_key):
-                    time.sleep(0.2)
+            wait = 0
+            while not os.path.exists(nuvlabox_vpn_csr) and not os.path.exists(nuvlabox_vpn_key):
+                if wait > 25:
+                    # appr 5 sec
+                    raise TimeoutError
+                wait += 1
+                time.sleep(0.2)
 
-                with open(nuvlabox_vpn_csr) as csr:
-                    vpn_csr = csr.read()
+            with open(nuvlabox_vpn_csr) as csr:
+                vpn_csr = csr.read()
 
-                with open(nuvlabox_vpn_key) as key:
-                    vpn_key = key.read()
+            with open(nuvlabox_vpn_key) as key:
+                vpn_key = key.read()
         except TimeoutError:
             logging.error(f'Unable to lookup {nuvlabox_vpn_key} and {nuvlabox_vpn_csr}')
             return None, None

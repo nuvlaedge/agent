@@ -217,8 +217,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
                 return False
-            with NuvlaBoxCommon.timeout(3):
-                requests.get(compute_api_url)
+
+            requests.get(compute_api_url, timeout=3)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
             pass
@@ -373,7 +373,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             # the 1st time
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
                 logging.warning("VPN credential exists locally, so it was removed from Nuvla. Recommissioning...")
-            elif self.vpn_commission_attempts > 3:
+            elif self.vpn_commission_attempts > 2:
                 logging.warning("Waiting for VPN commissioning for too long...forcing new recommission")
                 self.vpn_commission_attempts = 0
             else:
