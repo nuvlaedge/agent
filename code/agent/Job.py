@@ -51,4 +51,5 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             return
 
         self.container_runtime.launch_job(self.job_id, self.job_id_clean, self.nuvla_endpoint,
-                                          self.nuvla_endpoint_insecure, user_info["api-key"], user_info["secret-key"])
+                                          self.nuvla_endpoint_insecure, user_info["api-key"], user_info["secret-key"],
+                                          self.job_engine_lite_image)

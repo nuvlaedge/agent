@@ -218,7 +218,7 @@ class ContainerRuntimeClient(ABC):
 
     @abstractmethod
     def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
-                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None):
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None, docker_image=None):
         """
         Launches a new job
         :param job_id: nuvla ID of the job
@@ -529,7 +529,7 @@ class KubernetesClient(ContainerRuntimeClient):
         return False
 
     def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
-                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None):
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None, docker_image=None):
 
         cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
             f'--api-key {api_key} ' \
@@ -541,6 +541,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
         logging.info(f'Starting job {job_id} from {self.job_engine_lite_image}, with command: "{cmd}"')
 
+        img = docker_image if docker_image else self.job_engine_lite_image
         pod_body = client.V1Pod(
             kind='Pod',
             metadata=client.V1ObjectMeta(name=job_execution_id),
@@ -550,7 +551,7 @@ class KubernetesClient(ContainerRuntimeClient):
                 containers=[
                     client.V1Container(
                         name=job_execution_id,
-                        image=self.job_engine_lite_image,
+                        image=img,
                         command=cmd
                     )
                 ]
@@ -850,7 +851,8 @@ class DockerClient(ContainerRuntimeClient):
         return False
 
     def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
-                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None):
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None,
+                   docker_image=None):
         # Get the compute-api network
         try:
             compute_api = self.client.containers.get('compute-api')
@@ -869,7 +871,8 @@ class DockerClient(ContainerRuntimeClient):
 
         logging.info(f'Starting job {job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
 
-        self.client.containers.run(self.job_engine_lite_image,
+        img = docker_image if docker_image else self.job_engine_lite_image
+        self.client.containers.run(img,
                                    command=cmd,
                                    detach=True,
                                    name=job_execution_id,
