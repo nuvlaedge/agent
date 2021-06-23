@@ -257,18 +257,21 @@ if __name__ == "__main__":
             refresh_interval = nuvlabox_resource['refresh-interval']
             logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
             nuvlabox_info_updated_date = nuvlabox_resource['updated']
-            threading.Thread(target=activation.create_nb_document_file, args=(nuvlabox_resource,)).start()
+            threading.Thread(target=activation.create_nb_document_file, args=(nuvlabox_resource,), daemon=True).start()
 
         # if there's a mention to the VPN server, then watch the VPN credential
         if nuvlabox_resource.get("vpn-server-id"):
-            threading.Thread(target=infra.watch_vpn_credential, args=(nuvlabox_resource.get("vpn-server-id"),)).start()
+            threading.Thread(target=infra.watch_vpn_credential,
+                             args=(nuvlabox_resource.get("vpn-server-id"),),
+                             daemon=True).start()
 
         response = telemetry.update_status()
 
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             threading.Thread(target=manage_pull_jobs,
-                             args=(response['jobs'], infra.container_runtime.job_engine_lite_image,)).start()
+                             args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
+                             daemon=True).start()
 
         if not infra.is_alive():
             infra = Infrastructure(data_volume, refresh_period=refresh_interval)

@@ -34,7 +34,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         """
 
         NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
-        Thread.__init__(self)
+        Thread.__init__(self, daemon=True)
         self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'

@@ -87,6 +87,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
                                                         self.container_runtime,
                                                         self.container_stats_json_file)
+        self.container_stats_monitor.setDaemon(True)
         self.container_stats_monitor.start()
 
         self.status = {'resources': None,
@@ -319,6 +320,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
                                                                 self.container_runtime,
                                                                 self.container_stats_json_file)
+                self.container_stats_monitor.setDaemon(True)
                 self.container_stats_monitor.start()
 
         if container_stats:
@@ -346,7 +348,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             kubelet_version = self.container_runtime.get_kubelet_version()
             if kubelet_version:
                 status_for_nuvla['kubelet-version'] = kubelet_version
-        except NameError:
+        except (NameError, AttributeError):
             # method not implemented - meaning this is a Docker installation. Just ignore it
             pass
 
