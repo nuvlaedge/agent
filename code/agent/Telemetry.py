@@ -886,7 +886,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                 continue
 
                             fused = dev['fsused'] if dev.get('fsused') else "0"
-                            used = round(fused/1024/1024/1024)
+                            used = round(int(fused)/1024/1024/1024)
                             output.append({
                                 'device': dev['name'],
                                 'capacity': capacity,

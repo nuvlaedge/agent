@@ -28,7 +28,6 @@ if KUBERNETES_SERVICE_HOST:
     from kubernetes import client, config
     ORCHESTRATOR = 'kubernetes'
 else:
-
     import docker
     ORCHESTRATOR = 'docker'
 
@@ -323,6 +322,8 @@ class KubernetesClient(ContainerRuntimeClient):
     """
 
     def __init__(self, host_rootfs, host_home):
+        super().__init__(host_rootfs, host_home)
+
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
@@ -331,8 +332,6 @@ class KubernetesClient(ContainerRuntimeClient):
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
         self.vpn_client_component = os.getenv('NUVLABOX_VPN_COMPONENT_NAME', 'vpn-client')
-
-        super().__init__(host_rootfs, host_home)
 
     def get_node_info(self):
         if self.host_node_name:
@@ -687,10 +686,9 @@ class DockerClient(ContainerRuntimeClient):
     """
 
     def __init__(self, host_rootfs, host_home):
+        super().__init__(host_rootfs, host_home)
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
-
-        super().__init__(host_rootfs, host_home)
 
     def get_node_info(self):
         return self.client.info()
