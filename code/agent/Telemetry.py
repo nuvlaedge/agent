@@ -354,7 +354,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if node_id:
             status_for_nuvla["node-id"] = node_id
-            status_for_nuvla["orchestrator"] = NuvlaBoxCommon.ORCHESTRATOR
+            status_for_nuvla["orchestrator"] = NuvlaBoxCommon.ORCHESTRATOR_COE
 
         if cluster_id:
             status_for_nuvla["cluster-id"] = cluster_id
@@ -474,7 +474,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     @staticmethod
     def get_docker_server_version():
         try:
-            return docker.from_env().version()["Version"],
+            return docker.from_env().version()["Version"]
         except:
             return None
 

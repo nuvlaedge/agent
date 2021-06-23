@@ -27,9 +27,11 @@ KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
 if KUBERNETES_SERVICE_HOST:
     from kubernetes import client, config
     ORCHESTRATOR = 'kubernetes'
+    ORCHESTRATOR_COE = ORCHESTRATOR
 else:
     import docker
     ORCHESTRATOR = 'docker'
+    ORCHESTRATOR_COE = 'swarm'
 
 
 def get_mac_address(ifname, separator=':'):
@@ -361,7 +363,6 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_cluster_info(self, default_cluster_name=None):
         node_info = self.get_node_info()
 
-        orchestrator = 'kubernetes'
         cluster_id = self.get_cluster_id(node_info, default_cluster_name)
 
         nodes = self.list_nodes()
@@ -376,7 +377,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return {
             'cluster-id': cluster_id,
-            'cluster-orchestrator': orchestrator,
+            'cluster-orchestrator': ORCHESTRATOR_COE,
             'cluster-managers': managers,
             'cluster-workers': workers
         }
@@ -717,7 +718,6 @@ class DockerClient(ContainerRuntimeClient):
         swarm_info = node_info['Swarm']
 
         if swarm_info.get('ControlAvailable'):
-            orchestrator = 'swarm'
             cluster_id = swarm_info.get('Cluster', {}).get('ID')
             managers = []
             workers = []
@@ -731,7 +731,7 @@ class DockerClient(ContainerRuntimeClient):
 
             return {
                 'cluster-id': cluster_id,
-                'cluster-orchestrator': orchestrator,
+                'cluster-orchestrator': ORCHESTRATOR_COE,
                 'cluster-managers': managers,
                 'cluster-workers': workers
             }

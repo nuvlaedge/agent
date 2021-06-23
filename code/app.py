@@ -66,6 +66,35 @@ def manage_pull_jobs(job_list, job_image_name):
             logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
 
 
+def preflight_check(activation_class_object: Activate, infra_class_object: Infrastructure, nb_updated_date: str):
+    """
+    Checks if the NuvlaBox resource has been updated in Nuvla
+    :param activation_class_object: instance of Activate
+    :param infra_class_object: instance of Infrastructure
+    :param nb_updated_date: date of the last NB resource update
+    :return:
+    """
+    nuvlabox_resource = activation_class_object.get_nuvlabox_info()
+
+    global refresh_interval
+    global can_continue
+    global nuvlabox_info_updated_date
+
+    if nuvlabox_resource.get('state', '').startswith('DECOMMISSION'):
+        logging.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. Exiting...')
+        can_continue = False
+
+    if nb_updated_date != nuvlabox_resource['updated'] and can_continue:
+        refresh_interval = nuvlabox_resource['refresh-interval']
+        logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
+        nuvlabox_info_updated_date = nuvlabox_resource['updated']
+        activation_class_object.create_nb_document_file(nuvlabox_resource)
+
+    # if there's a mention to the VPN server, then watch the VPN credential
+    if nuvlabox_resource.get("vpn-server-id"):
+        infra_class_object.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
+
+
 @app.route('/api/status')
 def set_status():
     """ API endpoint to let other components set the NuvlaBox status """
@@ -244,26 +273,22 @@ if __name__ == "__main__":
     api_thread.daemon = True
     api_thread.start()
 
+    can_continue = True
+    nb_checker = None
+
     # start telemetry
     logging.info("Starting telemetry...")
     while True:
-        start_cycle = time.time()
-        nuvlabox_resource = activation.get_nuvlabox_info()
-        if nuvlabox_resource.get('state', '').startswith('DECOMMISSION'):
-            logging.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. Exiting...')
+        if not can_continue:
             break
 
-        if nuvlabox_info_updated_date != nuvlabox_resource['updated']:
-            refresh_interval = nuvlabox_resource['refresh-interval']
-            logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
-            nuvlabox_info_updated_date = nuvlabox_resource['updated']
-            threading.Thread(target=activation.create_nb_document_file, args=(nuvlabox_resource,), daemon=True).start()
+        if not nb_checker or not nb_checker.is_alive():
+            nb_checker = threading.Thread(target=preflight_check,
+                                          args=(activation, infra, nuvlabox_info_updated_date,),
+                                          daemon=True)
+            nb_checker.start()
 
-        # if there's a mention to the VPN server, then watch the VPN credential
-        if nuvlabox_resource.get("vpn-server-id"):
-            threading.Thread(target=infra.watch_vpn_credential,
-                             args=(nuvlabox_resource.get("vpn-server-id"),),
-                             daemon=True).start()
+        start_cycle = time.time()
 
         response = telemetry.update_status()
 
