@@ -247,12 +247,24 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         and if so, returns True or False """
 
         commission_payload = {}
+        minimum_commission_payload = {}
+        with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
+            old_commission_payload = json.loads(r.read())
+
         cluster_join_tokens = self.container_runtime.get_join_tokens()
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
         commission_payload.update(cluster_info)
+        for cluster_key, v in cluster_info.items():
+            # if some cluster info is going for commissioning, then pass all of it anyway
+            if old_commission_payload.get(cluster_key) == v:
+                continue
+
+            minimum_commission_payload.update(cluster_info)
 
         self.get_nuvlabox_capabilities(commission_payload)
+        if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])):
+            minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
 
         tls_keys = self.get_tls_keys()
 
@@ -267,19 +279,32 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 api_endpoint = f"https://{container_api_ip}:{container_api_port}"
 
         commission_payload["tags"] = self.container_runtime.get_node_labels()
+        if sorted(commission_payload.get('tags', [])) != sorted(old_commission_payload.get('tags', [])):
+            minimum_commission_payload['tags'] = commission_payload.get('tags', [])
 
         # if this node is a worker, them we must force remove some assets
         node_role = self.get_node_role_from_status()
         delete_attrs = []
 
         if NuvlaBoxCommon.ORCHESTRATOR == 'kubernetes':
-            if tls_keys:
-                commission_payload["kubernetes-client-ca"] = tls_keys[0]
-                commission_payload["kubernetes-client-cert"] = tls_keys[1]
-                commission_payload["kubernetes-client-key"] = tls_keys[2]
-
+            k8s_is = {}
             if api_endpoint:
-                commission_payload["kubernetes-endpoint"] = api_endpoint
+                k8s_is["kubernetes-endpoint"] = api_endpoint
+
+                if tls_keys:
+                    k8s_is["kubernetes-client-ca"] = tls_keys[0]
+                    k8s_is["kubernetes-client-cert"] = tls_keys[1]
+                    k8s_is["kubernetes-client-key"] = tls_keys[2]
+
+                if not old_commission_payload.get("kubernetes-endpoint"):
+                    # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
+                    minimum_commission_payload.update(k8s_is)
+                else:
+                    for k, v in k8s_is.items():
+                        if v != old_commission_payload.get(k):
+                            minimum_commission_payload[k] = v
+
+            commission_payload.update(k8s_is)
 
             # TODO: is this is a k8s worker, something similar should happen
             # if node_role and node_role.lower() == 'worker':
@@ -293,18 +318,34 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             if cluster_join_tokens and len(cluster_join_tokens) > 1:
                 self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
                 commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
+                if cluster_join_tokens[0] != old_commission_payload.get('swarm-token-manager'):
+                    minimum_commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
                 commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
+                if cluster_join_tokens[1] != old_commission_payload.get('swarm-token-worker'):
+                    minimum_commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
 
-            if tls_keys:
-                commission_payload["swarm-client-ca"] = tls_keys[0]
-                commission_payload["swarm-client-cert"] = tls_keys[1]
-                commission_payload["swarm-client-key"] = tls_keys[2]
+            docker_is = {}
 
             if not container_api_port:
                 container_api_port = self.compute_api_port
 
             if api_endpoint and self.compute_api_is_running(container_api_port):
-                commission_payload["swarm-endpoint"] = api_endpoint
+                docker_is["swarm-endpoint"] = api_endpoint
+
+                if tls_keys:
+                    docker_is["swarm-client-ca"] = tls_keys[0]
+                    docker_is["swarm-client-cert"] = tls_keys[1]
+                    docker_is["swarm-client-key"] = tls_keys[2]
+
+                if not old_commission_payload.get("swarm-endpoint"):
+                    # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
+                    minimum_commission_payload.update(docker_is)
+                else:
+                    for k, v in docker_is.items():
+                        if v != old_commission_payload.get(k):
+                            minimum_commission_payload[k] = v
+
+            commission_payload.update(docker_is)
 
             if node_role and node_role.lower() == 'worker':
                 delete_attrs = ['swarm-token-manager',
@@ -316,17 +357,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         # remove the keys from the commission payload, to avoid confusion on the server side
         if delete_attrs:
-            commission_payload['removed'] = delete_attrs
+            minimum_commission_payload['removed'] = commission_payload['removed'] = delete_attrs
             for attr in delete_attrs:
                 try:
                     commission_payload.pop(attr)
+                    minimum_commission_payload.pop(attr)
                 except KeyError:
                     pass
-
-        minimum_commission_payload = self.needs_commission(commission_payload)
-        if cluster_info and any([cluster_key in minimum_commission_payload for cluster_key in cluster_info]):
-            # if some cluster info is going for commissioning, then pass all of it anyway
-            minimum_commission_payload.update(cluster_info)
 
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
