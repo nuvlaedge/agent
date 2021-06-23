@@ -539,9 +539,9 @@ class KubernetesClient(ContainerRuntimeClient):
         if nuvla_endpoint_insecure:
             cmd = f'{cmd} --api-insecure'
 
-        logging.info(f'Starting job {job_id} from {self.job_engine_lite_image}, with command: "{cmd}"')
-
         img = docker_image if docker_image else self.job_engine_lite_image
+        logging.info(f'Starting job {job_id} from {img}, with command: "{cmd}"')
+
         pod_body = client.V1Pod(
             kind='Pod',
             metadata=client.V1ObjectMeta(name=job_execution_id),
