@@ -1114,6 +1114,8 @@ class NuvlaBoxCommon():
         nuvla_endpoint_insecure_raw = None
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
         self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
+        self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
+
         if os.path.exists(self.nuvlabox_nuvla_configuration):
             with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
                 for line in nuvla_conf.read().split():
@@ -1172,7 +1174,6 @@ class NuvlaBoxCommon():
         self.key = "key.pem"
         self.context = ".context"
         self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
-        self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.vpn_folder = "{}/vpn".format(self.data_volume)
 
         if not os.path.isdir(self.vpn_folder):
