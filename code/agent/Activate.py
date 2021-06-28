@@ -8,7 +8,6 @@ It takes care of activating a new NuvlaBox
 
 import json
 import logging
-import docker
 import requests
 
 from agent.common import NuvlaBoxCommon
@@ -131,7 +130,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
 
         cpuinfo = self.get_cpuinfo()
         # nuvlabox_resource.setdefault('hwRevisionCode', cpuinfo["Revision"])
-        nuvlabox_resource.setdefault('os-version', self.get_os())
+        nuvlabox_resource.setdefault('os-version', self.container_runtime.get_host_os())
         # nuvlabox_resource.setdefault('manufacturerSerialNumber', cpuinfo["Serial"])
         return nuvlabox_resource
 
@@ -148,11 +147,4 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
                 if l.startswith("Serial"):
                     cpuinfo["Serial"] = l.split(":")[-1].replace(" ", "")
         return cpuinfo
-
-    @staticmethod
-    def get_os():
-        """ Gets the host OS """
-
-        client = docker.from_env()
-        return "{} {}".format(client.info()["OperatingSystem"], client.info()["KernelVersion"])
 

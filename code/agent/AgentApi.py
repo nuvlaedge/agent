@@ -10,7 +10,6 @@ import json
 import logging
 import os
 import glob
-import socket
 import nuvla.api
 
 from agent.common import NuvlaBoxCommon
@@ -106,14 +105,12 @@ def post(payload):
         payload['parent'] = NB.nuvlabox_id
 
     if 'version' not in payload:
-        if os.path.exists("{}/{}".format(NB.data_volume, NB.context)):
+        if NB.nuvlabox_engine_version:
+            version = int(NB.nuvlabox_engine_version.split('.')[0])
+        elif os.path.exists("{}/{}".format(NB.data_volume, NB.context)):
             version = json.loads(open("{}/{}".format(NB.data_volume, NB.context)).read())['version']
         else:
-            try:
-                tag = NB.docker_client.api.inspect_container(socket.gethostname())['Config']['Labels']['git.branch']
-                version = int(tag.split('.')[0])
-            except (KeyError, ValueError, IndexError):
-                version = 1
+            version = 2
 
         payload['version'] = version
 
@@ -287,3 +284,26 @@ def get(identifier):
     else:
         return {"error": "Peripheral not found"}, 404
 
+
+def save_vpn_ip(ip):
+    """
+    Take the IP as a string and writes it into the shared volume
+
+    :param ip: string
+    :return:
+    """
+
+    with open(NB.vpn_ip_file, 'w') as vpnip:
+        vpnip.write(str(ip))
+
+
+def save_vulnerabilities(vulnerabilities):
+    """
+    Dumps vulnerabilities into a file
+
+    :param vulnerabilities: as JSON
+    :return:
+    """
+
+    with open(NB.vulnerabilities_file, 'w') as vf:
+        vf.write(json.dumps(vulnerabilities))

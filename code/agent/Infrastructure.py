@@ -16,9 +16,10 @@ from agent.common import NuvlaBoxCommon
 from agent.Telemetry import Telemetry
 from datetime import datetime
 from os import path, stat, remove
+from threading import Thread
 
 
-class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
+class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
     """ The Infrastructure class includes all methods and
     properties necessary update the infrastructure services
     and respective credentials in Nuvla, whenever the local
@@ -26,32 +27,20 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
     """
 
-    def __init__(self, data_volume):
+    def __init__(self, data_volume, refresh_period=15):
         """ Constructs an Infrastructure object, with a status placeholder
 
         :param data_volume: shared volume
         """
 
-        super().__init__(shared_data_volume=data_volume)
+        NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
+        Thread.__init__(self, daemon=True)
         self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.vpn_commission_attempts = 0
-
-    def get_swarm_tokens(self):
-        """ Retrieve Swarm tokens """
-
-        try:
-            if docker.from_env().swarm.attrs:
-                return docker.from_env().swarm.attrs['JoinTokens']['Manager'], \
-                       docker.from_env().swarm.attrs['JoinTokens']['Worker']
-        except docker.errors.APIError as e:
-            if self.lost_quorum_hint in str(e):
-                # quorum is lost
-                logging.warning(f'Quorum is lost. This node will no longer support Service and Cluster management')
-
-        return None
+        self.refresh_period = refresh_period
 
     @staticmethod
     def write_file(file, content, is_json=False):
@@ -68,7 +57,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
         with open(file, 'w') as f:
             f.write(content)
 
-    def token_diff(self, current_manager_token, current_worker_token):
+    def swarm_token_diff(self, current_manager_token, current_worker_token):
         """ Checks if the Swarm tokens have changed
 
         :param current_manager_token: current swarm manager token
@@ -90,83 +79,22 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return False
 
-    def is_kubernetes_running(self):
-        """ Tries to infer whether there is a k8s cluster running in the host
-        and if so, it tries to retrieve its API endpoint and client certificates
-
-        :returns dict {:endpoint, :ca, :cert, :key}"""
-
-        k8s_apiserver_container_label = "io.kubernetes.container.name=kube-apiserver"
-        k8s_apiservers = self.docker_client.containers.list(filters={"label": k8s_apiserver_container_label})
-
-        k8s_cluster_info = {}
-        if not k8s_apiservers:
-            return k8s_cluster_info
-
-        arg_address = "advertise-address"
-        arg_port = "secure-port"
-        arg_ca = "client-ca-file"
-        arg_cert = "kubelet-client-certificate"
-        arg_key = "kubelet-client-key"
-        # just in case there is more than one k8s config, we want to get the first one that looks healthy
-        for api in k8s_apiservers:
-            try:
-                inspect = self.docker_client.api.inspect_container(api.id)
-            except docker.errors.NotFound:
-                logging.warning(f'Error inspecting container {api.id} while looking up for k8s cluster')
-                continue
-
-            args_list = inspect.get('Args', [])
-            # convert list to dict
-            try:
-                args = { args_list[i].split('=')[0].lstrip("--"): args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
-            except IndexError:
-                logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
-                continue
-
-            try:
-                k8s_endpoint = f'https://{args[arg_address]}:{args[arg_port]}' \
-                    if not args[arg_address].startswith("http") else f'{args[arg_address]}:{args[arg_port]}'
-
-                with open(f'{self.hostfs}{args[arg_ca]}') as ca:
-                    k8s_client_ca = ca.read()
-
-                with open(f'{self.hostfs}{args[arg_cert]}') as cert:
-                    k8s_client_cert = cert.read()
-
-                with open(f'{self.hostfs}{args[arg_key]}') as key:
-                    k8s_client_key = key.read()
-
-                k8s_cluster_info.update({
-                    'endpoint': k8s_endpoint,
-                    'ca': k8s_client_ca,
-                    'cert': k8s_client_cert,
-                    'key': k8s_client_key
-                })
-                # if we got here, then it's very likely that the k8s cluster is up and running, no need to go further
-                break
-            except (KeyError, FileNotFoundError) as e:
-                logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
-                continue
-
-        return k8s_cluster_info
-
     def get_tls_keys(self):
-        """ Finds and returns the Docker API client TLS keys """
+        """ Finds and returns the Container orchestration API client TLS keys """
 
         ca_file = "{}/{}".format(self.data_volume, self.ca)
         cert_file = "{}/{}".format(self.data_volume, self.cert)
         key_file = "{}/{}".format(self.data_volume, self.key)
 
         try:
-            swarm_client_ca = open(ca_file).read()
-            swarm_client_cert = open(cert_file).read()
-            swarm_client_key = open(key_file).read()
+            client_ca = open(ca_file).read()
+            client_cert = open(cert_file).read()
+            client_key = open(key_file).read()
         except (FileNotFoundError, IndexError):
-            logging.warning("Docker API TLS key have not been set yet! Please check the NuvlaBox compute-api status")
+            logging.warning("Container orchestration API TLS keys have not been set yet!")
             return None
 
-        return swarm_client_ca, swarm_client_cert, swarm_client_key
+        return client_ca, client_cert, client_key
 
     def do_commission(self, payload):
         """ Perform the operation
@@ -236,26 +164,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return True
 
-    def get_labels(self):
-        """ Gets all the Docker node labels """
-        nuvla_tags = []
-
-        try:
-            node_id = self.docker_client.info()["Swarm"]["NodeID"]
-            container_labels = self.docker_client.api.inspect_node(node_id)["Spec"]["Labels"]
-        except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
-            if not "node is not a swarm manager" in str(e).lower():
-                logging.debug(f"Cannot get node labels: {str(e)}")
-            return nuvla_tags
-
-        for label, value in container_labels.items():
-            if value:
-                nuvla_tags.append("{}={}".format(label, value))
-            else:
-                nuvla_tags.append(label)
-
-        return nuvla_tags
-
     def needs_commission(self, current_conf):
         """ Check whether the current commission data structure
         has changed wrt to the previous one
@@ -283,30 +191,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.info("Auto-commissioning the NuvlaBox for the first time...")
             return current_conf
 
-    def has_nuvla_job_pull(self):
-        """ Checks if the job-engine-lite has been deployed alongside the NBE
-
-        :return:
-        """
-
-        job_engine_lite_container = "nuvlabox-job-engine-lite"
-        try:
-            container = self.docker_client.containers.get(job_engine_lite_container)
-        except docker.errors.NotFound:
-            return False
-        except Exception as e:
-            logging.error(f"Unable to search for container {job_engine_lite_container}. Reason: {str(e)}")
-            return False
-
-        try:
-            if container.status.lower() == "paused":
-                self.job_engine_lite_image = container.attrs['Config']['Image']
-                return True
-        except (AttributeError, KeyError):
-            return False
-
-        return False
-
     def get_nuvlabox_capabilities(self, commissioning_dict: dict):
         """ Finds the NuvlaBox capabilities and adds them to the NB commissioning payload
 
@@ -316,23 +200,25 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # NUVLA_JOB_PULL if job-engine-lite has been deployed with the NBE
         commissioning_dict['capabilities'] = []
-        if self.has_nuvla_job_pull():
+        if self.container_runtime.has_pull_job_capability():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
-    def compute_api_is_running(self) -> bool:
+    def compute_api_is_running(self, container_api_port) -> bool:
         """
         Pokes ate the compute-api endpoint to see if it is up and running
+
+        Only valid for Docker installations
 
         :return: True or False
         """
 
-        compute_api_url = f'https://{self.compute_api}:{self.compute_api_port}'
+        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
 
         try:
-            if docker.from_env().containers.get(self.compute_api).status != 'running':
+            if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
                 return False
-            with NuvlaBoxCommon.timeout(3):
-                requests.get(compute_api_url)
+
+            requests.get(compute_api_url, timeout=3)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
             pass
@@ -356,96 +242,128 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return role
 
-    def get_cluster_info(self):
-        """
-        Get information about the underlying cluster, if any
-        :return: dict with cluster info
-        """
-
-        d_info = self.docker_client.info()
-        swarm_info = d_info['Swarm']
-
-        if swarm_info.get('ControlAvailable'):
-            orchestrator = 'swarm'
-            cluster_id = swarm_info.get('Cluster', {}).get('ID')
-            managers = []
-            workers = []
-            for manager in self.docker_client.nodes.list(filters={'role': 'manager'}):
-                if manager not in managers and manager.attrs.get('Status', {}).get('State', '').lower() == 'ready':
-                    managers.append(manager.id)
-
-            for worker in self.docker_client.nodes.list(filters={'role': 'worker'}):
-                if worker not in workers and worker.attrs.get('Status', {}).get('State', '').lower() == 'ready':
-                    workers.append(worker.id)
-
-            return {
-                'cluster-id': cluster_id,
-                'cluster-orchestrator': orchestrator,
-                'cluster-managers': managers,
-                'cluster-workers': workers
-            }
-        else:
-            return {}
-
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
 
         commission_payload = {}
-        swarm_tokens = self.get_swarm_tokens()
-        if swarm_tokens:
-            self.token_diff(swarm_tokens[0], swarm_tokens[1])
-            commission_payload['swarm-token-manager'] = swarm_tokens[0]
-            commission_payload['swarm-token-worker'] = swarm_tokens[1]
+        minimum_commission_payload = {}
+        with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
+            old_commission_payload = json.loads(r.read())
 
-        cluster_info = self.get_cluster_info()
+        cluster_join_tokens = self.container_runtime.get_join_tokens()
+        cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
+
         commission_payload.update(cluster_info)
+        for cluster_key, v in cluster_info.items():
+            # if some cluster info is going for commissioning, then pass all of it anyway
+            if old_commission_payload.get(cluster_key) == v:
+                continue
 
-        tls_keys = self.get_tls_keys()
-        if tls_keys:
-            commission_payload["swarm-client-ca"] = tls_keys[0]
-            commission_payload["swarm-client-cert"] = tls_keys[1]
-            commission_payload["swarm-client-key"] = tls_keys[2]
-
-        if self.compute_api_is_running():
-            my_ip = self.telemetry_instance.get_ip()
-            commission_payload["swarm-endpoint"] = "https://{}:5000".format(my_ip)
-
-        k8s_config = self.is_kubernetes_running()
-        if k8s_config:
-            commission_payload["kubernetes-endpoint"] = k8s_config['endpoint']
-            commission_payload["kubernetes-client-ca"] = k8s_config['ca']
-            commission_payload["kubernetes-client-cert"] = k8s_config['cert']
-            commission_payload["kubernetes-client-key"] = k8s_config['key']
+            minimum_commission_payload.update(cluster_info)
 
         self.get_nuvlabox_capabilities(commission_payload)
+        if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])):
+            minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
 
-        tags = self.get_labels()
-        commission_payload["tags"] = tags
+        tls_keys = self.get_tls_keys()
+
+        my_vpn_ip = self.telemetry_instance.get_vpn_ip()
+        container_api_ip, container_api_port = self.container_runtime.get_api_ip_port()
+
+        api_endpoint = None
+        if my_vpn_ip:
+            api_endpoint = f"https://{my_vpn_ip}:{container_api_port}"
+        else:
+            if container_api_ip and container_api_port:
+                api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+
+        commission_payload["tags"] = self.container_runtime.get_node_labels()
+        if sorted(commission_payload.get('tags', [])) != sorted(old_commission_payload.get('tags', [])):
+            minimum_commission_payload['tags'] = commission_payload.get('tags', [])
 
         # if this node is a worker, them we must force remove some assets
         node_role = self.get_node_role_from_status()
         delete_attrs = []
-        if node_role and node_role.lower() == 'worker':
-            delete_attrs = ['swarm-token-manager',
-                            'swarm-token-worker',
-                            'swarm-client-key',
-                            'swarm-client-ca',
-                            'swarm-client-cert',
-                            'swarm-endpoint']
 
+        if NuvlaBoxCommon.ORCHESTRATOR == 'kubernetes':
+            k8s_is = {}
+            if api_endpoint:
+                k8s_is["kubernetes-endpoint"] = api_endpoint
+
+                if tls_keys:
+                    k8s_is["kubernetes-client-ca"] = tls_keys[0]
+                    k8s_is["kubernetes-client-cert"] = tls_keys[1]
+                    k8s_is["kubernetes-client-key"] = tls_keys[2]
+
+                if not old_commission_payload.get("kubernetes-endpoint"):
+                    # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
+                    minimum_commission_payload.update(k8s_is)
+                else:
+                    for k, v in k8s_is.items():
+                        if v != old_commission_payload.get(k):
+                            minimum_commission_payload[k] = v
+
+            commission_payload.update(k8s_is)
+
+            # TODO: is this is a k8s worker, something similar should happen
+            # if node_role and node_role.lower() == 'worker':
+            #     delete_attrs = ['swarm-token-manager',
+            #                     'swarm-token-worker',
+            #                     'swarm-client-key',
+            #                     'swarm-client-ca',
+            #                     'swarm-client-cert',
+            #                     'swarm-endpoint']
+        else:
+            if cluster_join_tokens and len(cluster_join_tokens) > 1:
+                self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
+                commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
+                if cluster_join_tokens[0] != old_commission_payload.get('swarm-token-manager'):
+                    minimum_commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
+                commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
+                if cluster_join_tokens[1] != old_commission_payload.get('swarm-token-worker'):
+                    minimum_commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
+
+            docker_is = {}
+
+            if not container_api_port:
+                container_api_port = self.compute_api_port
+
+            if api_endpoint and self.compute_api_is_running(container_api_port):
+                docker_is["swarm-endpoint"] = api_endpoint
+
+                if tls_keys:
+                    docker_is["swarm-client-ca"] = tls_keys[0]
+                    docker_is["swarm-client-cert"] = tls_keys[1]
+                    docker_is["swarm-client-key"] = tls_keys[2]
+
+                if not old_commission_payload.get("swarm-endpoint"):
+                    # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
+                    minimum_commission_payload.update(docker_is)
+                else:
+                    for k, v in docker_is.items():
+                        if v != old_commission_payload.get(k):
+                            minimum_commission_payload[k] = v
+
+            commission_payload.update(docker_is)
+
+            if node_role and node_role.lower() == 'worker':
+                delete_attrs = ['swarm-token-manager',
+                                'swarm-token-worker',
+                                'swarm-client-key',
+                                'swarm-client-ca',
+                                'swarm-client-cert',
+                                'swarm-endpoint']
+
+        # remove the keys from the commission payload, to avoid confusion on the server side
         if delete_attrs:
-            commission_payload['removed'] = delete_attrs
+            minimum_commission_payload['removed'] = commission_payload['removed'] = delete_attrs
             for attr in delete_attrs:
                 try:
                     commission_payload.pop(attr)
+                    minimum_commission_payload.pop(attr)
                 except KeyError:
                     pass
-
-        minimum_commission_payload = self.needs_commission(commission_payload)
-        if cluster_info and any([cluster_key in minimum_commission_payload for cluster_key in cluster_info]):
-            # if some cluster info is going for commissioning, then pass all of it anyway
-            minimum_commission_payload.update(cluster_info)
 
         if minimum_commission_payload:
             logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
@@ -492,7 +410,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             # the 1st time
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
                 logging.warning("VPN credential exists locally, so it was removed from Nuvla. Recommissioning...")
-            elif self.vpn_commission_attempts > 3:
+            elif self.vpn_commission_attempts > 2:
                 logging.warning("Waiting for VPN commissioning for too long...forcing new recommission")
                 self.vpn_commission_attempts = 0
             else:
@@ -523,9 +441,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
                 #     - IF the vpn-client is already running, then all is good, just save the VPN credential locally
                 logging.warning("VPN credential exists in Nuvla, but not locally")
 
-                dc = docker.from_env()
                 try:
-                    vpn_client_running = True if dc.containers.get("vpn-client").status == 'running' else False
+                    vpn_client_running = self.container_runtime.is_vpn_client_running()
                 except docker.errors.NotFound as e:
                     vpn_client_running = False
                     logging.info("VPN client is not running")
@@ -582,23 +499,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
             event_owners = [nb_owner, self.nuvlabox_id] if nb_owner else [self.nuvlabox_id]
             event['acl'] = {'owners': event_owners}
 
-            cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
-
             logging.info(f'Setting immutable SSH key {self.ssh_pub_key} for {self.installation_home}')
             try:
                 with NuvlaBoxCommon.timeout(10):
-                    self.docker_client.containers.run('alpine',
-                                                      remove=True,
-                                                      command=cmd,
-                                                      environment={
-                                                          'SSH_PUB': self.ssh_pub_key
-                                                      },
-                                                      volumes={
-                                                          f'{self.installation_home}/.ssh': {
-                                                              'bind': ssh_folder
-                                                          }
-                                                      }
-                                                      )
+                    if not self.container_runtime.install_ssh_key(self.ssh_pub_key, ssh_folder):
+                        return
             except Exception as e:
                 msg = f'An error occurred while setting immutable SSH key: {str(e)}'
                 logging.error(msg)
@@ -607,3 +512,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon):
 
             with open(self.ssh_flag, 'w') as sshfw:
                 sshfw.write(self.ssh_pub_key)
+
+    def run(self):
+        """
+        Threads the commissioning cycles, so that they don't interfere with the main telemetry cycle
+        """
+        while True:
+            self.try_commission()
+            time.sleep(self.refresh_period)
