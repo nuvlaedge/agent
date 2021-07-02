@@ -15,11 +15,13 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
+import datetime
 import socket
 import threading
 import json
 import agent.AgentApi as AgentApi
 import time
+import os
 from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
@@ -234,6 +236,44 @@ def manage_peripheral(identifier):
     return jsonify(message), return_code
 
 
+def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status_time: str):
+    """
+    Updates the NuvlaBox Status according to the local status file
+    :param nb_instance: instance of class NuvlaBoxCommon.NuvlaBoxCommon()
+    :param nb_telemetry: instance of class Telemetry()
+    :param nb_status_id: ID of the NB status resource
+    :param previous_status_time: ISO timestamp of the previous status heartbeat
+    :return: (Nuvla.api response, current heartbeat timestamp)
+    """
+
+    status = nb_telemetry.status_for_nuvla
+    status_current_time = status.get('current-time', '')
+    delete_attributes = []
+    if not status_current_time:
+        status = {'status-notes': ['NuvlaBox Telemetry not ready yet']}
+    else:
+        if status_current_time <= previous_status_time:
+            status = {
+                'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
+                'status': status.get('status', 'DEGRADED')
+            }
+        else:
+            delete_attributes = nb_telemetry.status_delete_attrs_in_nuvla
+
+    logging.info('Refresh status: %s' % status)
+    if delete_attributes:
+        logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
+
+    try:
+        r = nb_instance.api().edit(nb_status_id,
+                                   data=status,
+                                   select=delete_attributes)
+    except:
+        logging.exception("Unable to update NuvlaBox status in Nuvla")
+        return {}, status_current_time
+
+    return r.data, status_current_time
+
 
 if __name__ == "__main__":
     logging, args = init()
@@ -260,6 +300,7 @@ if __name__ == "__main__":
 
     telemetry = Telemetry(data_volume, nuvlabox_status_id)
     infra = Infrastructure(data_volume)
+    NB = NuvlaBoxCommon.NuvlaBoxCommon()
 
     infra.set_immutable_ssh_key()
 
@@ -273,8 +314,12 @@ if __name__ == "__main__":
     api_thread.daemon = True
     api_thread.start()
 
+    telemetry_thread = None
+
     can_continue = True
     nb_checker = None
+
+    past_status_time = ''
 
     # start telemetry
     logging.info("Starting telemetry...")
@@ -290,7 +335,11 @@ if __name__ == "__main__":
 
         start_cycle = time.time()
 
-        response = telemetry.update_status()
+        if not telemetry_thread or not telemetry_thread.is_alive():
+            telemetry_thread = threading.Thread(target=telemetry.update_status, daemon=True)
+            telemetry_thread.start()
+
+        response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
 
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
