@@ -3,7 +3,7 @@
 
 """ NuvlaBox Agent API
 
-List of functions to support the NuvlaBox Agent API instantiated by app.py
+List of functions to support the NuvlaBox Agent API instantiated by nuvlabox_agent.py
 """
 
 import json

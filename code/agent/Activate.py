@@ -13,6 +13,9 @@ import requests
 from agent.common import NuvlaBoxCommon
 
 
+logger = logging.getLogger(__name__)
+
+
 class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Activate class, which includes all methods and
     properties necessary to activate a NuvlaBox
@@ -31,6 +34,9 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         # self.api = nb.ss_api() if not api else api
         self.user_info = {}
 
+        logger.info(f'Nuvla endpoint: {self.nuvla_endpoint}')
+        logger.info(f'Nuvla connection insecure: {str(self.nuvla_endpoint_insecure)}')
+
     def activation_is_possible(self):
         """ Checks for any hints of a previous activation
         or any other conditions that might influence the
@@ -45,8 +51,8 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             with open(self.activation_flag) as a:
                 self.user_info = json.loads(a.read())
 
-            logging.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
-            logging.info("NuvlaBox credential: {}".format(self.user_info["api-key"]))
+            logger.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
+            logger.info("NuvlaBox credential: {}".format(self.user_info["api-key"]))
             return False, self.user_info
         except FileNotFoundError:
             # file doesn't exist yet, so it was not activated in the past
@@ -55,7 +61,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
     def activate(self):
         """ Makes the anonymous call to activate the NuvlaBox """
 
-        logging.info('Activating "{}"'.format(self.nuvlabox_id))
+        logger.info('Activating "{}"'.format(self.nuvlabox_id))
 
         try:
             self.user_info = self.api()._cimi_post('{}/activate'.format(self.nuvlabox_id))
@@ -63,7 +69,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             self.shell_execute(["timeout", "3s", "/lib/systemd/systemd-timesyncd"])
             self.user_info = self.api()._cimi_post('{}/activate'.format(self.nuvlabox_id))
         except requests.exceptions.ConnectionError as conn_err:
-            logging.error("Can not reach out to Nuvla at {}. Error: {}".format(self.nuvla_endpoint, conn_err))
+            logger.error("Can not reach out to Nuvla at {}. Error: {}".format(self.nuvla_endpoint, conn_err))
             raise
 
         # Flags that the activation has been done
@@ -86,13 +92,13 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
 
         context_file = "{}/{}".format(self.data_volume, self.context)
 
-        logging.info('Managing NB context file {}'.format(context_file))
+        logger.info('Managing NB context file {}'.format(context_file))
 
         try:
             with open(context_file) as c:
                 current_context = json.loads(c.read())
         except (ValueError, FileNotFoundError):
-            logging.warning("Writing {} for the first time".format(context_file))
+            logger.warning("Writing {} for the first time".format(context_file))
             current_context = {}
 
         current_vpn_is_id = current_context.get("vpn-server-id")
@@ -101,7 +107,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             cw.write(json.dumps(nuvlabox_resource))
 
         if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
-            logging.info('VPN Server ID has been added/changed in Nuvla: {}'
+            logger.info('VPN Server ID has been added/changed in Nuvla: {}'
                          .format(nuvlabox_resource.get("vpn-server-id")))
 
             self.commission_vpn()

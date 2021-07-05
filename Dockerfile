@@ -47,4 +47,4 @@ VOLUME /srv/nuvlabox/shared
 
 ONBUILD RUN ./license.sh
 
-ENTRYPOINT ["./app.py"]
+ENTRYPOINT ["./nuvlabox_agent.py"]

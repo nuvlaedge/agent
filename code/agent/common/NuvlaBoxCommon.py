@@ -90,7 +90,7 @@ def raise_timeout(signum, frame):
 
 
 @contextmanager
-def timeout(time):
+def timeout(time, raise_exception=False):
     # Register a function to raise a TimeoutError on the signal.
     signal.signal(signal.SIGALRM, raise_timeout)
     # Schedule the signal to be sent after ``time``.
@@ -99,7 +99,8 @@ def timeout(time):
     try:
         yield
     except TimeoutError:
-        pass
+        if raise_exception:
+            raise
     finally:
         # Unregister the signal so it won't be triggered
         # if the timeout is not reached.
