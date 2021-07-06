@@ -15,13 +15,12 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
-import datetime
 import socket
 import threading
 import json
+import logging
 import agent.AgentApi as AgentApi
 import time
-import os
 from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
@@ -37,16 +36,6 @@ app = Flask(__name__)
 data_volume = "/srv/nuvlabox/shared"
 default_log_filename = "agent.log"
 network_timeout = 10
-
-
-def init():
-    """ Initialize the application, including argparsing """
-
-    params = NuvlaBoxCommon.arguments().parse_args()
-
-    logger = NuvlaBoxCommon.logger(NuvlaBoxCommon.get_log_level(params))
-
-    return logger, params
 
 
 def manage_pull_jobs(job_list, job_image_name):
@@ -278,8 +267,6 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
 
 
 if __name__ == "__main__":
-    logging, args = init()
-
     socket.setdefaulttimeout(network_timeout)
 
     e = Event()
