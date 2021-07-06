@@ -34,57 +34,6 @@ else:
     ORCHESTRATOR_COE = 'swarm'
 
 
-def get_mac_address(ifname, separator=':'):
-    """ Gets the MAC address for interface ifname """
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', bytes(ifname, 'utf-8')[:15]))
-        mac = ':'.join('%02x' % b for b in info[18:24])
-        return mac
-    except struct.error:
-        logging.error("Could not find the device's MAC address from the network interface {} in {}".format(ifname, s))
-        raise
-    except TypeError:
-        logging.error("The MAC address could not be parsed")
-        raise
-
-
-def get_log_level(args):
-    """ Sets log level based on input args """
-
-    if args.debug:
-        return logging.DEBUG
-    elif args.quiet:
-        return logging.CRITICAL
-    return logging.INFO
-
-
-def logger(log_level):
-    """ Configures logging """
-
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    root_logger.addHandler(stdout_handler)
-
-    return root_logger
-
-
-def arguments():
-    """ Builds a generic argparse
-
-    :return: parser
-    """
-
-    parser = argparse.ArgumentParser(description='NuvlaBox Agent')
-    parser.add_argument('-d', '--debug', dest='debug', default=False, action='store_true')
-    parser.add_argument('-q', '--quiet', dest='quiet', default=False, action='store_true')
-
-    return parser
-
-
 def raise_timeout(signum, frame):
     raise TimeoutError
 
@@ -339,16 +288,16 @@ class KubernetesClient(ContainerRuntimeClient):
         if self.host_node_name:
             this_node = self.client.read_node(self.host_node_name)
             try:
-                return this_node.status.node_info
+                return this_node
             except AttributeError:
                 logging.warning(f'Cannot infer node information for node "{self.host_node_name}"')
 
         return None
 
     def get_host_os(self):
-        node_info = self.get_node_info()
-        if node_info:
-            return f"{node_info.os_image} {node_info.kernel_version}"
+        node = self.get_node_info()
+        if node:
+            return f"{node.status.node_info.os_image} {node.status.node_info.kernel_version}"
 
         return None
 
