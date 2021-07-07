@@ -291,7 +291,12 @@ if __name__ == "__main__":
     infra = Infrastructure(data_volume)
     NB = NuvlaBoxCommon.NuvlaBoxCommon()
 
-    infra.set_immutable_ssh_key()
+    if not infra.installation_home:
+        logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
+    else:
+        with open(infra.host_user_home_file, 'w') as userhome:
+            userhome.write(infra.installation_home)
+        infra.set_immutable_ssh_key()
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5

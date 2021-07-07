@@ -1055,12 +1055,6 @@ class NuvlaBoxCommon():
         else:
             self.installation_home = os.environ.get('HOST_HOME')
 
-            if not self.installation_home:
-                logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
-            else:
-                with open(self.host_user_home_file, 'w') as userhome:
-                    userhome.write(self.installation_home)
-
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
