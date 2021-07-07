@@ -261,8 +261,8 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
                                    data=status,
                                    select=delete_attributes)
     except:
-        logging.exception("Unable to update NuvlaBox status in Nuvla")
-        return {}, status_current_time
+        logging.error("Unable to update NuvlaBox status in Nuvla")
+        raise
 
     return r.data, status_current_time
 

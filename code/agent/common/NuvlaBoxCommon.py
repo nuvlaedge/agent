@@ -1098,7 +1098,9 @@ class NuvlaBoxCommon():
 
         if ORCHESTRATOR == 'kubernetes':
             self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
+            self.mqtt_broker_host = f"data-gateway.{self.container_runtime.namespace}"
         else:
+            self.mqtt_broker_host = "data-gateway"
             if os.path.exists(self.docker_socket_file):
                 self.container_runtime = DockerClient(self.hostfs, self.installation_home)
             else:
@@ -1130,7 +1132,6 @@ class NuvlaBoxCommon():
         self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
         self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
         self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
-        self.mqtt_broker_host = "data-gateway"
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
