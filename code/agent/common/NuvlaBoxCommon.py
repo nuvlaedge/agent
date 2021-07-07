@@ -314,11 +314,12 @@ class KubernetesClient(ContainerRuntimeClient):
         managers = []
         workers = []
         for n in nodes:
+            workers.append(n.metadata.name)
             for label in n.metadata.labels:
                 if 'node-role' in label and 'master' in label:
+                    workers.pop()
                     managers.append(n.metadata.name)
-                else:
-                    workers.append(n.metadata.name)
+                    break
 
         return {
             'cluster-id': cluster_id,
