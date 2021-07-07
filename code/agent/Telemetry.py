@@ -78,7 +78,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # self.data_volume = data_volume
         # self.vpn_folder = "{}/vpn".format(data_volume)
-        super().__init__(shared_data_volume=data_volume)
+        NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
 
         # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
@@ -118,6 +118,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 #                       'container-plugins': None,
                        'kubelet-version': None
                        }
+
+        self.status_for_nuvla = {}
+        self.status_delete_attrs_in_nuvla = []
 
         self.mqtt_telemetry = mqtt.Client()
 
@@ -224,7 +227,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
                                                                  "energy",
                                                                  json.dumps(energy)))
-                
+
         # self.mqtt_telemetry.disconnect()
 
     def get_installation_parameters(self):
@@ -482,7 +485,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Attempts to retrieve temperature information, if it exists. The keys will vary depending on the
         underlying host system.
 
-        :return: JSON with temperatures values for each Thermal Zone founded. 
+        :return: JSON with temperatures values for each Thermal Zone founded.
         Example: [{"thermal-zone": "acpitz", "value": <float in Celsius> for x86_64}]
         """
 
@@ -507,7 +510,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     except:
                         logging.warning(f'Cannot read thermal zone at {thermal_zone_file}')
                         continue
-                
+
                 with open(temperature_file) as tf:
                     try:
                         temperature_value = tf.read().split()[0]
@@ -925,27 +928,21 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
         new_status, all_status = self.get_status()
+
         updated_status, delete_attributes = self.diff(self.status, new_status)
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
-        logging.info('Refresh status: %s' % updated_status)
-        if delete_attributes:
-            logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
-        try:
-            r = self.api().edit(self.nb_status_id,
-                                data=updated_status,
-                                select=delete_attributes)
-        except:
-            logging.exception("Unable to update NuvlaBox status in Nuvla")
-            return {}
-        else:
-            # write all status into the shared volume for the other components to re-use if necessary
-            with open(self.nuvlabox_status_file, 'w') as nbsf:
-                nbsf.write(json.dumps(all_status))
+
+        self.status_for_nuvla = updated_status
+        self.status_delete_attrs_in_nuvla = delete_attributes
+
+        # write all status into the shared volume for the other components to re-use if necessary
+        with open(self.nuvlabox_status_file, 'w') as nbsf:
+            nbsf.write(json.dumps(all_status))
 
         self.status.update(new_status)
 
-        return r.data
+        return
 
     def update_operational_status(self, status="RUNNING", status_log=None):
         """ Update the NuvlaBox status with the current operational status

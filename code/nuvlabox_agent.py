@@ -15,7 +15,9 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
+import datetime
 import logging
+import os
 import signal
 import socket
 import sys
@@ -55,6 +57,47 @@ def init():
     root_logger = NuvlaBoxCommon.logger(NuvlaBoxCommon.get_log_level(params))
 
     return root_logger, params
+
+
+def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status_time: str):
+    """
+    Updates the NuvlaBox Status according to the local status file
+    :param nb_instance: instance of class NuvlaBoxCommon.NuvlaBoxCommon()
+    :param nb_telemetry: instance of class Telemetry()
+    :param nb_status_id: ID of the NB status resource
+    :param previous_status_time: ISO timestamp of the previous status heartbeat
+    :return: (Nuvla.api response, current heartbeat timestamp)
+    """
+
+    status = nb_telemetry.status_for_nuvla
+    status_current_time = status.get('current-time', '')
+    delete_attributes = []
+    if not status_current_time:
+        status = {'status-notes': ['NuvlaBox Telemetry is starting']}
+        nb_telemetry.status.update(status)
+    else:
+        if status_current_time <= previous_status_time:
+            status = {
+                'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
+                'status': status.get('status', 'DEGRADED')
+            }
+            nb_telemetry.status.update(status)
+        else:
+            delete_attributes = nb_telemetry.status_delete_attrs_in_nuvla
+
+    logging.info('Refresh status: %s' % status)
+    if delete_attributes:
+        logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
+
+    try:
+        r = nb_instance.api().edit(nb_status_id,
+                                   data=status,
+                                   select=delete_attributes)
+    except:
+        logging.exception("Unable to update NuvlaBox status in Nuvla")
+        return {}, status_current_time
+
+    return r.data, status_current_time
 
 
 def manage_pull_jobs(job_list, job_image_name):
@@ -124,13 +167,14 @@ def signal_term(signum, frame):
     stop_event.set()
 
 
-def nb_check(nb_checker, activation, infra):
-    if not nb_checker or not nb_checker.is_alive():
-        nb_checker = threading.Thread(name='agent_preflight_check', target=preflight_check,
-                                      args=(activation, infra, nuvlabox_info_updated_date,),
-                                      daemon=True)
-        nb_checker.start()
-    return nb_checker
+def wait_can_activate_or_user_info(activation):
+    with NuvlaBoxCommon.timeout(60, True):
+        while not stop_event.is_set():
+            can_activate, user_info = activation.activation_is_possible()
+            if can_activate or user_info:
+                break
+            stop_event.wait(timeout=3)
+    return can_activate, user_info
 
 
 def start_api_in_a_thread(telemetry, infra):
@@ -138,19 +182,29 @@ def start_api_in_a_thread(telemetry, infra):
     app.config["infra"] = infra
 
     api_thread = threading.Thread(name='agent_api', target=app.run,
-                                  kwargs={"host": "0.0.0.0", "port": "80"})
-    api_thread.daemon = True
+                                  kwargs={"host": "0.0.0.0", "port": "80"},
+                                  daemon=True)
     api_thread.start()
 
 
-def wait_can_activate_or_user_info(activation):
-    with NuvlaBoxCommon.timeout(60, True):
-        while not stop_event.is_set():
-            can_activate, user_info = activation.activation_is_possible()
-            if can_activate or user_info:
-               break
-            stop_event.wait(timeout=3)
-    return can_activate, user_info
+def start_telemetry_in_a_thread(telemetry_thread, telemetry):
+    if not telemetry_thread or not telemetry_thread.is_alive():
+        telemetry_thread = threading.Thread(name='agent_telemetry',
+                                            target=telemetry.update_status,
+                                            daemon=True)
+        telemetry_thread.start()
+        return telemetry_thread
+
+
+def handle_preflight_check_in_a_thread(preflight_check_thread, activation, infra):
+    if not preflight_check_thread or not preflight_check_thread.is_alive():
+        preflight_check_thread = threading.Thread(name='agent_preflight_check',
+                                                  target=preflight_check,
+                                                  args=(activation, infra,
+                                                        nuvlabox_info_updated_date,),
+                                                  daemon=True)
+        preflight_check_thread.start()
+    return preflight_check_thread
 
 
 def handle_jobs_in_a_thread(jobs, infra):
@@ -219,19 +273,28 @@ def main():
 
         telemetry = Telemetry(data_volume, nuvlabox_status_id)
         infra = Infrastructure(data_volume)
+        nuvlabox_common = NuvlaBoxCommon.NuvlaBoxCommon()
 
         infra.set_immutable_ssh_key()
 
         start_api_in_a_thread(telemetry, infra)
 
         logger.info("Starting telemetry...")
-        nb_checker = None
-        while not stop_event.is_set():
-            nb_checker = nb_check(nb_checker, activation, infra)
+        preflight_check_thread = None
+        telemetry_thread = None
+        past_status_time = ''
 
+        while not stop_event.is_set():
             start_cycle = time.time()
 
-            response = telemetry.update_status()
+            preflight_check_thread = handle_preflight_check_in_a_thread(preflight_check_thread,
+                                                                        activation, infra)
+
+            telemetry_thread = start_telemetry_in_a_thread(telemetry_thread, telemetry)
+
+            response, past_status_time = send_heartbeat(nuvlabox_common, telemetry,
+                                                        nuvlabox_status_id, past_status_time)
+
             jobs = response.get('jobs')
 
             handle_jobs_in_a_thread(jobs, infra)
