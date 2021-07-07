@@ -20,6 +20,7 @@ import threading
 import json
 import logging
 import agent.AgentApi as AgentApi
+import requests
 import time
 from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
@@ -266,6 +267,24 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     return r.data, status_current_time
 
 
+def wait_for_api_ready():
+    """
+    Waits in a loop for the API to be ready
+    :return:
+    """
+    while True:
+        try:
+            r = requests.get('http://localhost/api/healthcheck')
+            r.raise_for_status()
+            if r.status_code == 200:
+                break
+        except:
+            time.sleep(1)
+
+    logging.info('NuvlaBox Agent has been initialized.')
+    return
+
+
 if __name__ == "__main__":
     socket.setdefaulttimeout(network_timeout)
 
@@ -316,6 +335,10 @@ if __name__ == "__main__":
     past_status_time = ''
 
     # start telemetry
+    with NuvlaBoxCommon.timeout(10):
+        logging.info('Waiting for API to be ready...')
+        wait_for_api_ready()
+
     logging.info("Starting telemetry...")
     while True:
         if not can_continue:

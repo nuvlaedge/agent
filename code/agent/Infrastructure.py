@@ -248,8 +248,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         commission_payload = {}
         minimum_commission_payload = {}
-        with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
-            old_commission_payload = json.loads(r.read())
+        try:
+            with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
+                old_commission_payload = json.loads(r.read())
+        except FileNotFoundError:
+            old_commission_payload = {}
 
         cluster_join_tokens = self.container_runtime.get_join_tokens()
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')

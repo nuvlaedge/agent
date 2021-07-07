@@ -8,12 +8,8 @@ List of common attributes for all classes
 
 import os
 import json
-import fcntl
 import socket
-import struct
 import logging
-import argparse
-import sys
 import requests
 import signal
 import string
@@ -48,7 +44,7 @@ def timeout(time):
     try:
         yield
     except TimeoutError:
-        pass
+        raise
     finally:
         # Unregister the signal so it won't be triggered
         # if the timeout is not reached.
