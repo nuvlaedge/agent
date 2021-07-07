@@ -561,7 +561,7 @@ class KubernetesClient(ContainerRuntimeClient):
             dep_containers = dep.spec.template.spec.containers
             for container in dep_containers:
                 try:
-                    env = container.env
+                    env = container.env if container.env else []
                     for env_var in env:
                         if env_var.value_from:
                             # this is a templated var. No need to report it
