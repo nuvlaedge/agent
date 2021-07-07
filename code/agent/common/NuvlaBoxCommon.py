@@ -865,6 +865,7 @@ class DockerClient(ContainerRuntimeClient):
         for i, c_stat in enumerate(docker_stats):
             container = all_containers[i]
             container_stats = json.loads(next(c_stat))
+            collection_errors = []
 
             #
             # -----------------
@@ -883,7 +884,7 @@ class DockerClient(ContainerRuntimeClient):
                 if system_delta > 0.0 and online_cpus > -1:
                     cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
             except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
-                logging.error(f"Cannot get CPU stats for container {container.name}: {str(e)}. Moving on")
+                collection_errors.append("CPU")
                 cpu_percent = 0.0
 
             #
@@ -897,7 +898,7 @@ class DockerClient(ContainerRuntimeClient):
                 else:
                     mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
             except (IndexError, KeyError, ValueError) as e:
-                logging.error(f"Cannot get Mem stats for container {container.name}: {str(e)}. Moving on")
+                collection_errors.append("Mem")
                 mem_percent = mem_usage = mem_limit = 0.00
 
             #
@@ -918,16 +919,19 @@ class DockerClient(ContainerRuntimeClient):
                 try:
                     blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
                 except Exception as e:
-                    logging.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
+                    collection_errors.append("blk_in")
                     blk_in = 0.0
 
                 try:
                     blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
                 except Exception as e:
-                    logging.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
+                    collection_errors.append("blk_out")
                     blk_out = 0.0
             else:
                 blk_out = blk_in = 0.0
+
+            if collection_errors:
+                logging.error(f"Cannot get {','.join(collection_errors)} stats for container {container.name}")
 
             # -----------------
             out.append({

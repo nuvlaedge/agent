@@ -402,6 +402,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if self.installation_home:
             status_for_nuvla['host-user-home'] = self.installation_home
+        else:
+            status_for_nuvla['status-notes'].append("HOST_HOME is not defined - SSH key management won't be functional")
 
         if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
             # can only infer this for Docker, cause for K8s, the certificates might be on different folders,
