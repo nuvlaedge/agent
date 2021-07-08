@@ -1098,7 +1098,7 @@ class NuvlaBoxCommon():
 
         if ORCHESTRATOR == 'kubernetes':
             self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
-            self.mqtt_broker_host = f"data-gateway.{self.container_runtime.namespace}"
+            self.mqtt_broker_host = "localhost"
         else:
             self.mqtt_broker_host = "data-gateway"
             if os.path.exists(self.docker_socket_file):
