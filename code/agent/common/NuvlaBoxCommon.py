@@ -8,12 +8,8 @@ List of common attributes for all classes
 
 import os
 import json
-import fcntl
 import socket
-import struct
 import logging
-import argparse
-import sys
 import requests
 import signal
 import string
@@ -34,57 +30,6 @@ else:
     ORCHESTRATOR_COE = 'swarm'
 
 
-def get_mac_address(ifname, separator=':'):
-    """ Gets the MAC address for interface ifname """
-
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        info = fcntl.ioctl(s.fileno(), 0x8927, struct.pack('256s', bytes(ifname, 'utf-8')[:15]))
-        mac = ':'.join('%02x' % b for b in info[18:24])
-        return mac
-    except struct.error:
-        logging.error("Could not find the device's MAC address from the network interface {} in {}".format(ifname, s))
-        raise
-    except TypeError:
-        logging.error("The MAC address could not be parsed")
-        raise
-
-
-def get_log_level(args):
-    """ Sets log level based on input args """
-
-    if args.debug:
-        return logging.DEBUG
-    elif args.quiet:
-        return logging.CRITICAL
-    return logging.INFO
-
-
-def logger(log_level):
-    """ Configures logging """
-
-    root_logger = logging.getLogger()
-    root_logger.setLevel(log_level)
-
-    stdout_handler = logging.StreamHandler(sys.stdout)
-    root_logger.addHandler(stdout_handler)
-
-    return root_logger
-
-
-def arguments():
-    """ Builds a generic argparse
-
-    :return: parser
-    """
-
-    parser = argparse.ArgumentParser(description='NuvlaBox Agent')
-    parser.add_argument('-d', '--debug', dest='debug', default=False, action='store_true')
-    parser.add_argument('-q', '--quiet', dest='quiet', default=False, action='store_true')
-
-    return parser
-
-
 def raise_timeout(signum, frame):
     raise TimeoutError
 
@@ -99,7 +44,7 @@ def timeout(time):
     try:
         yield
     except TimeoutError:
-        pass
+        raise
     finally:
         # Unregister the signal so it won't be triggered
         # if the timeout is not reached.
@@ -339,16 +284,16 @@ class KubernetesClient(ContainerRuntimeClient):
         if self.host_node_name:
             this_node = self.client.read_node(self.host_node_name)
             try:
-                return this_node.status.node_info
+                return this_node
             except AttributeError:
                 logging.warning(f'Cannot infer node information for node "{self.host_node_name}"')
 
         return None
 
     def get_host_os(self):
-        node_info = self.get_node_info()
-        if node_info:
-            return f"{node_info.os_image} {node_info.kernel_version}"
+        node = self.get_node_info()
+        if node:
+            return f"{node.status.node_info.os_image} {node.status.node_info.kernel_version}"
 
         return None
 
@@ -369,11 +314,12 @@ class KubernetesClient(ContainerRuntimeClient):
         managers = []
         workers = []
         for n in nodes:
+            workers.append(n.metadata.name)
             for label in n.metadata.labels:
                 if 'node-role' in label and 'master' in label:
+                    workers.pop()
                     managers.append(n.metadata.name)
-                else:
-                    workers.append(n.metadata.name)
+                    break
 
         return {
             'cluster-id': cluster_id,
@@ -612,7 +558,7 @@ class KubernetesClient(ContainerRuntimeClient):
             dep_containers = dep.spec.template.spec.containers
             for container in dep_containers:
                 try:
-                    env = container.env
+                    env = container.env if container.env else []
                     for env_var in env:
                         if env_var.value_from:
                             # this is a templated var. No need to report it
@@ -916,6 +862,7 @@ class DockerClient(ContainerRuntimeClient):
         for i, c_stat in enumerate(docker_stats):
             container = all_containers[i]
             container_stats = json.loads(next(c_stat))
+            collection_errors = []
 
             #
             # -----------------
@@ -934,7 +881,7 @@ class DockerClient(ContainerRuntimeClient):
                 if system_delta > 0.0 and online_cpus > -1:
                     cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
             except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
-                logging.error(f"Cannot get CPU stats for container {container.name}: {str(e)}. Moving on")
+                collection_errors.append("CPU")
                 cpu_percent = 0.0
 
             #
@@ -948,7 +895,7 @@ class DockerClient(ContainerRuntimeClient):
                 else:
                     mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
             except (IndexError, KeyError, ValueError) as e:
-                logging.error(f"Cannot get Mem stats for container {container.name}: {str(e)}. Moving on")
+                collection_errors.append("Mem")
                 mem_percent = mem_usage = mem_limit = 0.00
 
             #
@@ -969,16 +916,19 @@ class DockerClient(ContainerRuntimeClient):
                 try:
                     blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
                 except Exception as e:
-                    logging.error(f"Cannot get blk_in stats for container {container.name}: {str(e)}. Moving on")
+                    collection_errors.append("blk_in")
                     blk_in = 0.0
 
                 try:
                     blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
                 except Exception as e:
-                    logging.error(f"Cannot get blk_out stats for container {container.name}: {str(e)}. Moving on")
+                    collection_errors.append("blk_out")
                     blk_out = 0.0
             else:
                 blk_out = blk_in = 0.0
+
+            if collection_errors:
+                logging.error(f"Cannot get {','.join(collection_errors)} stats for container {container.name}")
 
             # -----------------
             out.append({
@@ -1106,12 +1056,6 @@ class NuvlaBoxCommon():
         else:
             self.installation_home = os.environ.get('HOST_HOME')
 
-            if not self.installation_home:
-                logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
-            else:
-                with open(self.host_user_home_file, 'w') as userhome:
-                    userhome.write(self.installation_home)
-
         nuvla_endpoint_raw = None
         nuvla_endpoint_insecure_raw = None
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
@@ -1154,7 +1098,9 @@ class NuvlaBoxCommon():
 
         if ORCHESTRATOR == 'kubernetes':
             self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
+            self.mqtt_broker_host = f"data-gateway.{self.container_runtime.namespace}"
         else:
+            self.mqtt_broker_host = "data-gateway"
             if os.path.exists(self.docker_socket_file):
                 self.container_runtime = DockerClient(self.hostfs, self.installation_home)
             else:
@@ -1186,7 +1132,6 @@ class NuvlaBoxCommon():
         self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
         self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
         self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
-        self.mqtt_broker_host = "data-gateway"
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"

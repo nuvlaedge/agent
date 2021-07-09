@@ -184,6 +184,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.exception("Connection to NuvlaBox MQTT broker refused")
             self.mqtt_telemetry.disconnect()
             return
+        except socket.timeout:
+            logging.error(f'Timed out while trying to send telemetry to Data Gateway at {self.mqtt_broker_host}')
+            return
         except socket.gaierror:
             logging.exception("The NuvlaBox MQTT broker is not reachable...trying again later")
             self.mqtt_telemetry.disconnect()
@@ -402,6 +405,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if self.installation_home:
             status_for_nuvla['host-user-home'] = self.installation_home
+        else:
+            status_for_nuvla['status-notes'].append("HOST_HOME not defined - SSH key management will not be functional")
 
         if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
             # can only infer this for Docker, cause for K8s, the certificates might be on different folders,

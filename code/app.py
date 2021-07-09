@@ -15,13 +15,13 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
-import datetime
 import socket
 import threading
 import json
+import logging
 import agent.AgentApi as AgentApi
+import requests
 import time
-import os
 from flask import Flask, request, jsonify, Response
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
@@ -37,16 +37,6 @@ app = Flask(__name__)
 data_volume = "/srv/nuvlabox/shared"
 default_log_filename = "agent.log"
 network_timeout = 10
-
-
-def init():
-    """ Initialize the application, including argparsing """
-
-    params = NuvlaBoxCommon.arguments().parse_args()
-
-    logger = NuvlaBoxCommon.logger(NuvlaBoxCommon.get_log_level(params))
-
-    return logger, params
 
 
 def manage_pull_jobs(job_list, job_image_name):
@@ -271,15 +261,31 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
                                    data=status,
                                    select=delete_attributes)
     except:
-        logging.exception("Unable to update NuvlaBox status in Nuvla")
-        return {}, status_current_time
+        logging.error("Unable to update NuvlaBox status in Nuvla")
+        raise
 
     return r.data, status_current_time
 
 
-if __name__ == "__main__":
-    logging, args = init()
+def wait_for_api_ready():
+    """
+    Waits in a loop for the API to be ready
+    :return:
+    """
+    while True:
+        try:
+            r = requests.get('http://localhost/api/healthcheck')
+            r.raise_for_status()
+            if r.status_code == 200:
+                break
+        except:
+            time.sleep(1)
 
+    logging.info('NuvlaBox Agent has been initialized.')
+    return
+
+
+if __name__ == "__main__":
     socket.setdefaulttimeout(network_timeout)
 
     e = Event()
@@ -304,7 +310,12 @@ if __name__ == "__main__":
     infra = Infrastructure(data_volume)
     NB = NuvlaBoxCommon.NuvlaBoxCommon()
 
-    infra.set_immutable_ssh_key()
+    if not infra.installation_home:
+        logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
+    else:
+        with open(infra.host_user_home_file, 'w') as userhome:
+            userhome.write(infra.installation_home)
+        infra.set_immutable_ssh_key()
 
     nuvlabox_info_updated_date = ''
     refresh_interval = 5
@@ -324,6 +335,10 @@ if __name__ == "__main__":
     past_status_time = ''
 
     # start telemetry
+    with NuvlaBoxCommon.timeout(10):
+        logging.info('Waiting for API to be ready...')
+        wait_for_api_ready()
+
     logging.info("Starting telemetry...")
     while True:
         if not can_continue:

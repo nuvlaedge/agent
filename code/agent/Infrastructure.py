@@ -248,19 +248,25 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         commission_payload = {}
         minimum_commission_payload = {}
-        with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
-            old_commission_payload = json.loads(r.read())
+        try:
+            with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
+                old_commission_payload = json.loads(r.read())
+        except FileNotFoundError:
+            old_commission_payload = {}
 
         cluster_join_tokens = self.container_runtime.get_join_tokens()
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
-        commission_payload.update(cluster_info)
-        for cluster_key, v in cluster_info.items():
-            # if some cluster info is going for commissioning, then pass all of it anyway
-            if old_commission_payload.get(cluster_key) == v:
-                continue
+        if self.container_runtime.get_node_id(self.container_runtime.get_node_info()) in \
+                cluster_info['cluster-managers']:
+            # we can only commission the cluster if the underlying node is a manager
+            commission_payload.update(cluster_info)
+            for cluster_key, v in cluster_info.items():
+                # if some cluster info is going for commissioning, then pass all of it anyway
+                if old_commission_payload.get(cluster_key) == v:
+                    continue
 
-            minimum_commission_payload.update(cluster_info)
+                minimum_commission_payload.update(cluster_info)
 
         self.get_nuvlabox_capabilities(commission_payload)
         if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])):
