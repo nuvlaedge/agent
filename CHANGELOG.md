@@ -1,4 +1,15 @@
 # Changelog
+## [2.2.0] - 2021-07-26
+### Added 
+ - add support for execution in Kubernetes 
+ - separation of concerns on telemetry and heartbeat mechanisms
+### Changed
+ - refactor code
+ - simplify logging
+ - parallelize non-critical functions
+ - fix cluster commissioning
+ - catch MQTT exceptions
+ - improve complex parsing of string fields in telemetry
 ## [2.1.0] - 2021-06-11
 ### Added 
  - add temperature metrics
