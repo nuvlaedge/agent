@@ -258,7 +258,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
         if self.container_runtime.get_node_id(self.container_runtime.get_node_info()) in \
-                cluster_info['cluster-managers']:
+                cluster_info.get('cluster-managers', []):
             # we can only commission the cluster if the underlying node is a manager
             commission_payload.update(cluster_info)
             for cluster_key, v in cluster_info.items():
