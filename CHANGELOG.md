@@ -1,4 +1,8 @@
 # Changelog
+## [2.2.1] - 2021-07-27
+### Added
+### Changed
+ - sync IS commissioning with capabilities commissioning
 ## [2.2.0] - 2021-07-26
 ### Added 
  - add support for execution in Kubernetes 
