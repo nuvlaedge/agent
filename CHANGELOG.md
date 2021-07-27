@@ -1,4 +1,8 @@
 # Changelog
+## [2.2.2] - 2021-07-27
+### Added
+### Changed
+ - fix KeyError for commissioning of unclustered devices
 ## [2.2.1] - 2021-07-27
 ### Added
 ### Changed
