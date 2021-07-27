@@ -292,25 +292,25 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         node_role = self.get_node_role_from_status()
         delete_attrs = []
 
+        infra_service = {}
         if NuvlaBoxCommon.ORCHESTRATOR == 'kubernetes':
-            k8s_is = {}
             if api_endpoint:
-                k8s_is["kubernetes-endpoint"] = api_endpoint
+                infra_service["kubernetes-endpoint"] = api_endpoint
 
                 if tls_keys:
-                    k8s_is["kubernetes-client-ca"] = tls_keys[0]
-                    k8s_is["kubernetes-client-cert"] = tls_keys[1]
-                    k8s_is["kubernetes-client-key"] = tls_keys[2]
+                    infra_service["kubernetes-client-ca"] = tls_keys[0]
+                    infra_service["kubernetes-client-cert"] = tls_keys[1]
+                    infra_service["kubernetes-client-key"] = tls_keys[2]
 
                 if not old_commission_payload.get("kubernetes-endpoint"):
                     # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-                    minimum_commission_payload.update(k8s_is)
+                    minimum_commission_payload.update(infra_service)
                 else:
-                    for k, v in k8s_is.items():
+                    for k, v in infra_service.items():
                         if v != old_commission_payload.get(k):
                             minimum_commission_payload[k] = v
 
-            commission_payload.update(k8s_is)
+            commission_payload.update(infra_service)
 
             # TODO: is this is a k8s worker, something similar should happen
             # if node_role and node_role.lower() == 'worker':
@@ -330,28 +330,26 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 if cluster_join_tokens[1] != old_commission_payload.get('swarm-token-worker'):
                     minimum_commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
 
-            docker_is = {}
-
             if not container_api_port:
                 container_api_port = self.compute_api_port
 
             if api_endpoint and self.compute_api_is_running(container_api_port):
-                docker_is["swarm-endpoint"] = api_endpoint
+                infra_service["swarm-endpoint"] = api_endpoint
 
                 if tls_keys:
-                    docker_is["swarm-client-ca"] = tls_keys[0]
-                    docker_is["swarm-client-cert"] = tls_keys[1]
-                    docker_is["swarm-client-key"] = tls_keys[2]
+                    infra_service["swarm-client-ca"] = tls_keys[0]
+                    infra_service["swarm-client-cert"] = tls_keys[1]
+                    infra_service["swarm-client-key"] = tls_keys[2]
 
                 if not old_commission_payload.get("swarm-endpoint"):
                     # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-                    minimum_commission_payload.update(docker_is)
+                    minimum_commission_payload.update(infra_service)
                 else:
-                    for k, v in docker_is.items():
+                    for k, v in infra_service.items():
                         if v != old_commission_payload.get(k):
                             minimum_commission_payload[k] = v
 
-            commission_payload.update(docker_is)
+            commission_payload.update(infra_service)
 
             if node_role and node_role.lower() == 'worker':
                 delete_attrs = ['swarm-token-manager',
@@ -360,6 +358,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                                 'swarm-client-ca',
                                 'swarm-client-cert',
                                 'swarm-endpoint']
+
+        if 'capabilities' not in minimum_commission_payload and \
+                any([k in minimum_commission_payload for k in infra_service]) and \
+                commission_payload.get('capabilities', []):
+            # add capabilities no matter what, cause IS is going to be commissioned
+            minimum_commission_payload['capabilities'] = commission_payload['capabilities']
 
         # remove the keys from the commission payload, to avoid confusion on the server side
         if delete_attrs:
