@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.0] - 2021-08-02
+### Added 
+ - support for NBE revival from API key
+### Changed
 ## [2.2.2] - 2021-07-27
 ### Added
 ### Changed
