@@ -49,7 +49,21 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.info("NuvlaBox credential: {}".format(self.user_info["api-key"]))
             return False, self.user_info
         except FileNotFoundError:
-            # file doesn't exist yet, so it was not activated in the past
+            # file doesn't exist yet,
+            # But maybe the API was provided via env?
+            api_key, api_secret = self.get_api_keys()
+            if api_key and api_secret:
+                logging.info(f'Found API key set in environment, with key value {api_key}')
+                self.user_info = {
+                    "api-key": api_key,
+                    "secret-key": api_secret
+                }
+                
+                with open(self.activation_flag, 'w') as a:
+                    a.write(json.dumps(self.user_info))
+
+                return False, self.user_info
+            
             return True, self.user_info
 
     def activate(self):
@@ -69,12 +83,6 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         # Flags that the activation has been done
         with open(self.activation_flag, 'w') as a:
             a.write(json.dumps(self.user_info))
-
-        # Also store the Nuvla connection details for future restarts
-        with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
-            conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n\
-{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
-            nuvla_conf.write(conf)
 
         return self.user_info
 

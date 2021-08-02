@@ -64,6 +64,7 @@ class ContainerRuntimeClient(ABC):
         self.job_engine_lite_image = None
         self.vpn_client_component = 'vpn-client'
         self.host_home = host_home
+        self.ignore_env_variables = ['NUVLABOX_API_KEY', 'NUVLABOX_API_SECRET']
 
     @abstractmethod
     def get_node_info(self):
@@ -957,7 +958,13 @@ class DockerClient(ContainerRuntimeClient):
         config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
         working_dir = myself.labels['com.docker.compose.project.working_dir']
         project_name = myself.labels['com.docker.compose.project']
-        environment = myself.attrs.get('Config', {}).get('Env', [])
+        environment = [] 
+        for env_var in myself.attrs.get('Config', {}).get('Env', []):
+            if env_var.split('=')[0] in self.ignore_env_variables:
+                continue
+            
+            environment.append(env_var)
+            
         for container in nuvlabox_containers:
             c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
@@ -1095,6 +1102,12 @@ class NuvlaBoxCommon():
             nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
 
         self.nuvla_endpoint_insecure = nuvla_endpoint_insecure_raw
+        
+        # Also store the Nuvla connection details for future restarts
+        if not os.path.exists(self.nuvlabox_nuvla_configuration):
+            with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
+                conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
+                nuvla_conf.write(conf)
 
         if ORCHESTRATOR == 'kubernetes':
             self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
@@ -1192,6 +1205,17 @@ class NuvlaBoxCommon():
 
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
+    @staticmethod
+    def get_api_keys():                
+        nuvlabox_api_key = os.environ.get("NUVLABOX_API_KEY")
+        nuvlabox_api_secret = os.environ.get("NUVLABOX_API_SECRET")
+        if nuvlabox_api_key:
+            del os.environ["NUVLABOX_API_KEY"]
+        if nuvlabox_api_secret:
+            del os.environ["NUVLABOX_API_SECRET"]
+            
+        return nuvlabox_api_key, nuvlabox_api_secret
+        
     def api(self):
         """ Returns an Api object """
 
@@ -1359,7 +1383,8 @@ ${vpn_endpoints_mapped}
 
         :return:
         """
-
+        logging.info(f'Starting VPN commissioning...')
+        
         vpn_csr, vpn_key = self.prepare_vpn_certificates()
 
         if not vpn_key or not vpn_csr:

@@ -73,7 +73,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, nuvlabox_status_id):
+    def __init__(self, data_volume, nuvlabox_status_id, enable_container_monitoring=True):
         """ Constructs an Telemetry object, with a status placeholder """
 
         # self.data_volume = data_volume
@@ -84,11 +84,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.nb_status_id = nuvlabox_status_id
         self.first_net_stats = {}
         self.container_stats_queue = queue.Queue()
-        self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-                                                        self.container_runtime,
-                                                        self.container_stats_json_file)
-        self.container_stats_monitor.setDaemon(True)
-        self.container_stats_monitor.start()
+        self.enable_container_monitoring = enable_container_monitoring
+        if enable_container_monitoring:
+            self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
+                                                            self.container_runtime,
+                                                            self.container_stats_json_file)
+            self.container_stats_monitor.setDaemon(True)
+            self.container_stats_monitor.start()
 
         self.status = {'resources': None,
                        'status': None,
@@ -115,7 +117,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'orchestrator': None,
                        'cluster-join-address': None,
                        'temperatures': None,
-                       'container-plugins': None,
+                       'docker-plugins': None,
                        'kubelet-version': None
                        }
 
@@ -322,7 +324,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             container_stats = self.container_stats_queue.get(block=False)
         except queue.Empty:
-            if not self.container_stats_monitor.is_alive():
+            if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
                 self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
                                                                 self.container_runtime,
                                                                 self.container_stats_json_file)
@@ -343,7 +345,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
             "status-notes": operational_status_notes,
-            "container-plugins": self.container_runtime.get_container_plugins()
+            "docker-plugins": self.container_runtime.get_container_plugins()
         }
 
         docker_server_version = self.get_docker_server_version()

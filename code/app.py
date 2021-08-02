@@ -19,6 +19,7 @@ import socket
 import threading
 import json
 import logging
+import sys
 import agent.AgentApi as AgentApi
 import requests
 import time
@@ -32,6 +33,8 @@ from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
 __email__ = "support@sixsq.com"
+
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 app = Flask(__name__)
 data_volume = "/srv/nuvlabox/shared"

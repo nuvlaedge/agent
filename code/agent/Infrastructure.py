@@ -35,7 +35,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
         Thread.__init__(self, daemon=True)
-        self.telemetry_instance = Telemetry(data_volume, None)
+        self.telemetry_instance = Telemetry(data_volume, None, enable_container_monitoring=False)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
@@ -434,7 +434,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
             # IF there is a VPN credential in Nuvla:
             #  - if we also have one locally, BUT is different, then recommission
-            if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
+            if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0 and path.exists(self.vpn_client_conf_file):
                 with open(self.vpn_credential) as vpn_local:
                     local_vpn_credential = json.loads(vpn_local.read())
 
@@ -457,7 +457,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                     vpn_client_running = False
                     logging.info("VPN client is not running")
 
-                if vpn_client_running:
+                if vpn_client_running and self.telemetry_instance.get_vpn_ip():
                     # just save a copy of the VPN credential locally
                     self.write_file(self.vpn_credential, vpn_credential_nuvla, is_json=True)
                     logging.info("VPN client is now running. Saving VPN credential locally at {}"
@@ -465,7 +465,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 else:
                     # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
                     # maybe something went wrong, just recommission
-                    logging.error("Trying to fix local VPN client by recommissioning...")
+                    logging.warning("The local VPN client is either not running or missing its configuration. Forcing VPN recommissioning...")
                     self.commission_vpn()
 
     def set_immutable_ssh_key(self):
