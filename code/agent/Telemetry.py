@@ -117,7 +117,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'orchestrator': None,
                        'cluster-join-address': None,
                        'temperatures': None,
-                       'docker-plugins': None,
+                       'container-plugins': None,
                        'kubelet-version': None
                        }
 
@@ -345,7 +345,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": operational_status,
             "status-notes": operational_status_notes,
-            "docker-plugins": self.container_runtime.get_container_plugins()
+            "container-plugins": self.container_runtime.get_container_plugins()
         }
 
         docker_server_version = self.get_docker_server_version()
