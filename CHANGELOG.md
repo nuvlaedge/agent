@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.1] - 2021-08-04
+### Added
+### Changed
+ - updated nuvlabox-status attribute name for container-plugins
 ## [2.3.0] - 2021-08-02
 ### Added 
  - support for NBE revival from API key
