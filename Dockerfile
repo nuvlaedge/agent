@@ -1,4 +1,4 @@
-FROM python:3.7-slim AS psutil-builder
+FROM python:3.8-slim AS psutil-builder
 
 RUN apt update && apt install -y gcc
 
@@ -9,7 +9,7 @@ RUN pip install -r requirements.base.txt
 
 # ---
 
-FROM python:3.7-slim
+FROM python:3.8-slim
 
 ARG GIT_BRANCH
 ARG GIT_COMMIT_ID
@@ -23,7 +23,7 @@ LABEL git.build.time=${GIT_BUILD_TIME}
 LABEL git.run.number=${GITHUB_RUN_NUMBER}
 LABEL git.run.id=${TRAVIS_BUILD_WEB_URL}
 
-COPY --from=psutil-builder /usr/local/lib/python3.7/site-packages /usr/local/lib/python3.7/site-packages
+COPY --from=psutil-builder /usr/local/lib/python3.8/site-packages /usr/local/lib/python3.8/site-packages
 
 RUN apt update && apt install -y procps curl mosquitto-clients openssl
 
