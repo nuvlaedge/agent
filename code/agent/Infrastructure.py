@@ -39,7 +39,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
-        self.vpn_commission_attempts = 0
         self.refresh_period = refresh_period
 
     @staticmethod
@@ -414,19 +413,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if not credential_id:
             # If cannot find a VPN credential in Nuvla, then it is either in the process of being created
             # or it has been removed from Nuvla
-            logging.warning("VPN server is set but cannot find VPN credential in Nuvla")
+            logging.info("VPN server is set but cannot find VPN credential in Nuvla. Commissioning VPN...")
 
-            # IF there isn't yet a VPN credential stored locally, then maybe the NB is still commissioning for
-            # the 1st time
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
-                logging.warning("VPN credential exists locally, so it was removed from Nuvla. Recommissioning...")
-            elif self.vpn_commission_attempts > 2:
-                logging.warning("Waiting for VPN commissioning for too long...forcing new recommission")
-                self.vpn_commission_attempts = 0
-            else:
-                logging.info("NuvlaBox is in the process of commissioning, so VPN credential should get here soon")
-                self.vpn_commission_attempts += 1
-                return None
+                logging.warning("NOTE: VPN credential exists locally, so it was removed from Nuvla")
 
             self.commission_vpn()
         else:
