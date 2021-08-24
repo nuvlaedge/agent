@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.2] - 2021-08-24
+### Added
+### Changed
+ - speed up VPN commissioning
 ## [2.3.1] - 2021-08-04
 ### Added
 ### Changed
