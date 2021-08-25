@@ -1,5 +1,5 @@
 # Changelog
-## [2.3.2] - 2021-08-24
+## [2.3.2] - 2021-08-25
 ### Added
 ### Changed
  - speed up VPN commissioning
@@ -8,7 +8,7 @@
 ### Changed
  - updated nuvlabox-status attribute name for container-plugins
 ## [2.3.0] - 2021-08-02
-### Added 
+### Added
  - support for NBE revival from API key
 ### Changed
 ## [2.2.2] - 2021-07-27
@@ -20,8 +20,8 @@
 ### Changed
  - sync IS commissioning with capabilities commissioning
 ## [2.2.0] - 2021-07-26
-### Added 
- - add support for execution in Kubernetes 
+### Added
+ - add support for execution in Kubernetes
  - separation of concerns on telemetry and heartbeat mechanisms
 ### Changed
  - refactor code
@@ -31,17 +31,17 @@
  - catch MQTT exceptions
  - improve complex parsing of string fields in telemetry
 ## [2.1.0] - 2021-06-11
-### Added 
+### Added
  - add temperature metrics
 ### Changed
  - fix cluster commissioning params
 ## [2.0.1] - 2021-05-10
-### Added 
+### Added
  - preemptive check for NuvlaBox status before running telemetry cycle
 ### Changed
 ## [2.0.0] - 2021-04-30
-### Added 
- - support for clustering 
+### Added
+ - support for clustering
  - VPN credential management
 ### Changed
  - extended telemetry
@@ -50,20 +50,20 @@
 ### Changed
  - handle network counters to count for NB lifetime only
 ## [1.15.1] - 2021-02-12
-### Added 
+### Added
  - mechanism to cope with duplicated peripherals
 ### Changed
 ## [1.15.0] - 2021-02-08
-### Added 
+### Added
  - support for pull-mode jobs
 ### Changed
 ## [1.14.1] - 2021-01-13
-### Added 
+### Added
  - expand API
 ### Changed
 ## [1.14.0] - 2021-01-05
-### Added 
- - publish API on localhost only 
+### Added
+ - publish API on localhost only
  - add PUT method for peripherals
 ### Changed
 ## [1.13.2] - 2020-12-09
@@ -75,14 +75,14 @@
         ### Changed
                   - re-structure power consumption information
 ## [1.13.0] - 2020-12-04
-        ### Added 
-                  - include installation parameters in telemetry 
+        ### Added
+                  - include installation parameters in telemetry
                   - persist critical environment variables over restarts and reboots
         ### Changed
                   - minor bug fixes
                   - improve logging
 ## [1.12.0] - 2020-11-27
-        ### Added 
+        ### Added
                   - detect and report Kubernetes clusters running on the host
         ### Changed
 ## [1.11.1] - 2020-11-26
@@ -90,32 +90,32 @@
         ### Changed
                   - report disk telemetry for all mounted disks
 ## [1.11.0] - 2020-11-20
-### Added 
+### Added
 - add power consumption information to official telemetry and data gateway
 ### Changed
 ## [1.10.1] - 2020-11-20
-### Added 
+### Added
 - add telemetry for power consumption
 ### Changed
 ## [1.10.0] - 2020-11-02
-### Added 
+### Added
 - support for vulnerability reporting in telemetry
 ### Changed
 ## [1.9.1] - 2020-10-02
-### Added 
+### Added
 - ONBUILD SixSq license dump
 ### Changed
 ## [1.9.0] - 2020-09-30
-### Added 
+### Added
 - automatic IP-based geolocation retrieval
 ### Changed
 - fixed consistency on nuvlabox status persistency
 ## [1.8.0] - 2020-09-28
-### Added 
+### Added
 - report enabled Docker Plugins as part of the telemetry
 ### Changed
 ## [1.7.0] - 2020-08-12
-### Added 
+### Added
 - nuvlabox-engine-version information is now part of telemetry
 ### Changed
 ## [1.6.1] - 2020-08-10
@@ -123,7 +123,7 @@
 ### Changed
 - removed file logging
 ## [1.6.0] - 2020-08-07
-### Added 
+### Added
 - GPIO telemetry when available (for ARM* devices only)
 ### Changed
 ## [1.5.1] - 2020-04-16
@@ -131,7 +131,7 @@
 ### Changed
 - sanitize HTTP response whenever the request payload is malformed
 ## [1.5.0] - 2020-04-15
-### Added 
+### Added
 - API for managing NuvlaBox peripherals
 ### Changed
 - API port to 80
@@ -147,7 +147,7 @@
 - re-formatted nuvlabox-status payload
 - expanded the telemetry metrics that are sent to Nuvla
 ## [1.3.2] - 2020-02-18
-### Added 
+### Added
 - publish nuvlabox api endpoint to Nuvla
 ### Changed
 ## [1.3.1] - 2020-02-18
@@ -155,13 +155,13 @@
 ### Changed
 - fixed re-commissioning when it fails
 ## [1.3.0] - 2020-02-14
-### Added 
-- added host metrics to telemetry 
+### Added
+- added host metrics to telemetry
 - now collecting network metrics as well
 ### Changed
 - expanded metric collection document for sharing with other NuvlaBox components
 ## [1.2.3] - 2020-02-05
-### Added 
+### Added
 - automatic tagging in Nuvla, based on Docker node labels
 ### Changed
 - minimized commissioning payload
@@ -171,17 +171,17 @@
 - fixed bootstrap File Error issue
 - mqtt messaging schema
 ## [1.2.1] - 2020-01-28
-### Added 
+### Added
 - publishes telemetry to internal nuvlabox mosquitto broker
 ### Changed
 - fixed potential bug when opening context file during restart
 ## [1.2.0] - 2019-12-18
-### Added 
+### Added
 - watchdog for VPN credential
 ### Changed
 - re-structured common libraries
 ## [1.1.0] - 2019-11-19
-### Added 
+### Added
 - added VPN commissioning
 ### Changed
 - changed source of IP retrieval
@@ -196,11 +196,11 @@
 ### Changed
 - default IP address is now retrieved from node itself and not from list of Swarm nodes
 ## [1.0.1] - 2019-07-30
-### Added 
+### Added
 - persistence for the env variable NUVLABOX_UUID upon service restarts and updates
 ### Changed
 ## [1.0.0] - 2019-07-03
-### Added 
+### Added
 - added resilience to the handling of environment variables
 ### Changed
 - removed usb peripherals from telemetry
@@ -243,7 +243,7 @@
   - patch broken release
 
 ## [0.1.0] - 2019-05-17
-### Added 
+### Added
   - added state api, schema fixes and coordination with system manager
 ### Changed
 
@@ -251,4 +251,4 @@
 
 
 
- 
+
