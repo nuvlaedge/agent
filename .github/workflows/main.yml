@@ -29,6 +29,18 @@ jobs:
           DOCKER_PASSWORD: ${{ secrets.SIXSQ_DOCKER_PASSWORD }}
         run: ./container-release.sh
 
+      - name: Get component dependencies
+        run: ./get-dependencies-tree.sh
+
+      - name: Keep list of dependencies as an artifact
+        uses: actions/upload-artifact@v2
+        if: ${{ success() }}
+        with:
+          name: dependencies
+          path: |
+            dependencies-tree.png
+            dependencies-licenses.txt
+
   notify:
     if: always()
     name: Post Workflow Status To Slack
