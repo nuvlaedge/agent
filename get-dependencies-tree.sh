@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cat >get-deps.sh <<EOF
+cat>get-deps.sh <<EOF
 #!/bin/sh
 
 pip install pipdeptree pip-licenses graphviz
@@ -17,6 +17,6 @@ chmod +x get-deps.sh
 
 docker build . -t local_test_image
 
-docker run --entrypoint /bin/sh -v ./:/agent --workdir /agent local_test_image /agent/get-dependencies-tree.sh
+docker run --entrypoint /bin/sh -v $(pwd):/deptree --workdir /deptree local_test_image /deptree/get-deps.sh
 
 rm get-deps.sh
