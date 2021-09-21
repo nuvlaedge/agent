@@ -24,7 +24,8 @@ from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from pydoc import locate
-from threading import Thread
+from queue import Queue
+from threading import Thread, RLock
 
 
 class ContainerMonitoring(Thread):
@@ -169,6 +170,19 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # (to avoid network jittering and 3rd party service spamming)
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
+
+        self._jobs = []
+        self._jobs_lock = RLock()
+
+    @property
+    def jobs(self):
+        with self._jobs_lock:
+            return self._jobs
+
+    @jobs.setter
+    def jobs(self, jobs):
+        with self._jobs_lock:
+            self._jobs = jobs
 
     def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
@@ -931,7 +945,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     delete_attributes.append(key)
         return minimal_update, delete_attributes
 
-    def update_status(self):
+    def update_status(self, nb_instance, nuvlabox_status_id):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
         new_status, all_status = self.get_status()
@@ -948,6 +962,19 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             nbsf.write(json.dumps(all_status))
 
         self.status.update(new_status)
+
+        logging.info('Refresh status: %s' % updated_status)
+        try:
+            r = nb_instance.api().edit(nuvlabox_status_id,
+                                       data=updated_status,
+                                       select=delete_attributes)
+        except:
+            logging.error("Unable to update NuvlaBox status in Nuvla")
+            raise
+
+        jobs = r.data.get('jobs')
+        if isinstance(jobs, list) and jobs:
+            self.jobs = jobs
 
         return
 
