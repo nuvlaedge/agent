@@ -24,7 +24,6 @@ from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from pydoc import locate
-from queue import Queue
 from threading import Thread, RLock
 
 
@@ -84,6 +83,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
         self.first_net_stats = {}
+        self.status_queue = queue.Queue(maxsize=1)
         self.container_stats_queue = queue.Queue()
         self.enable_container_monitoring = enable_container_monitoring
         if enable_container_monitoring:
@@ -121,9 +121,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'container-plugins': None,
                        'kubelet-version': None
                        }
-
-        self.status_for_nuvla = {}
-        self.status_delete_attrs_in_nuvla = []
 
         self.mqtt_telemetry = mqtt.Client()
 
@@ -945,7 +942,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     delete_attributes.append(key)
         return minimal_update, delete_attributes
 
-    def update_status(self, nb_instance, nuvlabox_status_id):
+    def update_status(self):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
         new_status, all_status = self.get_status()
@@ -954,28 +951,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
 
-        self.status_for_nuvla = updated_status
-        self.status_delete_attrs_in_nuvla = delete_attributes
-
         # write all status into the shared volume for the other components to re-use if necessary
         with open(self.nuvlabox_status_file, 'w') as nbsf:
             nbsf.write(json.dumps(all_status))
 
         self.status.update(new_status)
 
-        logging.info('Refresh status: %s' % updated_status)
-        try:
-            r = nb_instance.api().edit(nuvlabox_status_id,
-                                       data=updated_status,
-                                       select=delete_attributes)
-        except:
-            logging.error("Unable to update NuvlaBox status in Nuvla")
-            raise
-
-        jobs = r.data.get('jobs')
-        if isinstance(jobs, list) and jobs:
-            self.jobs = jobs
-
+        self.status_queue.put_nowait({'status': new_status,
+                                      'updated_status': updated_status,
+                                      'delete_attributes': delete_attributes})
         return
 
     def update_operational_status(self, status="RUNNING", status_log=None):

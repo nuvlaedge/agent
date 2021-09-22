@@ -240,29 +240,36 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     :return: (Nuvla.api response, current heartbeat timestamp)
     """
 
-    status = {}
-    telemetry_status = copy.deepcopy(nb_telemetry.status_for_nuvla)
-    status_current_time = telemetry_status.get('current-time', '')
-
+    telemetry_info = nb_telemetry.status_queue.get_nowait() or {}
+    status = telemetry_info.get('updated_status', {})
+    status_current_time = status.get('current-time', '')
+    delete_attributes = []
     if not status_current_time:
         status = {'status-notes': ['NuvlaBox Telemetry is starting']}
+        nb_telemetry.status.update(status)
     else:
         if status_current_time <= previous_status_time:
             status = {
-                'status-notes': telemetry_status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
-                'status': telemetry_status.get('status', 'DEGRADED')
+                'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
+                'status': status.get('status', 'DEGRADED')
             }
+            nb_telemetry.status.update(status)
+        else:
+            delete_attributes = telemetry_info.get('delete_attributes', [])
 
-    if status:
-        nb_telemetry.status.update(status)
-        try:
-            r = nb_instance.api().edit(nb_status_id, data=status)
-            return status_current_time, r.data
-        except:
-            logging.error("Unable to update NuvlaBox status in Nuvla")
-            raise
+    logging.info('Refresh status: %s' % status)
+    if delete_attributes:
+        logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
 
-    return status_current_time, None
+    try:
+        r = nb_instance.api().edit(nb_status_id,
+                                   data=status,
+                                   select=delete_attributes)
+    except:
+        logging.error("Unable to update NuvlaBox status in Nuvla")
+        raise
+
+    return r.data, status_current_time
 
 
 def wait_for_api_ready():
@@ -352,17 +359,20 @@ if __name__ == "__main__":
 
         if not telemetry_thread or not telemetry_thread.is_alive():
             telemetry_thread = threading.Thread(target=telemetry.update_status,
-                                                args=(NB, nuvlabox_status_id),
                                                 daemon=True)
             telemetry_thread.start()
+        telemetry_thread.join(timeout=next_cycle_in-1.0)
+        if telemetry_thread.is_alive():
+            logging.warning('Telemetry thread not completed in time')
 
-        past_status_time, response = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
+        logging.info(f'status_queue length: {telemetry.status_queue.qsize()}')
 
-        jobs = copy.deepcopy(telemetry.jobs)
-        if infra.container_runtime.job_engine_lite_image and jobs:
-            logging.info(f'Processing the following jobs in pull-mode: {jobs}')
+        response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
+
+        if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
+            logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             threading.Thread(target=manage_pull_jobs,
-                             args=(jobs, infra.container_runtime.job_engine_lite_image,),
+                             args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
                              daemon=True).start()
 
         if not infra.is_alive():
