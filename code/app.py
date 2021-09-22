@@ -15,7 +15,7 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
-import copy
+import queue
 import socket
 import threading
 import json
@@ -240,8 +240,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     :return: (Nuvla.api response, current heartbeat timestamp)
     """
 
-    telemetry_info = nb_telemetry.status_queue.get_nowait() or {}
-    status = telemetry_info.get('updated_status', {})
+    status = nb_telemetry.status_for_nuvla
     status_current_time = status.get('current-time', '')
     delete_attributes = []
     if not status_current_time:
@@ -255,7 +254,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
             }
             nb_telemetry.status.update(status)
         else:
-            delete_attributes = telemetry_info.get('delete_attributes', [])
+            delete_attributes = nb_telemetry.status_delete_attrs_in_nuvla
 
     logging.info('Refresh status: %s' % status)
     if delete_attributes:
@@ -361,11 +360,9 @@ if __name__ == "__main__":
             telemetry_thread = threading.Thread(target=telemetry.update_status,
                                                 daemon=True)
             telemetry_thread.start()
-        telemetry_thread.join(timeout=next_cycle_in-1.0)
+        telemetry_thread.join(timeout=refresh_interval-1.0)
         if telemetry_thread.is_alive():
             logging.warning('Telemetry thread not completed in time')
-
-        logging.info(f'status_queue length: {telemetry.status_queue.qsize()}')
 
         response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
 

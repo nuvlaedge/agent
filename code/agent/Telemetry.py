@@ -122,6 +122,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                        'kubelet-version': None
                        }
 
+        self.status_for_nuvla = {}
+        self.status_delete_attrs_in_nuvla = []
+
         self.mqtt_telemetry = mqtt.Client()
 
         self.gpio_utility = False
@@ -951,15 +954,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
         updated_status['id'] = self.nb_status_id
 
+        self.status_for_nuvla = updated_status
+        self.status_delete_attrs_in_nuvla = delete_attributes
+
         # write all status into the shared volume for the other components to re-use if necessary
         with open(self.nuvlabox_status_file, 'w') as nbsf:
             nbsf.write(json.dumps(all_status))
 
         self.status.update(new_status)
 
-        self.status_queue.put_nowait({'status': new_status,
-                                      'updated_status': updated_status,
-                                      'delete_attributes': delete_attributes})
         return
 
     def update_operational_status(self, status="RUNNING", status_log=None):
