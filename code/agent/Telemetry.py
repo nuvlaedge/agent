@@ -83,7 +83,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
         self.first_net_stats = {}
-        self.status_queue = queue.Queue(maxsize=1)
         self.container_stats_queue = queue.Queue()
         self.enable_container_monitoring = enable_container_monitoring
         if enable_container_monitoring:
@@ -928,22 +927,19 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             return output_fallback
 
     @staticmethod
-    def diff(old_status, new_status):
+    def diff(previous_status, current_status):
         """ Compares the previous status with the new one and discover the minimal changes """
 
-        minimal_update = {}
-        delete_attributes = []
-        for key in old_status.keys():
-            if key in new_status:
-                if new_status[key] is None:
-                    delete_attributes.append(key)
-                    continue
-                if old_status[key] != new_status[key]:
-                    minimal_update[key] = new_status[key]
-            else:
-                if any(old_status.values()):
-                    delete_attributes.append(key)
-        return minimal_update, delete_attributes
+        items_changed_or_added = {}
+        attributes_to_delete = set(previous_status.keys()) - set(current_status.keys())
+
+        for key, value in current_status.items():
+            if value is None:
+                attributes_to_delete.add(key)
+            elif value != previous_status.get(key):
+                items_changed_or_added[key] = value
+
+        return items_changed_or_added, attributes_to_delete
 
     def update_status(self):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
