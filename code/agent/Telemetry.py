@@ -92,34 +92,36 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             self.container_stats_monitor.setDaemon(True)
             self.container_stats_monitor.start()
 
-        self.status = {'resources': None,
-                       'status': None,
-                       'status-notes': None,
-                       'nuvlabox-api-endpoint': None,
-                       'operating-system': None,
-                       'architecture': None,
-                       'ip': None,
-                       'last-boot': None,
-                       'hostname': None,
-                       'docker-server-version': None,
-                       'gpio-pins': None,
-                       'nuvlabox-engine-version': None,
-                       'inferred-location': None,
-                       'vulnerabilities': None,
-                       'node-id': None,
-                       'cluster-id': None,
-                       'cluster-managers': None,
-                       'cluster-nodes': None,
-                       'cluster-node-role': None,
-                       'installation-parameters': None,
-                       'swarm-node-cert-expiry-date': None,
-                       'host-user-home': None,
-                       'orchestrator': None,
-                       'cluster-join-address': None,
-                       'temperatures': None,
-                       'container-plugins': None,
-                       'kubelet-version': None
-                       }
+        self.status_default = {
+            'resources': None,
+            'status': None,
+            'status-notes': None,
+            'nuvlabox-api-endpoint': None,
+            'operating-system': None,
+            'architecture': None,
+            'ip': None,
+            'last-boot': None,
+            'hostname': None,
+            'docker-server-version': None,
+            'gpio-pins': None,
+            'nuvlabox-engine-version': None,
+            'inferred-location': None,
+            'vulnerabilities': None,
+            'node-id': None,
+            'cluster-id': None,
+            'cluster-managers': None,
+            'cluster-nodes': None,
+            'cluster-node-role': None,
+            'installation-parameters': None,
+            'swarm-node-cert-expiry-date': None,
+            'host-user-home': None,
+            'orchestrator': None,
+            'cluster-join-address': None,
+            'temperatures': None,
+            'container-plugins': None,
+            'kubelet-version': None
+        }
+        self.status = self.status_default.copy()
 
         self.status_for_nuvla = {}
         self.status_delete_attrs_in_nuvla = []
@@ -349,7 +351,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         ip = self.get_vpn_ip()
 
-        status_for_nuvla = {
+        status_for_nuvla = self.status_default.copy()
+        status_for_nuvla.update({
             'resources': resources,
             'operating-system': self.container_runtime.get_host_os(),
             "architecture": self.container_runtime.get_host_architecture(node_info),
@@ -359,7 +362,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "status": operational_status,
             "status-notes": operational_status_notes,
             "container-plugins": self.container_runtime.get_container_plugins()
-        }
+        })
 
         docker_server_version = self.get_docker_server_version()
         if docker_server_version:
