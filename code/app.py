@@ -15,7 +15,6 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
-import queue
 import socket
 import threading
 import json
@@ -248,7 +247,6 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         nb_telemetry.status.update(_status)
     else:
         if status_current_time <= previous_status_time:
-
             _status = {
                 'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
                 'status': status.get('status', 'DEGRADED')
