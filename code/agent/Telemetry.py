@@ -24,7 +24,7 @@ from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from pydoc import locate
-from threading import Thread, RLock
+from threading import Thread
 
 
 class ContainerMonitoring(Thread):
@@ -171,19 +171,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # (to avoid network jittering and 3rd party service spamming)
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
-
-        self._jobs = []
-        self._jobs_lock = RLock()
-
-    @property
-    def jobs(self):
-        with self._jobs_lock:
-            return self._jobs
-
-    @jobs.setter
-    def jobs(self, jobs):
-        with self._jobs_lock:
-            self._jobs = jobs
 
     def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
