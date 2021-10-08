@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.3] - 2021-10-08
+### Added
+### Changed
+ - add support for filesystems with non-standard network /sys layout"
 ## [2.3.2] - 2021-08-25
 ### Added
 ### Changed
