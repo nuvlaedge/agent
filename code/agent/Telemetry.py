@@ -801,7 +801,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     rx_bytes = int(rx.read())
                 with open("{}/tx_bytes".format(stats)) as tx:
                     tx_bytes = int(tx.read())
-            except FileNotFoundError:
+            except (FileNotFoundError, NotADirectoryError):
                 logging.warning("Cannot calculate net usage for interface {}".format(interface))
                 continue
 
