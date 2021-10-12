@@ -256,16 +256,23 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         cluster_join_tokens = self.container_runtime.get_join_tokens()
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
-        if self.container_runtime.get_node_id(self.container_runtime.get_node_info()) in \
-                cluster_info.get('cluster-managers', []):
-            # we can only commission the cluster if the underlying node is a manager
-            commission_payload.update(cluster_info)
-            for cluster_key, v in cluster_info.items():
-                # if some cluster info is going for commissioning, then pass all of it anyway
-                if old_commission_payload.get(cluster_key) == v:
-                    continue
+        if cluster_info:
+            # we only commission the cluster when the NuvlaBox status
+            # has already been updated with its "node-id"
+            with open(self.nuvlabox_status_file) as nbs:
+                nuvlabox_status = json.load(nbs)
 
-                minimum_commission_payload.update(cluster_info)
+            if nuvlabox_status.get('node-id') in cluster_info.get('cluster-managers', []) and \
+                    self.container_runtime.get_node_id(self.container_runtime.get_node_info()) in \
+                    cluster_info.get('cluster-managers', []):
+                # we can only commission the cluster if the underlying node is a manager
+                commission_payload.update(cluster_info)
+                for cluster_key, v in cluster_info.items():
+                    # if some cluster info is going for commissioning, then pass all of it anyway
+                    if old_commission_payload.get(cluster_key) == v:
+                        continue
+
+                    minimum_commission_payload.update(cluster_info)
 
         self.get_nuvlabox_capabilities(commission_payload)
         if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])):
