@@ -263,6 +263,26 @@ class ContainerRuntimeClient(ABC):
         """
         pass
 
+    @abstractmethod
+    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+        """
+        Defines the infra service structure for commissioning
+
+        :param api_endpoint: endpoint of the Docker/K8s API
+        :param tls_keys: TLS keys for authenticating with the API endpoint (ca, crt, key)
+
+        :returns dict of the infra service for commissioning
+        """
+        pass
+
+    @abstractmethod
+    def get_partial_decommission_attributes(self) -> list:
+        """
+        Says which attributes to partially decommission in case the node is a worker
+
+        :returns list of attributes
+        """
+        pass
 
 class KubernetesClient(ContainerRuntimeClient):
     """
@@ -280,6 +300,7 @@ class KubernetesClient(ContainerRuntimeClient):
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
         self.vpn_client_component = os.getenv('NUVLABOX_VPN_COMPONENT_NAME', 'vpn-client')
+        self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
 
     def get_node_info(self):
         if self.host_node_name:
@@ -627,7 +648,24 @@ class KubernetesClient(ContainerRuntimeClient):
         # doesn't seem to be available from the API
         return []
 
+    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+        if api_endpoint:
+            infra_service = {
+                "kubernetes-endpoint": api_endpoint
+            }
 
+            if tls_keys:
+                infra_service["kubernetes-client-ca"] = tls_keys[0]
+                infra_service["kubernetes-client-cert"] = tls_keys[1]
+                infra_service["kubernetes-client-key"] = tls_keys[2]
+
+            return infra_service
+        else:
+            return {}
+
+    def get_partial_decommission_attributes(self) -> list:
+        # TODO for k8s
+        return []
 #
 class DockerClient(ContainerRuntimeClient):
     """
@@ -638,6 +676,7 @@ class DockerClient(ContainerRuntimeClient):
         super().__init__(host_rootfs, host_home)
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
+        self.infra_service_endpoint_keyname = 'swarm-endpoint'
 
     def get_node_info(self):
         return self.client.info()
@@ -958,13 +997,13 @@ class DockerClient(ContainerRuntimeClient):
         config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
         working_dir = myself.labels['com.docker.compose.project.working_dir']
         project_name = myself.labels['com.docker.compose.project']
-        environment = [] 
+        environment = []
         for env_var in myself.attrs.get('Config', {}).get('Env', []):
             if env_var.split('=')[0] in self.ignore_env_variables:
                 continue
-            
+
             environment.append(env_var)
-            
+
         for container in nuvlabox_containers:
             c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
@@ -1041,6 +1080,29 @@ class DockerClient(ContainerRuntimeClient):
 
         return enabled_plugins
 
+    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+        if api_endpoint:
+            infra_service = {
+                "swarm-endpoint": api_endpoint
+            }
+
+            if tls_keys:
+                infra_service["swarm-client-ca"] = tls_keys[0]
+                infra_service["swarm-client-cert"] = tls_keys[1]
+                infra_service["swarm-client-key"] = tls_keys[2]
+
+            return infra_service
+        else:
+            return {}
+
+    def get_partial_decommission_attributes(self) -> list:
+        return ['swarm-token-manager',
+                'swarm-token-worker',
+                'swarm-client-key',
+                'swarm-client-ca',
+                'swarm-client-cert',
+                'swarm-endpoint']
+
 
 # --------------------
 class NuvlaBoxCommon():
@@ -1102,7 +1164,7 @@ class NuvlaBoxCommon():
             nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
 
         self.nuvla_endpoint_insecure = nuvla_endpoint_insecure_raw
-        
+
         # Also store the Nuvla connection details for future restarts
         if not os.path.exists(self.nuvlabox_nuvla_configuration):
             with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
@@ -1206,16 +1268,16 @@ class NuvlaBoxCommon():
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
     @staticmethod
-    def get_api_keys():                
+    def get_api_keys():
         nuvlabox_api_key = os.environ.get("NUVLABOX_API_KEY")
         nuvlabox_api_secret = os.environ.get("NUVLABOX_API_SECRET")
         if nuvlabox_api_key:
             del os.environ["NUVLABOX_API_KEY"]
         if nuvlabox_api_secret:
             del os.environ["NUVLABOX_API_SECRET"]
-            
+
         return nuvlabox_api_key, nuvlabox_api_secret
-        
+
     def api(self):
         """ Returns an Api object """
 
@@ -1384,7 +1446,7 @@ ${vpn_endpoints_mapped}
         :return:
         """
         logging.info(f'Starting VPN commissioning...')
-        
+
         vpn_csr, vpn_key = self.prepare_vpn_certificates()
 
         if not vpn_key or not vpn_csr:
