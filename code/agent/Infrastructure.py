@@ -102,7 +102,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return
         """
         if not payload:
-            logging.warning("Tried commissioning with empty payload. Nothing to do.")
+            logging.debug("Tried commissioning with empty payload. Nothing to do.")
             return
 
         logging.info("Commissioning the NuvlaBox...{}".format(payload))
@@ -320,9 +320,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         cluster_info = self.needs_cluster_commission()
 
         # initialize the commissioning payload
-        commission_payload = cluster_info
-        minimum_commission_payload = cluster_info
+        commission_payload = cluster_info.copy()
         old_commission_payload = self.read_commissioning_file()
+        minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() else cluster_info.copy()
 
         my_vpn_ip = self.telemetry_instance.get_vpn_ip()
         api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
@@ -335,7 +335,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if self.compute_api_is_running(container_api_port):
             infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, self.get_tls_keys())
         # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-        infra_diff = {k:v for k,v in infra_service.items() if v != old_commission_payload.get(k)}
+        infra_diff = {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
 
         if self.container_runtime.infra_service_endpoint_keyname in old_commission_payload:
             minimum_commission_payload.update(infra_diff)
