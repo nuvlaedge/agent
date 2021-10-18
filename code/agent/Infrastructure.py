@@ -212,7 +212,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return: True or False
         """
 
-        if NuvlaBoxCommon.ORCHESTRATOR in ['docker', 'swarm']:
+        if NuvlaBoxCommon.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
         if not container_api_port:
@@ -331,17 +331,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if sorted(commission_payload.get('tags', [])) != sorted(old_commission_payload.get('tags', [])):
             minimum_commission_payload['tags'] = commission_payload.get('tags', [])
 
-        tls_keys = self.get_tls_keys()
-        infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, tls_keys)
+        infra_service = {}
+        if self.compute_api_is_running(container_api_port):
+            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, self.get_tls_keys())
         # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-        if infra_service and \
-                not old_commission_payload.get(self.container_runtime.infra_service_endpoint_keyname) and \
-                (self.compute_api_is_running(container_api_port) or NuvlaBoxCommon.ORCHESTRATOR == 'kubernetes'):
-            minimum_commission_payload.update(infra_service)
+        infra_diff = dict(set(infra_service.items() - old_commission_payload.items()))
+
+        if self.container_runtime.infra_service_endpoint_keyname in old_commission_payload:
+            minimum_commission_payload.update(infra_diff)
         else:
-            for k, v in infra_service.items():
-                if v != old_commission_payload.get(k):
-                    minimum_commission_payload[k] = v
+            minimum_commission_payload.update(infra_service)
 
         commission_payload.update(infra_service)
 
@@ -371,7 +370,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
 
         # remove the keys from the commission payload, to avoid confusion on the server side
-        for attr in minimum_commission_payload['removed']:
+        for attr in minimum_commission_payload.get('removed', []):
             try:
                 commission_payload.pop(attr)
                 minimum_commission_payload.pop(attr)
@@ -520,5 +519,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         Threads the commissioning cycles, so that they don't interfere with the main telemetry cycle
         """
         while True:
-            self.try_commission()
+            try:
+                self.try_commission()
+            except Exception as e:
+                logging.error(f'Error while trying to commission NuvlaBox: {str(e)}')
             time.sleep(self.refresh_period)
