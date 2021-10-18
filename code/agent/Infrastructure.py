@@ -335,7 +335,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if self.compute_api_is_running(container_api_port):
             infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, self.get_tls_keys())
         # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-        infra_diff = dict(set(infra_service.items() - old_commission_payload.items()))
+        infra_diff = {k:v for k,v in infra_service.items() if v != old_commission_payload.get(k)}
 
         if self.container_runtime.infra_service_endpoint_keyname in old_commission_payload:
             minimum_commission_payload.update(infra_diff)
@@ -522,5 +522,5 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             try:
                 self.try_commission()
             except Exception as e:
-                logging.error(f'Error while trying to commission NuvlaBox: {str(e)}')
+                logging.exception('Error while trying to commission NuvlaBox')
             time.sleep(self.refresh_period)

@@ -183,14 +183,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             self.mqtt_telemetry.connect(self.mqtt_broker_host, self.mqtt_broker_port, self.mqtt_broker_keep_alive)
         except ConnectionRefusedError:
-            logging.exception("Connection to NuvlaBox MQTT broker refused")
+            logging.warning("Connection to NuvlaBox MQTT broker refused")
             self.mqtt_telemetry.disconnect()
             return
         except socket.timeout:
-            logging.error(f'Timed out while trying to send telemetry to Data Gateway at {self.mqtt_broker_host}')
+            logging.warning(f'Timed out while trying to send telemetry to Data Gateway at {self.mqtt_broker_host}')
             return
         except socket.gaierror:
-            logging.exception("The NuvlaBox MQTT broker is not reachable...trying again later")
+            logging.warning("The NuvlaBox MQTT broker is not reachable...trying again later")
             self.mqtt_telemetry.disconnect()
             return
 
