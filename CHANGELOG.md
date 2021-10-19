@@ -1,4 +1,8 @@
 # Changelog
+## [2.3.4] - 2021-10-19
+### Added 
+ - force update of nuvlabox-cluster through worker-based commissioning
+### Changed
 ## [2.3.3] - 2021-10-08
 ### Added
 ### Changed
