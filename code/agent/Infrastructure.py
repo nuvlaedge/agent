@@ -282,11 +282,10 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         if not cluster_info:
             # it is not a manager but...
-            if cluster_id and node_id and node_id == nuvlabox_status.get('node-id'):
+            if node_id and node_id == nuvlabox_status.get('node-id'):
                 # it is a worker, and NB status is aware of that, so we can update the cluster with it
                 return {
-                    "cluster-id": cluster_id,
-                    "cluster-node-id": node_id,
+                    "cluster-worker-id": node_id,
                 }
             else:
                 return {}
@@ -312,6 +311,31 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             api_endpoint = f"https://{container_api_ip}:{container_api_port}"
 
         return api_endpoint, container_api_port
+
+    def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict, old_payload: dict):
+        """
+        For workers, sets the "remove" attr to instruct the partial decommission
+
+        :param minimum_payload: base commissioning payload for request
+        :param full_payload: full payload
+        :param old_payload: payload from previous commissioning
+        :return:
+        """
+
+        if self.get_node_role_from_status() != "worker":
+            return
+
+        full_payload['removed'] = self.container_runtime.get_partial_decommission_attributes()
+        if full_payload['removed'] != old_payload.get('removed', []):
+            minimum_payload['removed'] = full_payload['removed']
+
+        # remove the keys from the commission payload, to avoid confusion on the server side
+        for attr in minimum_payload.get('removed', []):
+            try:
+                full_payload.pop(attr)
+                minimum_payload.pop(attr)
+            except KeyError:
+                pass
 
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
@@ -344,12 +368,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         commission_payload.update(infra_service)
 
-        # if this node is a worker, them we must force remove some assets
-        node_role = self.get_node_role_from_status()
-        if node_role and node_role.lower() == 'worker':
-            minimum_commission_payload['removed'] = commission_payload['removed'] = \
-                self.container_runtime.get_partial_decommission_attributes()
-
         # atm, it isn't clear whether these will make sense for k8s
         # if they do, then this block should be moved to an abstractmethod of the ContainerRuntime
         if cluster_join_tokens and len(cluster_join_tokens) > 1 and NuvlaBoxCommon.ORCHESTRATOR in ['docker', 'swarm']:
@@ -369,13 +387,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 or any(k in minimum_commission_payload for k in infra_service):
             minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
 
-        # remove the keys from the commission payload, to avoid confusion on the server side
-        for attr in minimum_commission_payload.get('removed', []):
-            try:
-                commission_payload.pop(attr)
-                minimum_commission_payload.pop(attr)
-            except KeyError:
-                pass
+        # if this node is a worker, them we must force remove some assets
+        self.needs_partial_decommission(minimum_commission_payload, commission_payload, old_commission_payload)
 
         if self.do_commission(minimum_commission_payload):
             self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
