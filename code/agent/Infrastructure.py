@@ -101,7 +101,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :param payload: commissioning payload
         :return
         """
+        if not payload:
+            logging.debug("Tried commissioning with empty payload. Nothing to do.")
+            return
 
+        logging.info("Commissioning the NuvlaBox...{}".format(payload))
         try:
             self.api()._cimi_post(self.nuvlabox_id+"/commission", json=payload)
         except Exception as e:
@@ -112,7 +116,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             # get the respective VPN credential that was just created
             with open("{}/{}".format(self.data_volume, self.context)) as vsi:
                 vpn_server_id = json.loads(vsi.read()).get("vpn-server-id")
-            # vpn_server_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())["vpn-server-id"]
 
             searcher_filter = self.build_vpn_credential_search_filter(vpn_server_id)
 
@@ -124,8 +127,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                     credential_id = self.api().search("credential", filter=searcher_filter, last=1).resources[0].id
                     break
                 except IndexError:
-                    logging.info("*****************")
-
                     logging.exception("Cannot find VPN credential in Nuvla after commissioning")
                     time.sleep(2)
                 except Exception as e:
@@ -211,6 +212,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return: True or False
         """
 
+        if NuvlaBoxCommon.ORCHESTRATOR not in ['docker', 'swarm']:
+            return False
+
+        if not container_api_port:
+            container_api_port = self.compute_api_port
+
         compute_api_url = f'https://{self.compute_api}:{container_api_port}'
 
         try:
@@ -241,152 +248,152 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         return role
 
-    def try_commission(self):
-        """ Checks whether any of the system configurations have changed
-        and if so, returns True or False """
+    def read_commissioning_file(self) -> dict:
+        """
+        Reads the current content of the commissioning file from the local shared volume
 
-        commission_payload = {}
-        minimum_commission_payload = {}
+        :return: last commissioning content
+        """
         try:
             with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
-                old_commission_payload = json.loads(r.read())
+                commission_payload = json.loads(r.read())
         except FileNotFoundError:
-            old_commission_payload = {}
+            commission_payload = {}
 
-        cluster_join_tokens = self.container_runtime.get_join_tokens()
+        return commission_payload
+
+    def needs_cluster_commission(self) -> dict:
+        """
+        Checks if the commissioning needs to carry cluster information
+
+        :return: commission-ready cluster info
+        """
+
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
-        if cluster_info:
-            # we only commission the cluster when the NuvlaBox status
-            # has already been updated with its "node-id"
-            with open(self.nuvlabox_status_file) as nbs:
-                nuvlabox_status = json.load(nbs)
+        node_info = self.container_runtime.get_node_info()
+        cluster_id = self.container_runtime.get_cluster_id(node_info)
+        node_id = self.container_runtime.get_node_id(node_info)
 
-            if nuvlabox_status.get('node-id') in cluster_info.get('cluster-managers', []) and \
-                    self.container_runtime.get_node_id(self.container_runtime.get_node_info()) in \
-                    cluster_info.get('cluster-managers', []):
-                # we can only commission the cluster if the underlying node is a manager
-                commission_payload.update(cluster_info)
-                for cluster_key, v in cluster_info.items():
-                    # if some cluster info is going for commissioning, then pass all of it anyway
-                    if old_commission_payload.get(cluster_key) == v:
-                        continue
+        # we only commission the cluster when the NuvlaBox status
+        # has already been updated with its "node-id"
+        with open(self.nuvlabox_status_file) as nbs:
+            nuvlabox_status = json.load(nbs)
 
-                    minimum_commission_payload.update(cluster_info)
+        if not cluster_info:
+            # it is not a manager but...
+            if node_id and node_id == nuvlabox_status.get('node-id'):
+                # it is a worker, and NB status is aware of that, so we can update the cluster with it
+                return {
+                    "cluster-worker-id": node_id,
+                }
+            else:
+                return {}
 
-        self.get_nuvlabox_capabilities(commission_payload)
-        if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])):
-            minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
+        if nuvlabox_status.get('node-id') in cluster_info.get('cluster-managers', []) and \
+                node_id == nuvlabox_status.get('node-id'):
+            return cluster_info
 
-        tls_keys = self.get_tls_keys()
+        return {}
 
-        my_vpn_ip = self.telemetry_instance.get_vpn_ip()
+    def get_compute_endpoint(self, vpn_ip: str) -> tuple:
+        """
+        Find the endpoint and port of the compute API
+
+        :returns tuple (api_endpoint, port)
+        """
         container_api_ip, container_api_port = self.container_runtime.get_api_ip_port()
 
         api_endpoint = None
-        if my_vpn_ip:
-            api_endpoint = f"https://{my_vpn_ip}:{container_api_port}"
-        else:
-            if container_api_ip and container_api_port:
-                api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+        if vpn_ip:
+            api_endpoint = f"https://{vpn_ip}:{container_api_port}"
+        elif container_api_ip and container_api_port:
+            api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+
+        return api_endpoint, container_api_port
+
+    def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict, old_payload: dict):
+        """
+        For workers, sets the "remove" attr to instruct the partial decommission
+
+        :param minimum_payload: base commissioning payload for request
+        :param full_payload: full payload
+        :param old_payload: payload from previous commissioning
+        :return:
+        """
+
+        if self.get_node_role_from_status() != "worker":
+            return
+
+        full_payload['removed'] = self.container_runtime.get_partial_decommission_attributes()
+        if full_payload['removed'] != old_payload.get('removed', []):
+            minimum_payload['removed'] = full_payload['removed']
+
+        # remove the keys from the commission payload, to avoid confusion on the server side
+        for attr in minimum_payload.get('removed', []):
+            try:
+                full_payload.pop(attr)
+                minimum_payload.pop(attr)
+            except KeyError:
+                pass
+
+    def try_commission(self):
+        """ Checks whether any of the system configurations have changed
+        and if so, returns True or False """
+        cluster_join_tokens = self.container_runtime.get_join_tokens()
+        cluster_info = self.needs_cluster_commission()
+
+        # initialize the commissioning payload
+        commission_payload = cluster_info.copy()
+        old_commission_payload = self.read_commissioning_file()
+        minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() else cluster_info.copy()
+
+        my_vpn_ip = self.telemetry_instance.get_vpn_ip()
+        api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
         commission_payload["tags"] = self.container_runtime.get_node_labels()
         if sorted(commission_payload.get('tags', [])) != sorted(old_commission_payload.get('tags', [])):
             minimum_commission_payload['tags'] = commission_payload.get('tags', [])
 
-        # if this node is a worker, them we must force remove some assets
-        node_role = self.get_node_role_from_status()
-        delete_attrs = []
-
         infra_service = {}
-        if NuvlaBoxCommon.ORCHESTRATOR == 'kubernetes':
-            if api_endpoint:
-                infra_service["kubernetes-endpoint"] = api_endpoint
+        if self.compute_api_is_running(container_api_port):
+            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, self.get_tls_keys())
+        # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
+        infra_diff = {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
 
-                if tls_keys:
-                    infra_service["kubernetes-client-ca"] = tls_keys[0]
-                    infra_service["kubernetes-client-cert"] = tls_keys[1]
-                    infra_service["kubernetes-client-key"] = tls_keys[2]
-
-                if not old_commission_payload.get("kubernetes-endpoint"):
-                    # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-                    minimum_commission_payload.update(infra_service)
-                else:
-                    for k, v in infra_service.items():
-                        if v != old_commission_payload.get(k):
-                            minimum_commission_payload[k] = v
-
-            commission_payload.update(infra_service)
-
-            # TODO: is this is a k8s worker, something similar should happen
-            # if node_role and node_role.lower() == 'worker':
-            #     delete_attrs = ['swarm-token-manager',
-            #                     'swarm-token-worker',
-            #                     'swarm-client-key',
-            #                     'swarm-client-ca',
-            #                     'swarm-client-cert',
-            #                     'swarm-endpoint']
+        if self.container_runtime.infra_service_endpoint_keyname in old_commission_payload:
+            minimum_commission_payload.update(infra_diff)
         else:
-            if cluster_join_tokens and len(cluster_join_tokens) > 1:
-                self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
-                commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
-                if cluster_join_tokens[0] != old_commission_payload.get('swarm-token-manager'):
-                    minimum_commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
-                commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
-                if cluster_join_tokens[1] != old_commission_payload.get('swarm-token-worker'):
-                    minimum_commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
+            minimum_commission_payload.update(infra_service)
 
-            if not container_api_port:
-                container_api_port = self.compute_api_port
+        commission_payload.update(infra_service)
 
-            if api_endpoint and self.compute_api_is_running(container_api_port):
-                infra_service["swarm-endpoint"] = api_endpoint
+        # atm, it isn't clear whether these will make sense for k8s
+        # if they do, then this block should be moved to an abstractmethod of the ContainerRuntime
+        if cluster_join_tokens and len(cluster_join_tokens) > 1 and NuvlaBoxCommon.ORCHESTRATOR in ['docker', 'swarm']:
+            self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
+            commission_payload.update({
+                'swarm-token-manager': cluster_join_tokens[0],
+                'swarm-token-worker': cluster_join_tokens[1]
+            })
 
-                if tls_keys:
-                    infra_service["swarm-client-ca"] = tls_keys[0]
-                    infra_service["swarm-client-cert"] = tls_keys[1]
-                    infra_service["swarm-client-key"] = tls_keys[2]
+        if commission_payload.get('swarm-token-manager') != old_commission_payload.get('swarm-token-manager'):
+            minimum_commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
+        if commission_payload.get('swarm-token-worker') != old_commission_payload.get('swarm-token-worker'):
+            minimum_commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
 
-                if not old_commission_payload.get("swarm-endpoint"):
-                    # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-                    minimum_commission_payload.update(infra_service)
-                else:
-                    for k, v in infra_service.items():
-                        if v != old_commission_payload.get(k):
-                            minimum_commission_payload[k] = v
+        self.get_nuvlabox_capabilities(commission_payload)
+        if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])) \
+                or any(k in minimum_commission_payload for k in infra_service):
+            minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
 
-            commission_payload.update(infra_service)
+        # if this node is a worker, them we must force remove some assets
+        self.needs_partial_decommission(minimum_commission_payload, commission_payload, old_commission_payload)
 
-            if node_role and node_role.lower() == 'worker':
-                delete_attrs = ['swarm-token-manager',
-                                'swarm-token-worker',
-                                'swarm-client-key',
-                                'swarm-client-ca',
-                                'swarm-client-cert',
-                                'swarm-endpoint']
-
-        if 'capabilities' not in minimum_commission_payload and \
-                any([k in minimum_commission_payload for k in infra_service]) and \
-                commission_payload.get('capabilities', []):
-            # add capabilities no matter what, cause IS is going to be commissioned
-            minimum_commission_payload['capabilities'] = commission_payload['capabilities']
-
-        # remove the keys from the commission payload, to avoid confusion on the server side
-        if delete_attrs:
-            minimum_commission_payload['removed'] = commission_payload['removed'] = delete_attrs
-            for attr in delete_attrs:
-                try:
-                    commission_payload.pop(attr)
-                    minimum_commission_payload.pop(attr)
-                except KeyError:
-                    pass
-
-        if minimum_commission_payload:
-            logging.info("Commissioning the NuvlaBox...{}".format(minimum_commission_payload))
-            if self.do_commission(minimum_commission_payload):
-                self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
-                                commission_payload,
-                                is_json=True)
+        if self.do_commission(minimum_commission_payload):
+            self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
+                            commission_payload,
+                            is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
         """ Simply build the API query for searching this NuvlaBox's VPN credential
@@ -525,5 +532,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         Threads the commissioning cycles, so that they don't interfere with the main telemetry cycle
         """
         while True:
-            self.try_commission()
+            try:
+                self.try_commission()
+            except Exception as e:
+                logging.exception('Error while trying to commission NuvlaBox')
             time.sleep(self.refresh_period)
