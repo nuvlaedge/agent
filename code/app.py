@@ -345,13 +345,13 @@ if __name__ == "__main__":
     logging.info("Starting telemetry...")
     while True:
         start_cycle = time.time()
-        
+
         if not can_continue:
             break
-            
-        if telemetry_thread.is_alive():
+
+        if telemetry_thread and telemetry_thread.is_alive():
             logging.warning('Telemetry thread not completed in time')
-            
+
         response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
 
         if not nb_checker or not nb_checker.is_alive():
