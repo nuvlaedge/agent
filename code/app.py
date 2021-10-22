@@ -243,15 +243,15 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     status_current_time = status.get('current-time', '')
     delete_attributes = []
     if not status_current_time:
-        status = {'status-notes': ['NuvlaBox Telemetry is starting']}
-        nb_telemetry.status.update(status)
+        _status = {'status-notes': ['NuvlaBox Telemetry is starting']}
+        nb_telemetry.status.update(_status)
     else:
         if status_current_time <= previous_status_time:
-            status = {
+            _status = {
                 'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
                 'status': status.get('status', 'DEGRADED')
             }
-            nb_telemetry.status.update(status)
+            nb_telemetry.status.update(_status)
         else:
             delete_attributes = nb_telemetry.status_delete_attrs_in_nuvla
 
@@ -344,8 +344,15 @@ if __name__ == "__main__":
 
     logging.info("Starting telemetry...")
     while True:
+        start_cycle = time.time()
+        
         if not can_continue:
             break
+            
+        if telemetry_thread.is_alive():
+            logging.warning('Telemetry thread not completed in time')
+            
+        response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
 
         if not nb_checker or not nb_checker.is_alive():
             nb_checker = threading.Thread(target=preflight_check,
@@ -353,13 +360,10 @@ if __name__ == "__main__":
                                           daemon=True)
             nb_checker.start()
 
-        start_cycle = time.time()
-
         if not telemetry_thread or not telemetry_thread.is_alive():
-            telemetry_thread = threading.Thread(target=telemetry.update_status, daemon=True)
+            telemetry_thread = threading.Thread(target=telemetry.update_status,
+                                                daemon=True)
             telemetry_thread.start()
-
-        response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
 
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
@@ -371,9 +375,7 @@ if __name__ == "__main__":
             infra = Infrastructure(data_volume, refresh_period=refresh_interval)
             infra.start()
 
-        end_cycle = time.time()
-        cycle_duration = end_cycle - start_cycle
-        # formula is R-2T, where
-        next_cycle_in = refresh_interval - 2 * cycle_duration
+        cycle_duration = time.time() - start_cycle
+        next_cycle_in = refresh_interval - cycle_duration - 1
 
         e.wait(timeout=next_cycle_in)
