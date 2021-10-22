@@ -16,6 +16,7 @@ logs/
 *.logs
 *.log
 *.bck
+.clj-kondo
 
 pom.xml.next
 pom.xml.releaseBackup
