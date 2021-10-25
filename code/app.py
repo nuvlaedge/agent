@@ -244,6 +244,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     delete_attributes = []
     if not status_current_time:
         _status = {'status-notes': ['NuvlaBox Telemetry is starting']}
+        status.update(_status)
         nb_telemetry.status.update(_status)
     else:
         if status_current_time <= previous_status_time:
@@ -251,6 +252,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
                 'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
                 'status': status.get('status', 'DEGRADED')
             }
+            status.update(_status)
             nb_telemetry.status.update(_status)
         else:
             delete_attributes = nb_telemetry.status_delete_attrs_in_nuvla
@@ -356,8 +358,8 @@ if __name__ == "__main__":
 
         if not nb_checker or not nb_checker.is_alive():
             nb_checker = threading.Thread(target=preflight_check,
-                                          args=(activation, infra, nuvlabox_info_updated_date,),
-                                          daemon=True)
+                                            args=(activation, infra, nuvlabox_info_updated_date,),
+                                            daemon=True)
             nb_checker.start()
 
         if not telemetry_thread or not telemetry_thread.is_alive():
@@ -368,8 +370,8 @@ if __name__ == "__main__":
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             threading.Thread(target=manage_pull_jobs,
-                             args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
-                             daemon=True).start()
+                                args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
+                                daemon=True).start()
 
         if not infra.is_alive():
             infra = Infrastructure(data_volume)
