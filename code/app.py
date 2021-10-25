@@ -372,7 +372,7 @@ if __name__ == "__main__":
                              daemon=True).start()
 
         if not infra.is_alive():
-            infra = Infrastructure(data_volume, refresh_period=refresh_interval)
+            infra = Infrastructure(data_volume)
             infra.start()
 
         cycle_duration = time.time() - start_cycle

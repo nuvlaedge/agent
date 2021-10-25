@@ -234,6 +234,20 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         return True
 
+    def get_local_nuvlabox_status(self) -> dict:
+        """
+        Reads the local nuvlabox-status file
+
+        Returns:
+            dict: content of the file, or empty dict in case it doesn't exist
+        """
+
+        try:
+            with open(self.nuvlabox_status_file) as ns:
+                return json.load(ns)
+        except FileNotFoundError:
+            return {}
+
     def get_node_role_from_status(self) -> str or None:
         """
         Look up the local nuvlabox-status file and take the cluster-node-role value from there
@@ -241,13 +255,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return: node role
         """
 
-        try:
-            with open(self.nuvlabox_status_file) as ns:
-                role = json.load(ns).get('cluster-node-role')
-        except FileNotFoundError:
-            role = None
-
-        return role
+        return self.get_local_nuvlabox_status().get('cluster-node-role')
 
     def read_commissioning_file(self) -> dict:
         """
@@ -278,8 +286,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         # we only commission the cluster when the NuvlaBox status
         # has already been updated with its "node-id"
-        with open(self.nuvlabox_status_file) as nbs:
-            nuvlabox_status = json.load(nbs)
+        nuvlabox_status = self.get_local_nuvlabox_status()
 
         if not cluster_info:
             # it is not a manager but...
