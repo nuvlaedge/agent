@@ -356,7 +356,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if compare_with_nb_resource:
             with open(f'{self.data_volume}/{self.context}') as f:
                 # overwrite the old commissioning value with the one from the NB resource (source of truth)
-                old[attr_name] = json.load(f).get(attr_name)
+                old_value = json.load(f).get(attr_name)
+                if old_value:
+                    old[attr_name] = old_value
 
         if isinstance(current[attr_name], str):
             if current[attr_name] != old.get(attr_name):
