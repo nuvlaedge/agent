@@ -267,11 +267,76 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             return None
 
+    def set_status_resources(self, body: dict):
+        """
+        Set the information about disk usage in the NuvlaBox status paylod
+
+        Args:
+            body (dict): NuvlaBox Status payload
+        """
+        # DISK
+        disk_usage = self.get_disks_usage()
+        disks = []
+        for dsk in disk_usage:
+            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
+            disks.append(dsk)
+
+        # CPU
+        cpu_sample = {
+            "capacity": int(psutil.cpu_count()),
+            "load": float(psutil.getloadavg()[2]),
+            "load-1": float(psutil.getloadavg()[0]),
+            "load-5": float(psutil.getloadavg()[1]),
+            "context-switches": int(psutil.cpu_stats().ctx_switches),
+            "interrupts": int(psutil.cpu_stats().interrupts),
+            "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
+            "system-calls": int(psutil.cpu_stats().syscalls)
+        }
+        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
+        cpu.update(cpu_sample)
+
+        # MEMORY
+        ram_sample = {
+            "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
+            "used": int(round(psutil.virtual_memory()[3]/1024/1024))
+        }
+        ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
+        ram.update(ram_sample)
+
+        # DOCKER STATS
+        container_stats = None
+        try:
+            container_stats = self.container_stats_queue.get(block=False)
+        except queue.Empty:
+            if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
+                self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
+                                                                self.container_runtime,
+                                                                self.container_stats_json_file)
+                self.container_stats_monitor.setDaemon(True)
+                self.container_stats_monitor.start()
+
+        ###
+        resources = {
+            'cpu': cpu,
+            'ram': ram
+        }
+
+        if disks:
+            resources['disks'] = disks
+
+        if container_stats:
+            resources['container-stats'] = container_stats
+
+        body['resources'] = resources
+
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
+        status_for_nuvla = self.status_default.copy()
+
         # get status for Nuvla
-        disk_usage = self.get_disks_usage()
+        self.set_status_resources(status_for_nuvla)
+        # disk_usage = self.get_disks_usage()
         operational_status_notes = self.get_operational_status_notes()
         operational_status = self.get_operational_status()
 
@@ -288,59 +353,58 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         cluster_managers = self.container_runtime.get_cluster_managers()
 
-        cpu_sample = {
-            "capacity": int(psutil.cpu_count()),
-            "load": float(psutil.getloadavg()[2]),
-            "load-1": float(psutil.getloadavg()[0]),
-            "load-5": float(psutil.getloadavg()[1]),
-            "context-switches": int(psutil.cpu_stats().ctx_switches),
-            "interrupts": int(psutil.cpu_stats().interrupts),
-            "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
-            "system-calls": int(psutil.cpu_stats().syscalls)
-        }
+        # cpu_sample = {
+        #     "capacity": int(psutil.cpu_count()),
+        #     "load": float(psutil.getloadavg()[2]),
+        #     "load-1": float(psutil.getloadavg()[0]),
+        #     "load-5": float(psutil.getloadavg()[1]),
+        #     "context-switches": int(psutil.cpu_stats().ctx_switches),
+        #     "interrupts": int(psutil.cpu_stats().interrupts),
+        #     "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
+        #     "system-calls": int(psutil.cpu_stats().syscalls)
+        # }
 
-        ram_sample = {
-            "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
-            "used": int(round(psutil.virtual_memory()[3]/1024/1024))
-        }
+        # ram_sample = {
+        #     "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
+        #     "used": int(round(psutil.virtual_memory()[3]/1024/1024))
+        # }
 
-        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
-        cpu.update(cpu_sample)
+        # cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
+        # cpu.update(cpu_sample)
 
-        ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
-        ram.update(ram_sample)
+        # ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
+        # ram.update(ram_sample)
 
-        disks = []
-        for dsk in disk_usage:
-            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
-            disks.append(dsk)
+        # disks = []
+        # for dsk in disk_usage:
+        #     dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
+        #     disks.append(dsk)
 
-        resources = {
-            'cpu': cpu,
-            'ram': ram
-        }
-        if disks:
-            resources['disks'] = disks
+        # resources = {
+        #     'cpu': cpu,
+        #     'ram': ram
+        # }
+        # if disks:
+        #     resources['disks'] = disks
 
-        container_stats = None
-        try:
-            container_stats = self.container_stats_queue.get(block=False)
-        except queue.Empty:
-            if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
-                self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-                                                                self.container_runtime,
-                                                                self.container_stats_json_file)
-                self.container_stats_monitor.setDaemon(True)
-                self.container_stats_monitor.start()
+        # container_stats = None
+        # try:
+        #     container_stats = self.container_stats_queue.get(block=False)
+        # except queue.Empty:
+        #     if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
+        #         self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
+        #                                                         self.container_runtime,
+        #                                                         self.container_stats_json_file)
+        #         self.container_stats_monitor.setDaemon(True)
+        #         self.container_stats_monitor.start()
 
-        if container_stats:
-            resources['container-stats'] = container_stats
+        # if container_stats:
+        #     resources['container-stats'] = container_stats
 
         ip = self.get_vpn_ip()
 
-        status_for_nuvla = self.status_default.copy()
         status_for_nuvla.update({
-            'resources': resources,
+            # 'resources': resources,
             'operating-system': self.container_runtime.get_host_os(),
             "architecture": self.container_runtime.get_host_architecture(node_info),
             "hostname": self.container_runtime.get_hostname(node_info),
@@ -468,17 +532,20 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage)
+        self.send_mqtt(status_for_nuvla,
+                       status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
+                       status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
+                       status_for_nuvla.get('resources', {}).get('disks', []))
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
         all_status.update({
             "cpu-usage": psutil.cpu_percent(),
-            "cpu-load": cpu_sample['load'],
+            "cpu-load": status_for_nuvla.get('resources', {}).get('cpu', {}).get('load'),
             "disk-usage": psutil.disk_usage("/")[3],
             "memory-usage": psutil.virtual_memory()[2],
-            "cpus": cpu_sample['capacity'],
-            "memory": ram_sample['capacity'],
+            "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
+            "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
             "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024)
         })
 
