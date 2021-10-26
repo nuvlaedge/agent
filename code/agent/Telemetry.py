@@ -92,34 +92,36 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             self.container_stats_monitor.setDaemon(True)
             self.container_stats_monitor.start()
 
-        self.status = {'resources': None,
-                       'status': None,
-                       'status-notes': None,
-                       'nuvlabox-api-endpoint': None,
-                       'operating-system': None,
-                       'architecture': None,
-                       'ip': None,
-                       'last-boot': None,
-                       'hostname': None,
-                       'docker-server-version': None,
-                       'gpio-pins': None,
-                       'nuvlabox-engine-version': None,
-                       'inferred-location': None,
-                       'vulnerabilities': None,
-                       'node-id': None,
-                       'cluster-id': None,
-                       'cluster-managers': None,
-                       'cluster-nodes': None,
-                       'cluster-node-role': None,
-                       'installation-parameters': None,
-                       'swarm-node-cert-expiry-date': None,
-                       'host-user-home': None,
-                       'orchestrator': None,
-                       'cluster-join-address': None,
-                       'temperatures': None,
-                       'container-plugins': None,
-                       'kubelet-version': None
-                       }
+        self.status_default = {
+            'resources': None,
+            'status': None,
+            'status-notes': None,
+            'nuvlabox-api-endpoint': None,
+            'operating-system': None,
+            'architecture': None,
+            'ip': None,
+            'last-boot': None,
+            'hostname': None,
+            'docker-server-version': None,
+            'gpio-pins': None,
+            'nuvlabox-engine-version': None,
+            'inferred-location': None,
+            'vulnerabilities': None,
+            'node-id': None,
+            'cluster-id': None,
+            'cluster-managers': None,
+            'cluster-nodes': None,
+            'cluster-node-role': None,
+            'installation-parameters': None,
+            'swarm-node-cert-expiry-date': None,
+            'host-user-home': None,
+            'orchestrator': None,
+            'cluster-join-address': None,
+            'temperatures': None,
+            'container-plugins': None,
+            'kubelet-version': None
+        }
+        self.status = self.status_default.copy()
 
         self.status_for_nuvla = {}
         self.status_delete_attrs_in_nuvla = []
@@ -336,7 +338,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         ip = self.get_vpn_ip()
 
-        status_for_nuvla = {
+        status_for_nuvla = self.status_default.copy()
+        status_for_nuvla.update({
             'resources': resources,
             'operating-system': self.container_runtime.get_host_os(),
             "architecture": self.container_runtime.get_host_architecture(node_info),
@@ -346,7 +349,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "status": operational_status,
             "status-notes": operational_status_notes,
             "container-plugins": self.container_runtime.get_container_plugins()
-        }
+        })
 
         docker_server_version = self.get_docker_server_version()
         if docker_server_version:
@@ -914,22 +917,19 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             return output_fallback
 
     @staticmethod
-    def diff(old_status, new_status):
+    def diff(previous_status, current_status):
         """ Compares the previous status with the new one and discover the minimal changes """
 
-        minimal_update = {}
-        delete_attributes = []
-        for key in old_status.keys():
-            if key in new_status:
-                if new_status[key] is None:
-                    delete_attributes.append(key)
-                    continue
-                if old_status[key] != new_status[key]:
-                    minimal_update[key] = new_status[key]
-            else:
-                if any(old_status.values()):
-                    delete_attributes.append(key)
-        return minimal_update, delete_attributes
+        items_changed_or_added = {}
+        attributes_to_delete = set(previous_status.keys()) - set(current_status.keys())
+
+        for key, value in current_status.items():
+            if value is None:
+                attributes_to_delete.add(key)
+            elif value != previous_status.get(key):
+                items_changed_or_added[key] = value
+
+        return items_changed_or_added, attributes_to_delete
 
     def update_status(self):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """

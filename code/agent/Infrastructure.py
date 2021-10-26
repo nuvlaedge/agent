@@ -8,6 +8,7 @@ and respective credentials in Nuvla
 """
 
 import logging
+from re import A
 import docker
 import json
 import requests
@@ -233,6 +234,20 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         return True
 
+    def get_local_nuvlabox_status(self) -> dict:
+        """
+        Reads the local nuvlabox-status file
+
+        Returns:
+            dict: content of the file, or empty dict in case it doesn't exist
+        """
+
+        try:
+            with open(self.nuvlabox_status_file) as ns:
+                return json.load(ns)
+        except FileNotFoundError:
+            return {}
+
     def get_node_role_from_status(self) -> str or None:
         """
         Look up the local nuvlabox-status file and take the cluster-node-role value from there
@@ -240,13 +255,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return: node role
         """
 
-        try:
-            with open(self.nuvlabox_status_file) as ns:
-                role = json.load(ns).get('cluster-node-role')
-        except FileNotFoundError:
-            role = None
-
-        return role
+        return self.get_local_nuvlabox_status().get('cluster-node-role')
 
     def read_commissioning_file(self) -> dict:
         """
@@ -277,8 +286,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         # we only commission the cluster when the NuvlaBox status
         # has already been updated with its "node-id"
-        with open(self.nuvlabox_status_file) as nbs:
-            nuvlabox_status = json.load(nbs)
+        nuvlabox_status = self.get_local_nuvlabox_status()
 
         if not cluster_info:
             # it is not a manager but...
@@ -337,6 +345,36 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             except KeyError:
                 pass
 
+    def commissioning_attr_has_changed(self, current: dict, old: dict, attr_name: str,
+                                        payload: dict, compare_with_nb_resource: bool = False):
+        """
+        Compares the current attribute value with the old one, and if different, adds it to the
+        commissioning payload
+
+        Args:
+            current (dict): current commissioning attributes
+            old (dict): previous commissioning attributes
+            attr_name (str): name of the attribute to be compared
+            payload (dict): minimum commissioning payload
+            compare_with_nb_resource (bool): if True, will lookup the local .context file and check if attr has changed.
+                                                NOTE: this flag make the check ignore whatever the previous commission was
+        """
+
+        if compare_with_nb_resource:
+            with open(f'{self.data_volume}/{self.context}') as f:
+                # overwrite the old commissioning value with the one from the NB resource (source of truth)
+                old_value = json.load(f).get(attr_name)
+                if old_value:
+                    old[attr_name] = old_value
+
+        if isinstance(current[attr_name], str):
+            if current[attr_name] != old.get(attr_name):
+                payload[attr_name] = current[attr_name]
+        elif isinstance(current[attr_name], list):
+            if sorted(current[attr_name]) != sorted(old.get(attr_name, [])):
+                payload[attr_name] = current[attr_name]
+
+
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
@@ -352,8 +390,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
         commission_payload["tags"] = self.container_runtime.get_node_labels()
-        if sorted(commission_payload.get('tags', [])) != sorted(old_commission_payload.get('tags', [])):
-            minimum_commission_payload['tags'] = commission_payload.get('tags', [])
+        self.commissioning_attr_has_changed(commission_payload, old_commission_payload, "tags", minimum_commission_payload)
 
         infra_service = {}
         if self.compute_api_is_running(container_api_port):
@@ -370,22 +407,30 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         # atm, it isn't clear whether these will make sense for k8s
         # if they do, then this block should be moved to an abstractmethod of the ContainerRuntime
-        if cluster_join_tokens and len(cluster_join_tokens) > 1 and NuvlaBoxCommon.ORCHESTRATOR in ['docker', 'swarm']:
+        if len(cluster_join_tokens) > 1:
             self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
             commission_payload.update({
-                'swarm-token-manager': cluster_join_tokens[0],
-                'swarm-token-worker': cluster_join_tokens[1]
+                self.container_runtime.join_token_manager_keyname: cluster_join_tokens[0],
+                self.container_runtime.join_token_worker_keyname: cluster_join_tokens[1]
             })
 
-        if commission_payload.get('swarm-token-manager') != old_commission_payload.get('swarm-token-manager'):
-            minimum_commission_payload['swarm-token-manager'] = cluster_join_tokens[0]
-        if commission_payload.get('swarm-token-worker') != old_commission_payload.get('swarm-token-worker'):
-            minimum_commission_payload['swarm-token-worker'] = cluster_join_tokens[1]
+            self.commissioning_attr_has_changed(commission_payload,
+                                                old_commission_payload,
+                                                self.container_runtime.join_token_manager_keyname,
+                                                minimum_commission_payload)
+            self.commissioning_attr_has_changed(commission_payload,
+                                                old_commission_payload,
+                                                self.container_runtime.join_token_worker_keyname,
+                                                minimum_commission_payload)
 
         self.get_nuvlabox_capabilities(commission_payload)
-        if sorted(commission_payload.get('capabilities', [])) != sorted(old_commission_payload.get('capabilities', [])) \
-                or any(k in minimum_commission_payload for k in infra_service):
+        # capabilities should always be commissioned when infra is also being commissioned
+        if any(k in minimum_commission_payload for k in infra_service):
             minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
+        else:
+            self.commissioning_attr_has_changed(commission_payload, old_commission_payload,
+                                                "capabilities", minimum_commission_payload,
+                                                compare_with_nb_resource=True)
 
         # if this node is a worker, them we must force remove some assets
         self.needs_partial_decommission(minimum_commission_payload, commission_payload, old_commission_payload)

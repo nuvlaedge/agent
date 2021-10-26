@@ -81,7 +81,7 @@ class ContainerRuntimeClient(ABC):
         pass
 
     @abstractmethod
-    def get_join_tokens(self):
+    def get_join_tokens(self) -> tuple:
         """
         Get token for joining this node
         """
@@ -301,6 +301,8 @@ class KubernetesClient(ContainerRuntimeClient):
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
         self.vpn_client_component = os.getenv('NUVLABOX_VPN_COMPONENT_NAME', 'vpn-client')
         self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
+        self.join_token_manager_keyname = 'kubernetes-token-manager'
+        self.join_token_worker_keyname = 'kubernetes-token-worker'
 
     def get_node_info(self):
         if self.host_node_name:
@@ -319,10 +321,10 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return None
 
-    def get_join_tokens(self):
+    def get_join_tokens(self) -> tuple:
         # NOTE: I don't think we can get the cluster join token from the API
         # it needs to come from the cluster mgmt tool (i.e. k0s, k3s, kubeadm, etc.)
-        return None
+        return ()
 
     def list_nodes(self, optional_filter={}):
         return self.client.list_node().items
@@ -677,6 +679,8 @@ class DockerClient(ContainerRuntimeClient):
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
         self.infra_service_endpoint_keyname = 'swarm-endpoint'
+        self.join_token_manager_keyname = 'swarm-token-manager'
+        self.join_token_worker_keyname = 'swarm-token-worker'
 
     def get_node_info(self):
         return self.client.info()
@@ -685,7 +689,7 @@ class DockerClient(ContainerRuntimeClient):
         node_info = self.get_node_info()
         return f"{node_info['OperatingSystem']} {node_info['KernelVersion']}"
 
-    def get_join_tokens(self):
+    def get_join_tokens(self) -> tuple:
         try:
             if self.client.swarm.attrs:
                 return self.client.swarm.attrs['JoinTokens']['Manager'], \
@@ -695,7 +699,7 @@ class DockerClient(ContainerRuntimeClient):
                 # quorum is lost
                 logging.warning(f'Quorum is lost. This node will no longer support Service and Cluster management')
 
-        return None
+        return ()
 
     def list_nodes(self, optional_filter={}):
         return self.client.nodes.list(filters=optional_filter)

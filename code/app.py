@@ -344,36 +344,38 @@ if __name__ == "__main__":
 
     logging.info("Starting telemetry...")
     while True:
+        start_cycle = time.time()
+
         if not can_continue:
             break
 
-        if not nb_checker or not nb_checker.is_alive():
-            nb_checker = threading.Thread(target=preflight_check,
-                                          args=(activation, infra, nuvlabox_info_updated_date,),
-                                          daemon=True)
-            nb_checker.start()
-
-        start_cycle = time.time()
-
-        if not telemetry_thread or not telemetry_thread.is_alive():
-            telemetry_thread = threading.Thread(target=telemetry.update_status, daemon=True)
-            telemetry_thread.start()
+        if telemetry_thread and telemetry_thread.is_alive():
+            logging.warning('Telemetry thread not completed in time')
 
         response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
+
+        if not nb_checker or not nb_checker.is_alive():
+            nb_checker = threading.Thread(target=preflight_check,
+                                            args=(activation, infra, nuvlabox_info_updated_date,),
+                                            daemon=True)
+            nb_checker.start()
+
+        if not telemetry_thread or not telemetry_thread.is_alive():
+            telemetry_thread = threading.Thread(target=telemetry.update_status,
+                                                daemon=True)
+            telemetry_thread.start()
 
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
             logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             threading.Thread(target=manage_pull_jobs,
-                             args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
-                             daemon=True).start()
+                                args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
+                                daemon=True).start()
 
         if not infra.is_alive():
-            infra = Infrastructure(data_volume, refresh_period=refresh_interval)
+            infra = Infrastructure(data_volume)
             infra.start()
 
-        end_cycle = time.time()
-        cycle_duration = end_cycle - start_cycle
-        # formula is R-2T, where
-        next_cycle_in = refresh_interval - 2 * cycle_duration
+        cycle_duration = time.time() - start_cycle
+        next_cycle_in = refresh_interval - cycle_duration - 1
 
         e.wait(timeout=next_cycle_in)
