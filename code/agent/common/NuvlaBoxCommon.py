@@ -1104,9 +1104,7 @@ class DockerClient(ContainerRuntimeClient):
     def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
         infra_service = self.infer_if_additional_coe_exists()
         if api_endpoint:
-            infra_service = {
-                "swarm-endpoint": api_endpoint
-            }
+            infra_service["swarm-endpoint"] = api_endpoint
 
             if tls_keys:
                 infra_service["swarm-client-ca"] = tls_keys[0]
