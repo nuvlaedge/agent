@@ -722,7 +722,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             if now - before <= self.time_between_get_geolocation:
                 # too soon to infer geolocation
-                return None
+                return previous_geolocation_json.get("coordinates")
         except FileNotFoundError:
             logging.debug("Inferring IP-based geolocation for the first time")
         except (json.decoder.JSONDecodeError, KeyError):
@@ -769,7 +769,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if inferred_location:
             # we have valid coordinates, so let's keep a local record of it
-            content = {"coordinated": inferred_location, "timestamp": now}
+            content = {"coordinates": inferred_location, "timestamp": now}
             with open(self.ip_geolocation_file, 'w') as ipgeof:
                 ipgeof.write(json.dumps(content))
 
@@ -835,11 +835,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     #
                     # current - first + carry
                     rx_bytes_report = rx_bytes - \
-                                      self.first_net_stats[interface].get('bytes-received', 0) + \
-                                      self.first_net_stats[interface].get('bytes-received-carry', 0)
+                                        self.first_net_stats[interface].get('bytes-received', 0) + \
+                                        self.first_net_stats[interface].get('bytes-received-carry', 0)
                     tx_bytes_report = tx_bytes - \
-                                      self.first_net_stats[interface].get('bytes-transmitted', 0) + \
-                                      self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
+                                        self.first_net_stats[interface].get('bytes-transmitted', 0) + \
+                                        self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
             else:
                 rx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-received', 0)
                 tx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-transmitted', 0)
