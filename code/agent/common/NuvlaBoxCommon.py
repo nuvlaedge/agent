@@ -1131,7 +1131,7 @@ class DockerClient(ContainerRuntimeClient):
         cmd = f'grep -R "{k8s_apiserver_process}" {self.hostfs}/proc/*/comm'
 
         try:
-            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8')
+            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8', shell=True)
         except TimeoutExpired as e:
             logging.warning(f'Could not infer if Kubernetes is also installed on the host: {str(e)}')
             return k8s_cluster_info
