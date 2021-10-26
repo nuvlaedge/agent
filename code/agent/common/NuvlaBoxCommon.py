@@ -17,7 +17,7 @@ import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from nuvla.api import Api
-from subprocess import PIPE, Popen
+from subprocess import run, STDOUT, PIPE, Popen, TimeoutExpired
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
 if KUBERNETES_SERVICE_HOST:
@@ -1125,11 +1125,30 @@ class DockerClient(ContainerRuntimeClient):
 
     def infer_if_additional_coe_exists(self) -> dict:
         # Check if there is a k8s installation available as well
-        k8s_apiserver_container_label = "io.kubernetes.container.name=kube-apiserver"
-        k8s_apiservers = self.client.containers.list(filters={"label": k8s_apiserver_container_label})
-
+        k8s_apiserver_process = 'kube-apiserver'
         k8s_cluster_info = {}
-        if not k8s_apiservers:
+
+        cmd = f'grep -R "{k8s_apiserver_process}" {self.hostfs}/proc/*/comm'
+
+        try:
+            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8')
+        except TimeoutExpired as e:
+            logging.warning(f'Could not infer if Kubernetes is also installed on the host: {str(e)}')
+            return k8s_cluster_info
+
+        process_args_file = result.stdout.split(':')[0].rstrip('comm') + 'cmdline'
+        with open(process_args_file) as pid_file_cmdline:
+            k8s_apiserver_args = pid_file_cmdline.read()
+
+        # cope with weird characters
+        k8s_apiserver_args = k8s_apiserver_args.replace('\x00', '')
+        args_list = k8s_apiserver_args.split('--')[1:]
+
+        # convert list to dict
+        try:
+            args = { args_list[i].split('=')[0]: args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
+        except IndexError:
+            logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
             return k8s_cluster_info
 
         arg_address = "advertise-address"
@@ -1137,46 +1156,29 @@ class DockerClient(ContainerRuntimeClient):
         arg_ca = "client-ca-file"
         arg_cert = "kubelet-client-certificate"
         arg_key = "kubelet-client-key"
-        # just in case there is more than one k8s config, we want to get the first one that looks healthy
-        for api in k8s_apiservers:
-            try:
-                inspect = self.client.api.inspect_container(api.id)
-            except docker.errors.NotFound:
-                logging.warning(f'Error inspecting container {api.id} while looking up for k8s cluster')
-                continue
 
-            args_list = inspect.get('Args', [])
-            # convert list to dict
-            try:
-                args = { args_list[i].split('=')[0].lstrip("--"): args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
-            except IndexError:
-                logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
-                continue
+        try:
+            k8s_endpoint = f'https://{args[arg_address]}:{args[arg_port]}' \
+                if not args[arg_address].startswith("http") else f'{args[arg_address]}:{args[arg_port]}'
 
-            try:
-                k8s_endpoint = f'https://{args[arg_address]}:{args[arg_port]}' \
-                    if not args[arg_address].startswith("http") else f'{args[arg_address]}:{args[arg_port]}'
+            with open(f'{self.hostfs}{args[arg_ca]}') as ca:
+                k8s_client_ca = ca.read()
 
-                with open(f'{self.hostfs}{args[arg_ca]}') as ca:
-                    k8s_client_ca = ca.read()
+            with open(f'{self.hostfs}{args[arg_cert]}') as cert:
+                k8s_client_cert = cert.read()
 
-                with open(f'{self.hostfs}{args[arg_cert]}') as cert:
-                    k8s_client_cert = cert.read()
+            with open(f'{self.hostfs}{args[arg_key]}') as key:
+                k8s_client_key = key.read()
 
-                with open(f'{self.hostfs}{args[arg_key]}') as key:
-                    k8s_client_key = key.read()
-
-                k8s_cluster_info.update({
-                    'kubernetes-endpoint': k8s_endpoint,
-                    'kubernetes-client-ca': k8s_client_ca,
-                    'kubernetes-client-cert': k8s_client_cert,
-                    'kubernetes-client-key': k8s_client_key
-                })
-                # if we got here, then it's very likely that the k8s cluster is up and running, no need to go further
-                break
-            except (KeyError, FileNotFoundError) as e:
-                logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
-                continue
+            k8s_cluster_info.update({
+                'kubernetes-endpoint': k8s_endpoint,
+                'kubernetes-client-ca': k8s_client_ca,
+                'kubernetes-client-cert': k8s_client_cert,
+                'kubernetes-client-key': k8s_client_key
+            })
+        except (KeyError, FileNotFoundError) as e:
+            logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
+            return {}
 
         return k8s_cluster_info
 
