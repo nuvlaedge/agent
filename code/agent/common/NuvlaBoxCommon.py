@@ -1340,6 +1340,17 @@ class NuvlaBoxCommon():
 
         return True
 
+    @staticmethod
+    def read_json_file(file_path: str) -> dict:
+        """
+        Reads a JSON file. Error should be caught by the calling module
+
+        :param file_path: path of the file to be read
+        :return: content of the file, as a dict
+        """
+        with open(file_path) as f:
+            return json.load(f)
+
     def get_operational_status(self):
         """ Retrieves the operational status of the NuvlaBox from the .status file """
 

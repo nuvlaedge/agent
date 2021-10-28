@@ -42,8 +42,7 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             return False, self.user_info
 
         try:
-            with open(self.activation_flag) as a:
-                self.user_info = json.loads(a.read())
+            self.user_info = self.read_json_file(self.activation_flag)
 
             logging.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
             logging.info("NuvlaBox credential: {}".format(self.user_info["api-key"]))
@@ -80,17 +79,16 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             raise
 
         # Flags that the activation has been done
-        with open(self.activation_flag, 'w') as a:
-            a.write(json.dumps(self.user_info))
+        self.write_json_to_file(self.activation_flag, self.user_info)
 
         return self.user_info
 
-    def create_nb_document_file(self, nuvlabox_resource):
+    def create_nb_document_file(self, nuvlabox_resource: dict) -> dict:
         """ Writes contextualization file with NB resource content
 
         :param nuvlabox_resource: nuvlabox resource data
+        :return copy of the old NB resource context which is being overwritten
         """
-
         context_file = "{}/{}".format(self.data_volume, self.context)
 
         logging.info('Managing NB context file {}'.format(context_file))
@@ -102,14 +100,21 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.warning("Writing {} for the first time".format(context_file))
             current_context = {}
 
-        current_vpn_is_id = current_context.get("vpn-server-id")
-
         with open(context_file, 'w') as cw:
             cw.write(json.dumps(nuvlabox_resource))
 
-        if nuvlabox_resource.get("vpn-server-id") != current_vpn_is_id:
-            logging.info('VPN Server ID has been added/changed in Nuvla: {}'
-                         .format(nuvlabox_resource.get("vpn-server-id")))
+        return current_context
+
+    def vpn_commission_if_needed(self, current_nb_resource: dict, old_nb_resource: dict):
+        """
+        Checks if the VPN server ID has changed in the NB resource, and if so, asks for VPN commissioning
+
+        :param current_nb_resource: current NuvlaBox resource, from Nuvla
+        :param old_nb_resource: old content of the NuvlaBox resource
+        :return:
+        """
+        if current_nb_resource.get("vpn-server-id") != old_nb_resource.get("vpn-server-id"):
+            logging.info(f'VPN Server ID has been added/changed in Nuvla: {current_nb_resource.get("vpn-server-id")}')
 
             self.commission_vpn()
 
@@ -118,40 +123,15 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return self.api().get(self.nuvlabox_id).data
 
-    def update_nuvlabox_resource(self):
+    def update_nuvlabox_resource(self) -> tuple:
         """ Updates the static information about the NuvlaBox
 
-        :return: nuvlabox-status ID
+        :return: current and old NuvlaBox resources
         """
 
         self.authenticate(self.api(), self.user_info["api-key"], self.user_info["secret-key"])
         nuvlabox_resource = self.get_nuvlabox_info()
 
-        self.create_nb_document_file(nuvlabox_resource)
+        old_nuvlabox_resource = self.create_nb_document_file(nuvlabox_resource)
 
-        return nuvlabox_resource["nuvlabox-status"]
-
-    def update_nuvlabox_info(self, nuvlabox_resource):
-        """ Takes the nuvlabox_resource and updates it with static and
-        device specific information """
-
-        cpuinfo = self.get_cpuinfo()
-        # nuvlabox_resource.setdefault('hwRevisionCode', cpuinfo["Revision"])
-        nuvlabox_resource.setdefault('os-version', self.container_runtime.get_host_os())
-        # nuvlabox_resource.setdefault('manufacturerSerialNumber', cpuinfo["Serial"])
-        return nuvlabox_resource
-
-    @staticmethod
-    def get_cpuinfo():
-        """ Static method to fetch CPU information """
-
-        cpuinfo = {}
-        with open("/proc/cpuinfo", "r") as cpui:
-            lines = cpui.read().splitlines()
-            for l in lines:
-                if l.startswith("Revision"):
-                    cpuinfo["Revision"] = l.split(":")[-1].replace(" ", "")
-                if l.startswith("Serial"):
-                    cpuinfo["Serial"] = l.split(":")[-1].replace(" ", "")
-        return cpuinfo
-
+        return nuvlabox_resource, old_nuvlabox_resource
