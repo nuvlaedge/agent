@@ -58,9 +58,8 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
                     "api-key": api_key,
                     "secret-key": api_secret
                 }
-                
-                with open(self.activation_flag, 'w') as a:
-                    a.write(json.dumps(self.user_info))
+
+                self.write_json_to_file(self.activation_flag, self.user_info)
 
                 return False, self.user_info
             

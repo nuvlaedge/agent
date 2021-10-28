@@ -1322,6 +1322,24 @@ class NuvlaBoxCommon():
         stdout, stderr = p.communicate()
         return {'stdout': stdout, 'stderr': stderr, 'returncode': p.returncode}
 
+    @staticmethod
+    def write_json_to_file(file_path: str, content: dict, mode: str = 'w') -> bool:
+        """
+        Write JSON content into a file
+
+        :param file_path: path of the file to be written
+        :param content: JSON content
+        :param mode: mode in which to open the file for writing
+        :return: True if file was written with success. False otherwise
+        """
+        try:
+            with open(file_path, mode) as f:
+                f.write(json.dumps(content))
+        except:
+            return False
+
+        return True
+
     def get_operational_status(self):
         """ Retrieves the operational status of the NuvlaBox from the .status file """
 

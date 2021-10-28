@@ -4,3 +4,6 @@ pom.xml
 *.md
 .gitignore
 .idea
+code/tests
+code/requirements.tests.txt
+__pycache__
