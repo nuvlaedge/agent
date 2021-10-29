@@ -1351,6 +1351,21 @@ class NuvlaBoxCommon():
         with open(file_path) as f:
             return json.load(f)
 
+    def get_nuvlabox_version(self) -> int:
+        """
+        Gives back this NuvlaBox Engine's version
+
+        :return: major version of the NuvlaBox Engine, as an integer
+        """
+        if self.nuvlabox_engine_version:
+            version = int(self.nuvlabox_engine_version.split('.')[0])
+        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
+            version = self.read_json_file(f"{self.data_volume}/{self.context}")['version']
+        else:
+            version = 2
+
+        return version
+
     def get_operational_status(self):
         """ Retrieves the operational status of the NuvlaBox from the .status file """
 

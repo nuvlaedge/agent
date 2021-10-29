@@ -3,10 +3,11 @@
 
 from agent.Activate import Activate
 import json
+import logging
 import mock
 import requests
 import unittest
-from tests.utils.fake import Fake
+from tests.utils.fake import Fake, FakeNuvlaApi
 from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
 
 
@@ -20,6 +21,18 @@ class ActivateTestCase(unittest.TestCase):
         self.obj.activation_flag = 'mock-activation-file'
         self.obj.nuvlabox_id = "nuvlabox/fake-id"
         self.obj.nuvla_endpoint = "https://fake-nuvla.io"
+        self.obj.data_volume = self.shared_volume
+        self.obj.context = 'path/to/fake/context/file'
+        logging.disable(logging.CRITICAL)
+
+    def tearDown(self):
+        logging.disable(logging.NOTSET)
+
+    @staticmethod
+    def set_nuvla_api(api_keys):
+        """ Fake the initialization of the Nuvla Api instance """
+        api = FakeNuvlaApi(api_keys)
+        return api
 
     def test_instantiation(self):
         self.assertTrue(self.obj.user_info == {}, "Failed to instantiate Activate class instance")
@@ -61,19 +74,8 @@ class ActivateTestCase(unittest.TestCase):
     @mock.patch.object(Activate, 'write_json_to_file')
     @mock.patch.object(Activate, 'api')
     def test_activate(self, mock_api, mock_write_file, mock_shell_exec):
-        class Api(object):
-            def __init__(self, reference_api_keys):
-                self.api_keys = reference_api_keys
-
-            def _cimi_post(self, nuvlabox_id):
-                return self.api_keys
-
-        def setApi(api_keys):
-            api = Api(api_keys)
-            return api
-
-        # succesfull activation will return the API keys for the NuvlaBox
-        mock_api.return_value = setApi(json.loads(self.api_key_content))
+        # successful activation will return the API keys for the NuvlaBox
+        mock_api.return_value = self.set_nuvla_api(json.loads(self.api_key_content))
         mock_write_file.return_value = True
         self.assertEqual(self.obj.activate(), json.loads(self.api_key_content),
                          'Unable to activate the NuvlaBox')
@@ -96,8 +98,65 @@ class ActivateTestCase(unittest.TestCase):
         mock_shell_exec.assert_called_once()
         mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
 
+    @mock.patch.object(Activate, 'write_json_to_file')
+    @mock.patch.object(Activate, 'read_json_file')
+    def test_create_nb_document(self, mock_read_json_file, mock_write_to_file):
+        # if context file does not exist, the old NB resource should be empty
+        mock_read_json_file.side_effect = FileNotFoundError
+        mock_write_to_file.return_value = None
+        self.assertEqual(self.obj.create_nb_document_file({'foo': 'bar'}), {},
+                         'Returned an old NuvlaBox resource when there should not be one')
+        mock_read_json_file.assert_called_once()
+        mock_write_to_file.assert_called_once()
 
+        # if there is a context file already, its content will be returned as the old NuvlaBox resource context
+        old_nuvlabox_context = {'id': 'nuvlabox/fake-old'}
+        mock_read_json_file.reset_mock(side_effect=True)
+        mock_write_to_file.reset_mock()
+        mock_read_json_file.return_value = old_nuvlabox_context
+        self.assertEqual(self.obj.create_nb_document_file({'foo': 'bar'}), old_nuvlabox_context,
+                         'Unable to get old NuvlaBox context when creating new NB document')
+        mock_write_to_file.assert_called_once()
 
+    @mock.patch.object(Activate, 'commission_vpn')
+    def test_vpn_commission_if_needed(self, mock_commission_vpn):
+        old_nuvlabox_resource = {'id': self.obj.nuvlabox_id}
+        new_nuvlabox_resource = {**old_nuvlabox_resource, **{'vpn-server-id': 'infrastructure-servive/fake-vpn'}}
 
+        mock_commission_vpn.return_value = None
 
+        # if 'vpn-server-id' has not changed, then VPN commissioning will not be invoked
+        self.obj.vpn_commission_if_needed(old_nuvlabox_resource, old_nuvlabox_resource)
+        mock_commission_vpn.assert_not_called()
 
+        # but if 'vpn-server-id' changes, then VPN commissioning takes place
+        self.obj.vpn_commission_if_needed(new_nuvlabox_resource, old_nuvlabox_resource)
+        mock_commission_vpn.assert_called_once()
+
+    @mock.patch.object(Activate, 'api')
+    def test_get_nuvlabox_info(self, mock_api):
+        mock_api.return_value = self.set_nuvla_api(json.loads(self.api_key_content))
+
+        # Nuvla should return the NuvlaBox resource
+        returned_nuvlabox_resource = self.obj.get_nuvlabox_info()
+        self.assertIsInstance(returned_nuvlabox_resource, dict)
+        self.assertEqual(self.obj.nuvlabox_id, returned_nuvlabox_resource.get('id'),
+                         'Did not get the expected NuvlaBox resource')
+        mock_api.assert_called_once()
+
+    @mock.patch.object(Activate, 'create_nb_document_file')
+    @mock.patch.object(Activate, 'get_nuvlabox_info')
+    @mock.patch.object(Activate, 'authenticate')
+    def test_update_nuvlabox_resource(self, mock_authenticate, mock_get_nuvlabox_info, mock_create_nb_doc):
+        self.obj.user_info = json.loads(self.api_key_content)
+        mock_authenticate.return_value = self.set_nuvla_api(self.obj.user_info)
+        old_nuvlabox_resource = {'id': self.obj.nuvlabox_id}
+        new_nuvlabox_resource = {**old_nuvlabox_resource, **{'new-attr': True}}
+        mock_get_nuvlabox_info.return_value = new_nuvlabox_resource
+        mock_create_nb_doc.return_value = old_nuvlabox_resource
+
+        # when called, it shall get the NB resource from Nuvla,
+        # overwrite the existing NB doc,
+        # and return both old and new NB resources
+        self.assertEqual(self.obj.update_nuvlabox_resource(), (new_nuvlabox_resource, old_nuvlabox_resource),
+                         'Failed to update NuvlaBox resource: unexpected "new" and "old" NB resources')

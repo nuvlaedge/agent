@@ -94,14 +94,12 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         logging.info('Managing NB context file {}'.format(context_file))
 
         try:
-            with open(context_file) as c:
-                current_context = json.loads(c.read())
+            current_context = self.read_json_file(context_file)
         except (ValueError, FileNotFoundError):
             logging.warning("Writing {} for the first time".format(context_file))
             current_context = {}
 
-        with open(context_file, 'w') as cw:
-            cw.write(json.dumps(nuvlabox_resource))
+        self.write_json_to_file(context_file, nuvlabox_resource)
 
         return current_context
 
