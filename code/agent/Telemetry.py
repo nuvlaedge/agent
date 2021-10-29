@@ -267,27 +267,21 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             return None
 
-    def get_status(self):
-        """ Gets several types of information to populate the NuvlaBox status """
+    def set_status_resources(self, body: dict):
+        """
+        Set the information about disk usage in the NuvlaBox status paylod
 
-        # get status for Nuvla
+        Args:
+            body (dict): NuvlaBox Status payload
+        """
+        # DISK
         disk_usage = self.get_disks_usage()
-        operational_status_notes = self.get_operational_status_notes()
-        operational_status = self.get_operational_status()
+        disks = []
+        for dsk in disk_usage:
+            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
+            disks.append(dsk)
 
-        node_info = self.container_runtime.get_node_info()
-
-        system_errors, system_warnings = self.container_runtime.read_system_issues(node_info)
-
-        operational_status_notes += system_errors + system_warnings
-        if system_errors:
-            operational_status = 'DEGRADED'
-
-        node_id = self.container_runtime.get_node_id(node_info)
-        cluster_id = self.container_runtime.get_cluster_id(node_info, f'cluster_{self.nuvlabox_id}')
-
-        cluster_managers = self.container_runtime.get_cluster_managers()
-
+        # CPU
         cpu_sample = {
             "capacity": int(psutil.cpu_count()),
             "load": float(psutil.getloadavg()[2]),
@@ -298,30 +292,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
             "system-calls": int(psutil.cpu_stats().syscalls)
         }
+        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
+        cpu.update(cpu_sample)
 
+        # MEMORY
         ram_sample = {
             "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
             "used": int(round(psutil.virtual_memory()[3]/1024/1024))
         }
-
-        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
-        cpu.update(cpu_sample)
-
         ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
         ram.update(ram_sample)
 
-        disks = []
-        for dsk in disk_usage:
-            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
-            disks.append(dsk)
-
-        resources = {
-            'cpu': cpu,
-            'ram': ram
-        }
-        if disks:
-            resources['disks'] = disks
-
+        # DOCKER STATS
         container_stats = None
         try:
             container_stats = self.container_stats_queue.get(block=False)
@@ -333,119 +315,214 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 self.container_stats_monitor.setDaemon(True)
                 self.container_stats_monitor.start()
 
-        if container_stats:
-            resources['container-stats'] = container_stats
+        # NETWORK
+        net_stats = self.get_network_info()
 
-        ip = self.get_vpn_ip()
+        # POWER
+        try:
+            power_consumption = self.get_power_consumption()
+        except Exception as e:
+            logging.error(f"Unable to retrieve power consumption metrics: {str(e)}")
+            power_consumption = None
 
-        status_for_nuvla = self.status_default.copy()
-        status_for_nuvla.update({
-            'resources': resources,
-            'operating-system': self.container_runtime.get_host_os(),
-            "architecture": self.container_runtime.get_host_architecture(node_info),
-            "hostname": self.container_runtime.get_hostname(node_info),
-            "ip": ip if ip else self.container_runtime.get_api_ip_port()[0],
-            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        ###
+        resources = {
+            'cpu': cpu,
+            'ram': ram
+        }
+
+        conditional_resources = [
+            ('disks', disks),
+            ('container-stats', container_stats),
+            ('net-stats', net_stats),
+            ('power-consumption', power_consumption)
+        ]
+        for cres in conditional_resources:
+            if cres[1]:
+                resources[cres[0]] = cres[1]
+
+        body['resources'] = resources
+
+    def set_status_operational_status(self, body: dict, node: dict):
+        """
+        Gets and sets the operational status and status_notes for the nuvlabox-status
+
+        :param body: payload for the nuvlabox-status update request
+        :param node: information about the underlying COE node
+        """
+        operational_status_notes = self.get_operational_status_notes()
+        operational_status = self.get_operational_status()
+
+        system_errors, system_warnings = self.container_runtime.read_system_issues(node)
+
+        operational_status_notes += system_errors + system_warnings
+        if system_errors:
+            operational_status = 'DEGRADED'
+
+        if not self.installation_home:
+            operational_status_notes.append("HOST_HOME not defined - SSH key management will not be functional")
+
+        body.update({
             "status": operational_status,
             "status-notes": operational_status_notes,
-            "container-plugins": self.container_runtime.get_container_plugins()
         })
 
+    def set_status_ip(self, body: dict):
+        """
+        Set the IP of the NuvlaBox for the telemetry update
+
+        :param body: payload for the nuvlabox-status update request
+        """
+        ip = self.get_vpn_ip()
+        body["ip"] = ip if ip else self.container_runtime.get_api_ip_port()[0]
+
+    def set_status_coe_version(self, body: dict):
+        """
+        Set the version of Docker and Kubelet when possible and if present
+
+        :param body: payload for the nuvlabox-status update request
+        """
         docker_server_version = self.get_docker_server_version()
         if docker_server_version:
-            status_for_nuvla['docker-server-version'] = docker_server_version
+            body['docker-server-version'] = docker_server_version
 
         try:
             kubelet_version = self.container_runtime.get_kubelet_version()
             if kubelet_version:
-                status_for_nuvla['kubelet-version'] = kubelet_version
+                body['kubelet-version'] = kubelet_version
         except (NameError, AttributeError):
             # method not implemented - meaning this is a Docker installation. Just ignore it
             pass
 
+    def get_cluster_manager_attrs(self, managers: list, node_id: str) -> tuple:
+        """
+        If this node is a manager, tries to get the WHOLE list of nodes in the cluster
+
+        :param managers: existing cluster managers
+        :param node_id: this node's ID
+        :return: tuple of (bool, list), to say if this node is a manager, and the whole list of cluster nodes
+        """
+        cluster_nodes = []
+        if node_id not in managers:
+            return False, cluster_nodes
+
+        try:
+            all_cluster_nodes = self.container_runtime.list_nodes()
+        except docker.errors.APIError as e:
+            logging.error(f'Cannot get Docker cluster nodes: {str(e)}')
+        else:
+            for node in all_cluster_nodes:
+                active_node_id = self.container_runtime.is_node_active(node)
+                if not active_node_id:
+                    continue
+                if active_node_id not in cluster_nodes:
+                    try:
+                        cluster_nodes.append(node.id)
+                    except AttributeError:
+                        continue
+
+            return True, cluster_nodes
+        return False, []
+
+    def set_status_cluster(self, body: dict, node: dict):
+        """
+        Gets and sets all the cluster attributes for the nuvlabox-status
+
+        :param body: payload for the nuvlabox-status update request
+        :param node: information about the underlying COE node
+        """
+
+        node_id = self.container_runtime.get_node_id(node)
+        cluster_id = self.container_runtime.get_cluster_id(node, f'cluster_{self.nuvlabox_id}')
+        cluster_managers = self.container_runtime.get_cluster_managers()
+
         if node_id:
-            status_for_nuvla["node-id"] = node_id
-            status_for_nuvla["orchestrator"] = NuvlaBoxCommon.ORCHESTRATOR_COE
+            body["node-id"] = node_id
+            body["orchestrator"] = NuvlaBoxCommon.ORCHESTRATOR_COE
+            # assume it's a worker to begin with
+            body["cluster-node-role"] = "worker"
 
         if cluster_id:
-            status_for_nuvla["cluster-id"] = cluster_id
+            body["cluster-id"] = cluster_id
 
         if cluster_managers:
-            status_for_nuvla["cluster-managers"] = cluster_managers
+            body["cluster-managers"] = cluster_managers
             if node_id:
                 cluster_join_addr = self.container_runtime.get_cluster_join_address(node_id)
                 if cluster_join_addr:
-                    status_for_nuvla["cluster-join-address"] = cluster_join_addr
+                    body["cluster-join-address"] = cluster_join_addr
 
-        if node_id and node_id in cluster_managers:
-            status_for_nuvla["cluster-node-role"] = "manager"
+        is_manager, cluster_nodes = self.get_cluster_manager_attrs(cluster_managers, node_id)
+        if is_manager:
+            body["cluster-node-role"] = "manager"
 
-            cluster_nodes = []
-            try:
-                all_cluster_nodes = self.container_runtime.list_nodes()
-            except docker.errors.APIError as e:
-                logging.error(f'Cannot get Docker cluster nodes: {str(e)}')
-            else:
-                for node in all_cluster_nodes:
-                    active_node_id = self.container_runtime.is_node_active(node)
-                    if active_node_id and active_node_id not in cluster_nodes:
-                        try:
-                            cluster_nodes.append(node.id)
-                        except AttributeError:
-                            continue
+        if len(cluster_nodes) > 0:
+            body['cluster-nodes'] = cluster_nodes
 
-            if len(cluster_nodes) > 0:
-                status_for_nuvla['cluster-nodes'] = cluster_nodes
-        else:
-            if node_id:
-                status_for_nuvla["cluster-node-role"] = "worker"
+    def set_status_installation_params(self, body: dict):
+        """
+        Sets the NuvlaBox installation parameters attribute in the nuvlabox-status
 
+        :param body: payload for the nuvlabox-status update request
+        """
         installation_params = self.get_installation_parameters()
         if installation_params:
-            status_for_nuvla['installation-parameters'] = installation_params
+            body['installation-parameters'] = installation_params
 
-        net_stats = self.get_network_info()
-        if net_stats:
-            status_for_nuvla['resources']['net-stats'] = net_stats
+    def set_status_coe_cert_expiration_date(self, body: dict):
+        """
+        Sets the COE certificate expiration date in the NuvlaBox Status
 
-        if self.installation_home:
-            status_for_nuvla['host-user-home'] = self.installation_home
-        else:
-            status_for_nuvla['status-notes'].append("HOST_HOME not defined - SSH key management will not be functional")
-
+        :param body: payload for the nuvlabox-status update request
+        """
         if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
             # can only infer this for Docker, cause for K8s, the certificates might be on different folders,
             # depending on the installation tool (k0s vs k3s vs kubeadm ...)
             try:
                 swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()
                 if swarm_cert_expiration:
-                    status_for_nuvla['swarm-node-cert-expiry-date'] = swarm_cert_expiration
+                    body['swarm-node-cert-expiry-date'] = swarm_cert_expiration
             except Exception as e:
                 logging.warning(f"Cannot infer Docker Swarm cert expiration date. Reason: {str(e)}")
 
-        power_consumption = None
-        try:
-            power_consumption = self.get_power_consumption()
-            if power_consumption:
-                status_for_nuvla['resources']['power-consumption'] = power_consumption
-        except:
-            logging.exception("Unable to retrieve power consumption metrics")
+    def set_status_temperatures(self, body: dict):
+        """
+        Sets the device temperates in the NuvlaBox Status
 
+        :param body: payload for the nuvlabox-status update request
+        """
         temperatures = self.get_temperature()
         if temperatures:
-            status_for_nuvla['temperatures'] = temperatures
+            body['temperatures'] = temperatures
 
+    def set_status_gpio(self, body: dict):
+        """
+        Sets the GPIO pins information in the NuvlaBox Status
+
+        :param body: payload for the nuvlabox-status update request
+        """
         if self.gpio_utility:
             # Get GPIO pins status
             gpio_pins = self.get_gpio_pins()
-
             if gpio_pins:
-                status_for_nuvla['gpio-pins'] = gpio_pins
+                body['gpio-pins'] = gpio_pins
 
+    def set_status_inferred_location(self, body: dict):
+        """
+        Sets the inferred location of the NuvlaBox, in the NuvlaBox Status
+
+        :param body: payload for the nuvlabox-status update request
+        """
         inferred_location = self.get_ip_geolocation()
         if inferred_location:
-            status_for_nuvla['inferred-location'] = inferred_location
+            body['inferred-location'] = inferred_location
 
+    def set_status_vulnerabilities(self, body: dict):
+        """
+        Sets the vulnerabilities of the NuvlaBox, in the NuvlaBox Status
+
+        :param body: payload for the nuvlabox-status update request
+        """
         # get results from security scans
         vulnerabilities = self.get_security_vulnerabilities()
         if vulnerabilities is not None:
@@ -461,24 +538,75 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             if len(scores) > 0:
                 formatted_vulnerabilities['summary']['average-score'] = round(sum(scores) / len(scores), 2)
 
-            status_for_nuvla['vulnerabilities'] = formatted_vulnerabilities
+            body['vulnerabilities'] = formatted_vulnerabilities
 
+    def get_status(self):
+        """ Gets several types of information to populate the NuvlaBox status """
+
+        status_for_nuvla = self.status_default.copy()
+        node_info = self.container_runtime.get_node_info()
+        status_for_nuvla.update({
+            'operating-system': self.container_runtime.get_host_os(),
+            "architecture": self.container_runtime.get_host_architecture(node_info),
+            "hostname": self.container_runtime.get_hostname(node_info),
+            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "container-plugins": self.container_runtime.get_container_plugins()
+        })
+        if self.installation_home:
+            status_for_nuvla['host-user-home'] = self.installation_home
         # set the nb engine version if it exists
         if self.nuvlabox_engine_version:
             status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
+        # get status for Nuvla
+        # - RESOURCES attr
+        self.set_status_resources(status_for_nuvla)
+
+        # - STATUS attrs
+        self.set_status_operational_status(status_for_nuvla, node_info)
+
+        # - IP attr
+        self.set_status_ip(status_for_nuvla)
+
+        # - COE VERSIONS attrs
+        self.set_status_coe_version(status_for_nuvla)
+
+        # - CLUSTER attrs
+        self.set_status_cluster(status_for_nuvla, node_info)
+
+        # - INSTALLATION PARAMETERS attr
+        self.set_status_installation_params(status_for_nuvla)
+
+        # - COE CERT EXPIRATION attr
+        self.set_status_coe_cert_expiration_date(status_for_nuvla)
+
+        # - TEMPERATURES attr
+        self.set_status_temperatures(status_for_nuvla)
+
+        # - GPIO PINS attr
+        self.set_status_gpio(status_for_nuvla)
+
+        # - LOCATION attr
+        self.set_status_inferred_location(status_for_nuvla)
+
+        # - VULNERABILITIES attr
+        self.set_status_vulnerabilities(status_for_nuvla)
+
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla, cpu_sample, ram_sample, disk_usage)
+        self.send_mqtt(status_for_nuvla,
+                       status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
+                       status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
+                       status_for_nuvla.get('resources', {}).get('disks', []))
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
         all_status.update({
             "cpu-usage": psutil.cpu_percent(),
-            "cpu-load": cpu_sample['load'],
+            "cpu-load": status_for_nuvla.get('resources', {}).get('cpu', {}).get('load'),
             "disk-usage": psutil.disk_usage("/")[3],
             "memory-usage": psutil.virtual_memory()[2],
-            "cpus": cpu_sample['capacity'],
-            "memory": ram_sample['capacity'],
+            "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
+            "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
             "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024)
         })
 
