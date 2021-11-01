@@ -18,24 +18,37 @@ class Fake(object):
         return cls
 
 
+class FakeRequestsResponse(object):
+    def __init__(self, **kwargs):
+        self.status_code = kwargs.get('status_code') if kwargs.get('status_code') else 123
+        self.json_response = kwargs.get('json_response') if kwargs.get('json_response') else {'req': 'fake response'}
+
+    def json(self):
+        return self.json_response
+
+
 class FakeNuvlaApi(object):
     """ Fake the nuvla.api module """
     def __init__(self, reference_api_keys, **kwargs):
         self.api_keys = reference_api_keys
         self.kwargs = kwargs
+        self.MockResponse = self.Response(self.kwargs.get('id', 'fake/id'), self.kwargs.get('data', {}))
 
     class Response(object):
-        def __init__(self, nb_id, data):
-            self.data = {**{'id': nb_id}, **data}
+        def __init__(self, id, data):
+            self.data = {**{'id': id}, **data}
 
     def _cimi_post(self, _):
         return self.api_keys
 
-    def get(self, nuvlabox_id, **kwargs):
-        return self.Response(nuvlabox_id, self.kwargs.get('data', {}))
+    def get(self, id, **kwargs):
+        return self.Response(id, self.kwargs.get('data', {}))
 
-    # def edit(self, nuvlabox_id, payload):
-    #     return
+    def edit(self, nuvlabox_id, payload):
+        return self.MockResponse
+
+    def delete(self, nuvlabox_id):
+        return self.MockResponse
 
     def add(self, resource, _):
-        return self.Response(resource, self.kwargs.get('data', {}))
+        return self.MockResponse
