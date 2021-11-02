@@ -1160,7 +1160,8 @@ class DockerClient(ContainerRuntimeClient):
             k3s_cluster_info['kubernetes-client-ca'] = base64.b64decode(ca).decode()
             k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(cert).decode()
             k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(key).decode()
-        except FileNotFoundError:
+        except Exception as e:
+            logging.warning(f'Unable to lookup k3s certificates: {str(e)}')
             return {}
 
         return k3s_cluster_info
