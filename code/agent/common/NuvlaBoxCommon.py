@@ -1153,9 +1153,12 @@ class DockerClient(ContainerRuntimeClient):
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
 
         try:
-            k3s_cluster_info['kubernetes-client-ca'] = open(k3s['clusters'][0]['cluster']['certificate-authority']).read()
-            k3s_cluster_info['kubernetes-client-cert'] = open(k3s['users'][0]['user']['client-certificate']).read()
-            k3s_cluster_info['kubernetes-client-key'] = open(k3s['clusters'][0]['cluster']['certificate-key']).read()
+            ca_file = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["certificate-authority"]}'
+            cert_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-certificate"]}'
+            key_file = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["certificate-key"]}'
+            k3s_cluster_info['kubernetes-client-ca'] = open(ca_file).read()
+            k3s_cluster_info['kubernetes-client-cert'] = open(cert_file).read()
+            k3s_cluster_info['kubernetes-client-key'] = open(key_file).read()
         except FileNotFoundError:
             return {}
 
