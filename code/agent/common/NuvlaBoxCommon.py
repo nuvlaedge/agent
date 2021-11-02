@@ -1194,8 +1194,8 @@ class DockerClient(ContainerRuntimeClient):
             return k8s_cluster_info
 
         # cope with weird characters
-        k8s_apiserver_args = k8s_apiserver_args.replace('\x00', '')
-        args_list = k8s_apiserver_args.split('--')[1:]
+        k8s_apiserver_args = k8s_apiserver_args.replace('\x00', '\n').splitlines()
+        args_list = list(map(lambda x: x.lstrip('--'), k8s_apiserver_args[1:]))
 
         # convert list to dict
         try:
