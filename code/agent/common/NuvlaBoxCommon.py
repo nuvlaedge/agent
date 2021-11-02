@@ -1155,7 +1155,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             ca_file = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["certificate-authority"]}'
             cert_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-certificate"]}'
-            key_file = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["client-key"]}'
+            key_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-key"]}'
             k3s_cluster_info['kubernetes-client-ca'] = open(ca_file).read()
             k3s_cluster_info['kubernetes-client-cert'] = open(cert_file).read()
             k3s_cluster_info['kubernetes-client-key'] = open(key_file).read()
