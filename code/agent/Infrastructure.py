@@ -356,7 +356,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             old (dict): previous commissioning attributes
             attr_name (str): name of the attribute to be compared
             payload (dict): minimum commissioning payload
-            compare_with_nb_resource (bool): if True, will looku===p the local .context file and check if attr has changed.
+            compare_with_nb_resource (bool): if True, will lookup the local .context file and check if attr has changed.
                                                 NOTE: this flag make the check ignore whatever the previous commission was
         """
 
