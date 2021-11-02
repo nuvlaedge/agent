@@ -6,6 +6,7 @@
 List of common attributes for all classes
 """
 
+import base64
 import os
 import json
 import socket
@@ -1139,7 +1140,7 @@ class DockerClient(ContainerRuntimeClient):
         :return: commissioning-ready kubernetes infra
         """
         k3s_cluster_info = {}
-        k3s_conf = f'{self.hostfs}/var/lib/rancher/k3s/server/cred/api-server.kubeconfig'
+        k3s_conf = f'{self.hostfs}/etc/rancher/k3s/k3s.yaml'
         if not os.path.isfile(k3s_conf) or not k3s_address:
             return k3s_cluster_info
 
@@ -1153,12 +1154,12 @@ class DockerClient(ContainerRuntimeClient):
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
 
         try:
-            ca_file = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["certificate-authority"]}'
-            cert_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-certificate"]}'
-            key_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-key"]}'
-            k3s_cluster_info['kubernetes-client-ca'] = open(ca_file).read()
-            k3s_cluster_info['kubernetes-client-cert'] = open(cert_file).read()
-            k3s_cluster_info['kubernetes-client-key'] = open(key_file).read()
+            ca_file = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["certificate-authority-data"]}'
+            cert_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-certificate-data"]}'
+            key_file = f'{self.hostfs}{k3s["users"][0]["user"]["client-key-data"]}'
+            k3s_cluster_info['kubernetes-client-ca'] = base64.b64decode(open(ca_file).read()).decode()
+            k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(open(cert_file).read()).decode()
+            k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(open(key_file).read()).decode()
         except FileNotFoundError:
             return {}
 
