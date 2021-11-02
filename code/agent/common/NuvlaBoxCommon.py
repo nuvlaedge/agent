@@ -14,6 +14,7 @@ import requests
 import signal
 import string
 import time
+import yaml
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from nuvla.api import Api
@@ -285,10 +286,13 @@ class ContainerRuntimeClient(ABC):
         pass
 
     @abstractmethod
-    def infer_if_additional_coe_exists(self) -> dict:
+    def infer_if_additional_coe_exists(self, fallback_address: str=None) -> dict:
         """
         Tries to discover if there is another COE running in the host,
         that can be used for deploying apps from Nuvla
+
+        :param fallback_address: fallback IP/FQDN of the NuvlaBox's infrastructure service in case we cannot find one
+        for the the additional COE
 
         :returns COE attributes as a dict, as expected by the Nuvla commissioning:
                     [coe]-endpoint, [coe]-client-ca, [coe]-client-cert and [coe]-client-key
@@ -680,7 +684,7 @@ class KubernetesClient(ContainerRuntimeClient):
         # TODO for k8s
         return []
 
-    def infer_if_additional_coe_exists(self) -> dict:
+    def infer_if_additional_coe_exists(self, fallback_address: str=None) -> dict:
         # For k8s installations, we might want to see if there's also Docker running alongside
         # TODO
         return {}
@@ -1102,7 +1106,11 @@ class DockerClient(ContainerRuntimeClient):
         return enabled_plugins
 
     def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
-        infra_service = self.infer_if_additional_coe_exists()
+        try:
+            infra_service = self.infer_if_additional_coe_exists(fallback_address=api_endpoint.replace('https://', '').split(':')[0])
+        except:
+            # this is a non-critical step, so we should never fail because of it
+            infra_service = {}
         if api_endpoint:
             infra_service["swarm-endpoint"] = api_endpoint
 
@@ -1123,7 +1131,37 @@ class DockerClient(ContainerRuntimeClient):
                 'swarm-client-cert',
                 'swarm-endpoint']
 
-    def infer_if_additional_coe_exists(self) -> dict:
+    def is_k3s_running(self, k3s_address: str) -> dict:
+        """
+        Checks specifically if k3s is installed
+
+        :param k3s_address: endpoint address for the kubernetes API
+        :return: commissioning-ready kubernetes infra
+        """
+        k3s_cluster_info = {}
+        k3s_conf = f'{self.hostfs}/var/lib/rancher/k3s/server/cred/api-server.kubeconfig'
+        if not os.path.isfile(k3s_conf) or not k3s_address:
+            return k3s_cluster_info
+
+        with open(k3s_conf) as kubeconfig:
+            try:
+                k3s = yaml.safe_load(kubeconfig)
+            except yaml.YAMLError as exc:
+                return k3s_cluster_info
+
+        k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
+        k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
+
+        try:
+            k3s_cluster_info['kubernetes-client-ca'] = open(k3s['clusters'][0]['cluster']['certificate-authority']).read()
+            k3s_cluster_info['kubernetes-client-cert'] = open(k3s['users'][0]['user']['client-certificate']).read()
+            k3s_cluster_info['kubernetes-client-key'] = open(k3s['clusters'][0]['cluster']['certificate-key']).read()
+        except FileNotFoundError:
+            return {}
+
+        return k3s_cluster_info
+
+    def infer_if_additional_coe_exists(self, fallback_address=None) -> dict:
         # Check if there is a k8s installation available as well
         k8s_apiserver_process = 'kube-apiserver'
         k8s_cluster_info = {}
@@ -1131,14 +1169,24 @@ class DockerClient(ContainerRuntimeClient):
         cmd = f'grep -R "{k8s_apiserver_process}" {self.hostfs}/proc/*/comm'
 
         try:
-            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8', shell=True)
+            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8', shell=True).stdout
         except TimeoutExpired as e:
             logging.warning(f'Could not infer if Kubernetes is also installed on the host: {str(e)}')
             return k8s_cluster_info
 
-        process_args_file = result.stdout.split(':')[0].rstrip('comm') + 'cmdline'
-        with open(process_args_file) as pid_file_cmdline:
-            k8s_apiserver_args = pid_file_cmdline.read()
+        if not result:
+            # try k3s
+            try:
+                return self.is_k3s_running(fallback_address)
+            except:
+                return k8s_cluster_info
+
+        process_args_file = result.split(':')[0].rstrip('comm') + 'cmdline'
+        try:
+            with open(process_args_file) as pid_file_cmdline:
+                k8s_apiserver_args = pid_file_cmdline.read()
+        except FileNotFoundError:
+            return k8s_cluster_info
 
         # cope with weird characters
         k8s_apiserver_args = k8s_apiserver_args.replace('\x00', '')
