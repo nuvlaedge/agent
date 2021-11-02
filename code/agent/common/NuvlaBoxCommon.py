@@ -1154,9 +1154,9 @@ class DockerClient(ContainerRuntimeClient):
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
 
         try:
-            ca = f'{self.hostfs}{k3s["clusters"][0]["cluster"]["certificate-authority-data"]}'
-            cert = f'{self.hostfs}{k3s["users"][0]["user"]["client-certificate-data"]}'
-            key = f'{self.hostfs}{k3s["users"][0]["user"]["client-key-data"]}'
+            ca = k3s["clusters"][0]["cluster"]["certificate-authority-data"]
+            cert = k3s["users"][0]["user"]["client-certificate-data"]
+            key = k3s["users"][0]["user"]["client-key-data"]
             k3s_cluster_info['kubernetes-client-ca'] = base64.b64decode(ca).decode()
             k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(cert).decode()
             k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(key).decode()
