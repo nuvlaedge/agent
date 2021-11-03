@@ -1,4 +1,11 @@
 # Changelog
+## [2.4.0] - 2021-11-03
+### Added 
+ - Kubernetes infrastructure discovery for kubeadm, k0s and k3s installations
+### Changed
+ - Improved parallelization of telemetry and heartbeat cycles
+ - Fixed IP-based geolocation retrieval
+ - General fixes and code refactoring
 ## [2.3.4] - 2021-10-19
 ### Added 
  - force update of nuvlabox-cluster through worker-based commissioning
