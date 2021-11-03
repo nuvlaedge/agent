@@ -261,8 +261,8 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
 
     try:
         r = nb_instance.api().edit(nb_status_id,
-                                   data=status,
-                                   select=delete_attributes)
+                                    data=status,
+                                    select=delete_attributes)
     except:
         logging.error("Unable to update NuvlaBox status in Nuvla")
         raise
