@@ -6,6 +6,7 @@
 List of common attributes for all classes
 """
 
+import base64
 import os
 import json
 import socket
@@ -14,10 +15,11 @@ import requests
 import signal
 import string
 import time
+import yaml
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from nuvla.api import Api
-from subprocess import PIPE, Popen
+from subprocess import run, STDOUT, PIPE, Popen, TimeoutExpired
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
 if KUBERNETES_SERVICE_HOST:
@@ -281,6 +283,20 @@ class ContainerRuntimeClient(ABC):
         Says which attributes to partially decommission in case the node is a worker
 
         :returns list of attributes
+        """
+        pass
+
+    @abstractmethod
+    def infer_if_additional_coe_exists(self, fallback_address: str=None) -> dict:
+        """
+        Tries to discover if there is another COE running in the host,
+        that can be used for deploying apps from Nuvla
+
+        :param fallback_address: fallback IP/FQDN of the NuvlaBox's infrastructure service in case we cannot find one
+        for the the additional COE
+
+        :returns COE attributes as a dict, as expected by the Nuvla commissioning:
+                    [coe]-endpoint, [coe]-client-ca, [coe]-client-cert and [coe]-client-key
         """
         pass
 
@@ -668,6 +684,12 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_partial_decommission_attributes(self) -> list:
         # TODO for k8s
         return []
+
+    def infer_if_additional_coe_exists(self, fallback_address: str=None) -> dict:
+        # For k8s installations, we might want to see if there's also Docker running alongside
+        # TODO
+        return {}
+
 #
 class DockerClient(ContainerRuntimeClient):
     """
@@ -1085,10 +1107,13 @@ class DockerClient(ContainerRuntimeClient):
         return enabled_plugins
 
     def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+        try:
+            infra_service = self.infer_if_additional_coe_exists(fallback_address=api_endpoint.replace('https://', '').split(':')[0])
+        except:
+            # this is a non-critical step, so we should never fail because of it
+            infra_service = {}
         if api_endpoint:
-            infra_service = {
-                "swarm-endpoint": api_endpoint
-            }
+            infra_service["swarm-endpoint"] = api_endpoint
 
             if tls_keys:
                 infra_service["swarm-client-ca"] = tls_keys[0]
@@ -1096,8 +1121,8 @@ class DockerClient(ContainerRuntimeClient):
                 infra_service["swarm-client-key"] = tls_keys[2]
 
             return infra_service
-        else:
-            return {}
+
+        return infra_service
 
     def get_partial_decommission_attributes(self) -> list:
         return ['swarm-token-manager',
@@ -1106,6 +1131,109 @@ class DockerClient(ContainerRuntimeClient):
                 'swarm-client-ca',
                 'swarm-client-cert',
                 'swarm-endpoint']
+
+    def is_k3s_running(self, k3s_address: str) -> dict:
+        """
+        Checks specifically if k3s is installed
+
+        :param k3s_address: endpoint address for the kubernetes API
+        :return: commissioning-ready kubernetes infra
+        """
+        k3s_cluster_info = {}
+        k3s_conf = f'{self.hostfs}/etc/rancher/k3s/k3s.yaml'
+        if not os.path.isfile(k3s_conf) or not k3s_address:
+            return k3s_cluster_info
+
+        with open(k3s_conf) as kubeconfig:
+            try:
+                k3s = yaml.safe_load(kubeconfig)
+            except yaml.YAMLError as exc:
+                return k3s_cluster_info
+
+        k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
+        k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
+
+        try:
+            ca = k3s["clusters"][0]["cluster"]["certificate-authority-data"]
+            cert = k3s["users"][0]["user"]["client-certificate-data"]
+            key = k3s["users"][0]["user"]["client-key-data"]
+            k3s_cluster_info['kubernetes-client-ca'] = base64.b64decode(ca).decode()
+            k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(cert).decode()
+            k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(key).decode()
+        except Exception as e:
+            logging.warning(f'Unable to lookup k3s certificates: {str(e)}')
+            return {}
+
+        return k3s_cluster_info
+
+    def infer_if_additional_coe_exists(self, fallback_address=None) -> dict:
+        # Check if there is a k8s installation available as well
+        k8s_apiserver_process = 'kube-apiserver'
+        k8s_cluster_info = {}
+
+        cmd = f'grep -R "{k8s_apiserver_process}" {self.hostfs}/proc/*/comm'
+
+        try:
+            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8', shell=True).stdout
+        except TimeoutExpired as e:
+            logging.warning(f'Could not infer if Kubernetes is also installed on the host: {str(e)}')
+            return k8s_cluster_info
+
+        if not result:
+            # try k3s
+            try:
+                return self.is_k3s_running(fallback_address)
+            except:
+                return k8s_cluster_info
+
+        process_args_file = result.split(':')[0].rstrip('comm') + 'cmdline'
+        try:
+            with open(process_args_file) as pid_file_cmdline:
+                k8s_apiserver_args = pid_file_cmdline.read()
+        except FileNotFoundError:
+            return k8s_cluster_info
+
+        # cope with weird characters
+        k8s_apiserver_args = k8s_apiserver_args.replace('\x00', '\n').splitlines()
+        args_list = list(map(lambda x: x.lstrip('--'), k8s_apiserver_args[1:]))
+
+        # convert list to dict
+        try:
+            args = { args_list[i].split('=')[0]: args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
+        except IndexError:
+            logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
+            return k8s_cluster_info
+
+        arg_address = "advertise-address"
+        arg_port = "secure-port"
+        arg_ca = "client-ca-file"
+        arg_cert = "kubelet-client-certificate"
+        arg_key = "kubelet-client-key"
+
+        try:
+            k8s_endpoint = f'https://{args[arg_address]}:{args[arg_port]}' \
+                if not args[arg_address].startswith("http") else f'{args[arg_address]}:{args[arg_port]}'
+
+            with open(f'{self.hostfs}{args[arg_ca]}') as ca:
+                k8s_client_ca = ca.read()
+
+            with open(f'{self.hostfs}{args[arg_cert]}') as cert:
+                k8s_client_cert = cert.read()
+
+            with open(f'{self.hostfs}{args[arg_key]}') as key:
+                k8s_client_key = key.read()
+
+            k8s_cluster_info.update({
+                'kubernetes-endpoint': k8s_endpoint,
+                'kubernetes-client-ca': k8s_client_ca,
+                'kubernetes-client-cert': k8s_client_cert,
+                'kubernetes-client-key': k8s_client_key
+            })
+        except (KeyError, FileNotFoundError) as e:
+            logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
+            return {}
+
+        return k8s_cluster_info
 
 
 # --------------------
