@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import json
+import docker
 import logging
 import mock
 import requests
 import unittest
-from tests.utils.fake import Fake, FakeNuvlaApi
+import tests.utils.fake as fake
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 
 
@@ -16,10 +17,19 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         self.obj = NuvlaBoxCommon.DockerClient(self.hostfs, self.host_home)
+        self.local_docker_client = docker.from_env()
+        self.fake_swarm_tokens = {
+            'JoinTokens': {
+                'Manager': 'token-manager',
+                'Worker': 'token-worker'
+            }
+        }
+        self.job_engine_lite_component = 'fake-job-lite'
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
         self.obj.client.close()
+        self.local_docker_client.close()
         logging.disable(logging.NOTSET)
 
     def test_init(self):
@@ -32,6 +42,210 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         # the base class should also have been set
         self.assertEqual(self.obj.job_engine_lite_component, "nuvlabox-job-engine-lite",
                          'Base class of the ContainerRuntime was not properly initialized')
+
+    def test_get_node_info(self):
+        self.assertIn('ID', self.obj.get_node_info(),
+                      'Unable to retrieve Docker info')
+
+        self.assertIsInstance(self.obj.get_node_info(), dict,
+                              'Docker info should be returned as a dict')
+
+        self.assertEqual(self.obj.get_node_info().keys(), self.local_docker_client.info().keys(),
+                         'Get node info return a different value than the real Docker info')
+
+    def test_get_host_os(self):
+        self.assertIsInstance(self.obj.get_host_os(), str,
+                              'Host OS should be a string')
+
+    @mock.patch('docker.api.swarm.SwarmApiMixin.inspect_swarm')
+    def test_get_join_tokens(self, mock_docker):
+        # if there are no tokens (Swarm is off), we should get an empty tuple
+        mock_docker.return_value = {}
+        self.assertEqual(self.obj.get_join_tokens(), (),
+                         'Returned Swarm tokens even though Swarm is NOT enabled')
+
+        # otherwise, the tokens should be received
+        mock_docker.return_value = self.fake_swarm_tokens
+        self.assertEqual(self.obj.get_join_tokens(),
+                         (self.fake_swarm_tokens['JoinTokens']['Manager'],
+                          self.fake_swarm_tokens['JoinTokens']['Worker']),
+                         'Did not get the expected Swarm tokens')
+
+        # is there's a Docker error, we should get an empty tuple
+        mock_docker.side_effect = docker.errors.APIError("fake", response=requests.Response())
+        self.assertEqual(self.obj.get_join_tokens(), (),
+                         'Returned Swarm tokens even though Docker threw an exception')
+
+    @mock.patch('docker.models.nodes.NodeCollection.list')
+    def test_list_nodes(self, mock_docker):
+        # a filter should be accepted as an arg
+        fake_filter = {'test': 'foo'}
+        mock_docker.return_value = []
+        self.assertEqual(self.obj.list_nodes(optional_filter=fake_filter), [],
+                         'Listing Docker nodes when there are none')
+        mock_docker.assert_called_once_with(filters=fake_filter)
+
+        # make sure the returned list is consistent with what's provided by Docker
+        mock_docker.return_value = [1, 2, 3]
+        self.assertEqual(len(self.obj.list_nodes()), 3,
+                         'Number of Docker nodes does not match with true value')
+
+        # and when Docker throws an error, this shall too
+        mock_docker.side_effect = docker.errors.APIError("", response=requests.Response())
+        self.assertRaises(docker.errors.APIError, self.obj.list_nodes)
+
+    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.list_nodes')
+    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    def test_get_cluster_info(self, mock_get_node_info, mock_list_nodes):
+        # if Swarm is not enabled, we should get an empty dict
+        mock_get_node_info.return_value = {'Swarm': {}}
+        self.assertEqual(self.obj.get_cluster_info(), {},
+                         'Returned cluster info when there is no cluster')
+
+        # if not a Swarm manager, then again {} is returned
+        mock_get_node_info.return_value = {'Swarm': {'ControlAvailable': ''}}
+        self.assertEqual(self.obj.get_cluster_info(), {},
+                         'Returned cluster info when node is not a manager')
+
+        # if nodes exist...
+
+        mock_get_node_info.return_value = {
+            'Swarm': {
+                'ControlAvailable': True
+            },
+            'Cluster': {
+                'ID': 'fake-id'
+            }
+        }
+
+        # if all nodes are ready, we get them all back
+        mock_list_nodes.return_value = [fake.MockDockerNode(), fake.MockDockerNode()]
+        self.assertIn('cluster-id', self.obj.get_cluster_info(),
+                      'Expecting cluster-id in cluster info')
+        self.assertEqual(len(self.obj.get_cluster_info()['cluster-managers']), 2,
+                         'Expecting 2 cluster nodes, but got something else')
+        self.assertEqual(len(self.obj.get_cluster_info().keys()), 4,
+                         'Expecting 4 keys to define cluster, but got something else')
+
+        # if not all nodes are ready, then we just get the ones which are ready
+        mock_list_nodes.return_value = [fake.MockDockerNode(), fake.MockDockerNode(state='not-ready')]
+        self.assertIn('cluster-orchestrator', self.obj.get_cluster_info(),
+                      'Expecting cluster-orchestrator in cluster info')
+        self.assertIn(self.obj.get_cluster_info()['cluster-orchestrator'].lower(), ['docker', 'swarm'],
+                      'Expecting Docker-based COE but got a different orchestrator')
+        self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 1,
+                         'Expecting 1 worker in cluster info, but got something else')
+
+    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    def test_get_api_ip_port(self, mock_get_nodes_info):
+        # if Swarm info has an address, we should just get that back with port 5000
+        node_addr = '1.2.3.4'
+        mock_get_nodes_info.return_value = {
+            'Swarm': {
+                'NodeAddr': node_addr
+            }
+        }
+
+        self.assertEqual(self.obj.get_api_ip_port(), (node_addr, 5000),
+                         'Expected default Swarm NodeAddr with port 5000, but got something else instead')
+
+        # otherwise, we try to read the machine IP from the disk
+        mock_get_nodes_info.return_value = {'Swarm': {}}
+        # if there's a valid IP in this file, we return it
+        tcp_file = '''sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode                                                     
+   6: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 51149 1 ffffffc1c9be2e80 100 0 0 10 0                     
+   7: 0100007F:13D8 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 58062 1 ffffffc1dea25d00 100 0 0 10 0                     
+   8: 2D28A8C0:0016 652AA8C0:D6C9 01 00000024:00000000 01:00000015 00000000     0        0 3610139 4 ffffffc10cd3f440 22 4 29 10 -1                  
+   9: 0100007F:ECA0 0100007F:13D8 06 00000000:00000000 03:00000577 00000000     0        0 0 3 ffffffc0d1887ef0
+   '''
+        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=tcp_file)):
+            self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', 5000),
+                             'Could not get valid IP from filesystem')
+
+        # if there's no valid IP in this file, then we return 127.0.0.1
+        tcp_file = '''sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode                                                     
+   0: 0100007F:0B83 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 22975 1 ffffffc1dea20000 100 0 0 10 0                     
+   1: 00000000:1388 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 46922 1 ffffffc1c9be1740 100 0 0 10 0
+   '''
+        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=tcp_file)):
+            self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', 5000),
+                             'Could not get default IP from filesystem')
+
+    @mock.patch('docker.models.containers.ContainerCollection.get')
+    def test_has_pull_job_capability(self, mock_containers_get):
+        # if the job-lite does not exist, we get False
+        mock_containers_get.side_effect = docker.errors.NotFound
+        self.assertFalse(self.obj.has_pull_job_capability(),
+                         'Job lite can not be found but returned True anyway')
+
+        # same for any other exception
+        mock_containers_get.side_effect = EOFError
+        self.assertFalse(self.obj.has_pull_job_capability(),
+                         'Error occurred but returned True anyway')
+
+        # otherwise, we infer its Docker image
+        mock_containers_get.reset_mock(side_effect=True)
+
+        mock_containers_get.return_value = fake.MockContainer(status='running')
+
+        # if the container is running, we return false
+        self.assertFalse(self.obj.has_pull_job_capability(),
+                         'Returned True even when job-lite container is not paused')
+
+        # the container is supposed to be paused
+        mock_containers_get.return_value = fake.MockContainer()
+        self.assertTrue(self.obj.has_pull_job_capability(),
+                        'Should have found the job-lite component, but has not')
+        self.assertEqual(self.obj.job_engine_lite_image, 'fake-image',
+                         'Set the wrong job-lite Docker image')
+
+    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.cast_dict_to_list')
+    @mock.patch('docker.api.swarm.SwarmApiMixin.inspect_node')
+    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    def test_get_node_labels(self, mock_get_node_info, mock_inspect_node, mock_cast_dict_to_list):
+        # errors while inspecting node should cause it to return empty list
+        mock_inspect_node.side_effect = KeyError
+        node = {
+            'Swarm': {
+                'NodeID': 'fake-id'
+            }
+        }
+        mock_get_node_info.return_value = node
+        err = 'Exception not caught while getting node labels'
+        self.assertEqual(self.obj.get_node_labels(), [],
+                         err)
+
+        mock_inspect_node.reset_mock(side_effect=True)
+        mock_get_node_info.side_effect = docker.errors.NullResource
+        self.assertEqual(self.obj.get_node_labels(), [],
+                         err)
+
+        mock_get_node_info.reset_mock(side_effect=True)
+        labels = [1, 2]
+        mock_inspect_node.return_value = {
+            'Spec': {
+                'Labels': labels
+            }
+        }
+        mock_cast_dict_to_list.return_value = labels
+        self.assertEqual(self.obj.get_node_labels(), labels,
+                         'Unable to get node labels')
+        mock_cast_dict_to_list.assert_called_once_with(labels)
+
+    @mock.patch('docker.models.containers.ContainerCollection.get')
+    def test_is_vpn_client_running(self, mock_containers_get):
+        mock_containers_get.return_value = fake.MockContainer(status='running')
+        # if vpn is running, returns True
+        self.assertTrue(self.obj.is_vpn_client_running(),
+                        'Says vpn-client is not running when it is')
+
+        # False otherwise
+        mock_containers_get.return_value = fake.MockContainer(status='paused')
+        self.assertFalse(self.obj.is_vpn_client_running(),
+                         'Says vpn-client is running, but it is not')
+
+
+
 # class NuvlaBoxCommonTestCase(unittest.TestCase):
 #
 #     def setUp(self):

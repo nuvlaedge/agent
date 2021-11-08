@@ -776,6 +776,7 @@ class DockerClient(ContainerRuntimeClient):
             except:
                 ip = '127.0.0.1'
             else:
+                # TODO: double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaBox API IP!")
                     return None, 5000

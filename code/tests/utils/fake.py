@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import mock
+import random
 
 
 class Fake(object):
@@ -16,6 +17,26 @@ class Fake(object):
                 except (TypeError, AttributeError):
                     pass
         return cls
+
+
+class MockContainer(object):
+    def __init__(self, status='paused'):
+        self.status = status
+        self.attrs = {
+            'Config': {
+                'Image': 'fake-image'
+            }
+        }
+
+
+class MockDockerNode(object):
+    def __init__(self, state: str='ready'):
+        self.attrs = {
+            'Status': {
+                'State': state
+            }
+        }
+        self.id = random.randint(100, 999)
 
 
 class FakeRequestsResponse(object):
