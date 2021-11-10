@@ -1083,11 +1083,11 @@ class DockerClient(ContainerRuntimeClient):
 
             environment.append(env_var)
 
+        nuvlabox_containers = list(filter(lambda x: x.id != myself.id, nuvlabox_containers))
         for container in nuvlabox_containers:
             c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
-                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir and \
-                    container.id != myself.id:
+                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir:
                 config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
                 environment += container.attrs.get('Config', {}).get('Env', [])
 
@@ -1205,7 +1205,7 @@ class DockerClient(ContainerRuntimeClient):
 
         k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
-
+        logging.error(1)
         try:
             ca = k3s["clusters"][0]["cluster"]["certificate-authority-data"]
             cert = k3s["users"][0]["user"]["client-certificate-data"]
@@ -1213,7 +1213,9 @@ class DockerClient(ContainerRuntimeClient):
             k3s_cluster_info['kubernetes-client-ca'] = base64.b64decode(ca).decode()
             k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(cert).decode()
             k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(key).decode()
+            logging.error(1)
         except Exception as e:
+            logging.error(2)
             logging.warning(f'Unable to lookup k3s certificates: {str(e)}')
             return {}
 
@@ -1254,6 +1256,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             args = { args_list[i].split('=')[0]: args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
         except IndexError:
+            # should never get into this exception, but keep it anyway, just to be safe
             logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
             return k8s_cluster_info
 

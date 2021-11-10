@@ -19,3 +19,9 @@ and then run:
 # from the <project_root>/code folder
 python -m unittest tests/test_<filename>.py -v
 ```
+
+or, if a report is needed:
+
+```shell
+pytest --junitxml=test-report.xml
+```

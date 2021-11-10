@@ -20,9 +20,15 @@ class Fake(object):
 
 
 class MockContainer(object):
-    def __init__(self, status='paused'):
+    def __init__(self, status='paused', myid=None):
         self.status = status
         self.name = random.randint(100, 999)
+        self.id = random.randint(100, 999) if not myid else myid
+        self.labels = {
+            'com.docker.compose.project.working_dir': '/workdir',
+            'com.docker.compose.project.config_files': 'a.yml,b.yml',
+            'com.docker.compose.project': 'nuvlabox'
+        }
         self.attrs = {
             'Config': {
                 'Image': 'fake-image'
@@ -31,7 +37,8 @@ class MockContainer(object):
                 'Networks': {
                     'fake-network': {}
                 }
-            }
+            },
+            'RestartCount': 1
         }
 
     def remove(self):
