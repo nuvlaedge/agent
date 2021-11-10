@@ -44,3 +44,4 @@ pom.xml.asc
 .DS_Store
 
 __pycache__
+test-report.xml

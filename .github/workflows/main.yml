@@ -20,6 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Run unit tests
+        run: |
+          pip install -r code/requirements.tests.txt
+          pytest code/tests --junitxml=test-report.xml
+
       - name: Multi-arch docker image build prerequired
         run: sudo docker run --privileged linuxkit/binfmt:v0.8
 
@@ -40,6 +45,12 @@ jobs:
           path: |
             dependencies-tree.png
             dependencies-licenses.txt
+
+      - name: Publish Unit Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v1
+        if: always()
+        with:
+          files: test-report.xml
 
   notify:
     if: always()

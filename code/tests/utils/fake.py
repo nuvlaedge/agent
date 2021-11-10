@@ -22,11 +22,23 @@ class Fake(object):
 class MockContainer(object):
     def __init__(self, status='paused'):
         self.status = status
+        self.name = random.randint(100, 999)
         self.attrs = {
             'Config': {
                 'Image': 'fake-image'
+            },
+            'NetworkSettings': {
+                'Networks': {
+                    'fake-network': {}
+                }
             }
         }
+
+    def remove(self):
+        pass
+
+    def kill(self):
+        pass
 
 
 class MockDockerNode(object):

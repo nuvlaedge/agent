@@ -244,154 +244,146 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertFalse(self.obj.is_vpn_client_running(),
                          'Says vpn-client is running, but it is not')
 
+    @mock.patch('docker.models.containers.ContainerCollection.run')
+    def test_install_ssh_key(self, mock_docker_run):
+        # if all goes well, we expect True
+        mock_docker_run.return_value = None
+        self.assertTrue(self.obj.install_ssh_key('fake-pub-key', 'fake-ssh-folder'),
+                        'Unable to install SSH key')
 
+        # if an exception is thrown, it should be raised and we get no return
+        mock_docker_run.side_effect = Exception
+        self.assertRaises(Exception, self.obj.install_ssh_key, 'fake-pub-key', 'fake-ssh-folder',
+                          'Exception was not thrown when failing to install SSH key')
 
-# class NuvlaBoxCommonTestCase(unittest.TestCase):
-#
-#     def setUp(self):
-#         Activate.__bases__ = (Fake.imitate(NuvlaBoxCommon),)
-#         self.shared_volume = "mock/path"
-#         self.obj = Activate(self.shared_volume)
-#         self.api_key_content = '{"api-key": "mock-key", "secret-key": "mock-secret"}'
-#         self.obj.activation_flag = 'mock-activation-file'
-#         self.obj.nuvlabox_id = "nuvlabox/fake-id"
-#         self.obj.nuvla_endpoint = "https://fake-nuvla.io"
-#         self.obj.data_volume = self.shared_volume
-#         self.obj.context = 'path/to/fake/context/file'
-#         logging.disable(logging.CRITICAL)
-#
-#     def tearDown(self):
-#         logging.disable(logging.NOTSET)
-#
-#     @staticmethod
-#     def set_nuvla_api(api_keys):
-#         """ Fake the initialization of the Nuvla Api instance """
-#         api = FakeNuvlaApi(api_keys)
-#         return api
-#
-#     def test_instantiation(self):
-#         self.assertTrue(self.obj.user_info == {}, "Failed to instantiate Activate class instance")
-#
-#     @mock.patch.object(Activate, 'read_json_file')
-#     @mock.patch.object(Activate, 'write_json_to_file')
-#     @mock.patch.object(Activate, 'get_api_keys')
-#     @mock.patch.object(Activate, 'get_operational_status')
-#     def test_activation_is_possible(self, mock_get_op_status, mock_get_api_keys, mock_write_file, mock_read_file):
-#         # activation is not possible because NuvlaBox is not ready/operational
-#         mock_get_op_status.return_value = 'UNKNOWN'
-#         self.assertEqual(self.obj.activation_is_possible(), (False, {}),
-#                          'Activation unable to cope with UNKNOWN operational status')
-#
-#         mock_get_op_status.return_value = 'OPERATIONAL'
-#         # if there's no file and no env, then activation should go through
-#         mock_get_api_keys.return_value = (None, None)
-#         mock_read_file.side_effect = FileNotFoundError
-#         self.assertEqual(self.obj.activation_is_possible(), (True, {}),
-#                          'Activation not possible when it should be')
-#
-#         # activation is not possible, because even though files does not exist, API keys are in env
-#         mock_write_file.return_value = True
-#         mock_get_api_keys.return_value = (json.loads(self.api_key_content)['api-key'],
-#                                           json.loads(self.api_key_content)['secret-key'])
-#         self.assertEqual(self.obj.activation_is_possible(), (False, json.loads(self.api_key_content)),
-#                          'Cannot read existing activation file with API key credentials')
-#         self.assertTrue(mock_write_file.called,
-#                         'Could not save API keys from env into file')
-#
-#         # activation is not possible because NuvlaBox has already been activated - there's a file
-#         mock_read_file.reset_mock(return_value=True, side_effect=True)
-#         mock_read_file.return_value = json.loads(self.api_key_content)
-#         # with mock.patch("agent.Activate.open", mock.mock_open(read_data=self.api_key_content)):
-#         self.assertEqual(self.obj.activation_is_possible(), (False, json.loads(self.api_key_content)),
-#                          'Cannot read existing activation file with API key credentials')
-#
-#     @mock.patch.object(Activate, 'shell_execute')
-#     @mock.patch.object(Activate, 'write_json_to_file')
-#     @mock.patch.object(Activate, 'api')
-#     def test_activate(self, mock_api, mock_write_file, mock_shell_exec):
-#         # successful activation will return the API keys for the NuvlaBox
-#         mock_api.return_value = self.set_nuvla_api(json.loads(self.api_key_content))
-#         mock_write_file.return_value = True
-#         self.assertEqual(self.obj.activate(), json.loads(self.api_key_content),
-#                          'Unable to activate the NuvlaBox')
-#         # and because it was successful, the API keys have been written to a file
-#         mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
-#
-#         # if there's an SSLError while activating, then systemd-timesyncd should take place
-#         mock_shell_exec.return_value = True
-#         mock_api.side_effect = requests.exceptions.SSLError
-#         self.assertRaises(requests.exceptions.SSLError, self.obj.activate)
-#         self.assertTrue(mock_shell_exec.called,
-#                         'requests.exceptions.SSLError was not caught during NuvlaBox activation')
-#         # there hasn't been a new attempt to write the api keys into the file
-#         mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
-#
-#         # if there's a connection error, then an exception must be thrown
-#         mock_api.side_effect = requests.exceptions.ConnectionError
-#         self.assertRaises(requests.exceptions.ConnectionError, self.obj.activate)
-#         # ensure neither the write function nor the shell_exec have been called a second time
-#         mock_shell_exec.assert_called_once()
-#         mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
-#
-#     @mock.patch.object(Activate, 'write_json_to_file')
-#     @mock.patch.object(Activate, 'read_json_file')
-#     def test_create_nb_document(self, mock_read_json_file, mock_write_to_file):
-#         # if context file does not exist, the old NB resource should be empty
-#         mock_read_json_file.side_effect = FileNotFoundError
-#         mock_write_to_file.return_value = None
-#         self.assertEqual(self.obj.create_nb_document_file({'foo': 'bar'}), {},
-#                          'Returned an old NuvlaBox resource when there should not be one')
-#         mock_read_json_file.assert_called_once()
-#         mock_write_to_file.assert_called_once()
-#
-#         # if there is a context file already, its content will be returned as the old NuvlaBox resource context
-#         old_nuvlabox_context = {'id': 'nuvlabox/fake-old'}
-#         mock_read_json_file.reset_mock(side_effect=True)
-#         mock_write_to_file.reset_mock()
-#         mock_read_json_file.return_value = old_nuvlabox_context
-#         self.assertEqual(self.obj.create_nb_document_file({'foo': 'bar'}), old_nuvlabox_context,
-#                          'Unable to get old NuvlaBox context when creating new NB document')
-#         mock_write_to_file.assert_called_once()
-#
-#     @mock.patch.object(Activate, 'commission_vpn')
-#     def test_vpn_commission_if_needed(self, mock_commission_vpn):
-#         old_nuvlabox_resource = {'id': self.obj.nuvlabox_id}
-#         new_nuvlabox_resource = {**old_nuvlabox_resource, **{'vpn-server-id': 'infrastructure-servive/fake-vpn'}}
-#
-#         mock_commission_vpn.return_value = None
-#
-#         # if 'vpn-server-id' has not changed, then VPN commissioning will not be invoked
-#         self.obj.vpn_commission_if_needed(old_nuvlabox_resource, old_nuvlabox_resource)
-#         mock_commission_vpn.assert_not_called()
-#
-#         # but if 'vpn-server-id' changes, then VPN commissioning takes place
-#         self.obj.vpn_commission_if_needed(new_nuvlabox_resource, old_nuvlabox_resource)
-#         mock_commission_vpn.assert_called_once()
-#
-#     @mock.patch.object(Activate, 'api')
-#     def test_get_nuvlabox_info(self, mock_api):
-#         mock_api.return_value = self.set_nuvla_api(json.loads(self.api_key_content))
-#
-#         # Nuvla should return the NuvlaBox resource
-#         returned_nuvlabox_resource = self.obj.get_nuvlabox_info()
-#         self.assertIsInstance(returned_nuvlabox_resource, dict)
-#         self.assertEqual(self.obj.nuvlabox_id, returned_nuvlabox_resource.get('id'),
-#                          'Did not get the expected NuvlaBox resource')
-#         mock_api.assert_called_once()
-#
-#     @mock.patch.object(Activate, 'create_nb_document_file')
-#     @mock.patch.object(Activate, 'get_nuvlabox_info')
-#     @mock.patch.object(Activate, 'authenticate')
-#     def test_update_nuvlabox_resource(self, mock_authenticate, mock_get_nuvlabox_info, mock_create_nb_doc):
-#         self.obj.user_info = json.loads(self.api_key_content)
-#         mock_authenticate.return_value = self.set_nuvla_api(self.obj.user_info)
-#         old_nuvlabox_resource = {'id': self.obj.nuvlabox_id}
-#         new_nuvlabox_resource = {**old_nuvlabox_resource, **{'new-attr': True}}
-#         mock_get_nuvlabox_info.return_value = new_nuvlabox_resource
-#         mock_create_nb_doc.return_value = old_nuvlabox_resource
-#
-#         # when called, it shall get the NB resource from Nuvla,
-#         # overwrite the existing NB doc,
-#         # and return both old and new NB resources
-#         self.assertEqual(self.obj.update_nuvlabox_resource(), (new_nuvlabox_resource, old_nuvlabox_resource),
-#                          'Failed to update NuvlaBox resource: unexpected "new" and "old" NB resources')
+    @mock.patch('docker.models.containers.ContainerCollection.get')
+    def test_is_nuvla_job_running(self, mock_containers_get):
+        job_id = 'fake-id'
+        job_exec_id = 'fake-exec-id'
+        # if docker cannot find the job container, then return False
+        mock_containers_get.side_effect = docker.errors.NotFound('', requests.Response())
+        self.assertFalse(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                         'Says job execution container exists when it should not')
+
+        # any other exception means we can't assess this, so returns True by default
+        mock_containers_get.side_effect = TimeoutError
+        self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                        'Cannot know if job execution container is running, but says it is not running')
+
+        mock_containers_get.reset_mock(side_effect=True)
+        # if container is found, but the container object is defective, assume it is True
+        mock_containers_get.return_value = fake.MockContainer(status='fake-status')
+        mock_containers_get.return_value.kill = mock.Mock()
+        mock_containers_get.return_value.kill.side_effect = AttributeError
+        # throw AttributeError
+        self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                        'Says job execution container is not running when it actually does not know if it is')
+
+        mock_containers_get.return_value = fake.MockContainer(status='created')
+        mock_containers_get.return_value.remove = mock.Mock()
+        mock_containers_get.return_value.remove.side_effect = docker.errors.NotFound('', requests.Response())
+        # throw docker.errors.NotFound
+        self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                        'Says job execution container is running when actually it does not even exist')
+
+        # and running, return True
+        mock_containers_get.return_value = fake.MockContainer(status='running')
+        self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                        'Says job execution container is not running when it is not')
+        # same for status=restarting
+        mock_containers_get.return_value = fake.MockContainer(status='restarting')
+        self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                        'Says job execution container is not running but it is restarting')
+
+        # finally, if status is either created or not known, container is killed and this returns False
+        mock_containers_get.return_value = fake.MockContainer(status='created')
+        self.assertFalse(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                         'Failed to remove created job execution container')
+        mock_containers_get.return_value = fake.MockContainer(status='non-a-status')
+        self.assertFalse(self.obj.is_nuvla_job_running(job_id, job_exec_id),
+                         'Failed to kill job execution container in unknown state')
+
+    @mock.patch('docker.api.network.NetworkApiMixin.connect_container_to_network')
+    @mock.patch('docker.models.containers.ContainerCollection.run')
+    @mock.patch('docker.models.containers.ContainerCollection.get')
+    def test_launch_job(self, mock_containers_get, mock_containers_run, mock_net_connect):
+        job_id = 'fake-id'
+        job_exec_id = 'fake-exec-id'
+        nuvla = 'https://fake-nuvla.io'
+
+        # if there's an error while getting the compute-api, we expect None
+        mock_containers_get.side_effect = TimeoutError
+        self.assertIs(self.obj.launch_job(job_id, job_exec_id, nuvla), None,
+                      'compute-api could not be found, but still got something else than None')
+        mock_containers_run.assert_not_called()
+
+        # otherwise we try to launch the job execution container
+        mock_containers_get.reset_mock(side_effect=True)
+        mock_containers_get.return_value = fake.MockContainer()
+        mock_containers_run.return_value = None
+        self.assertIs(self.obj.launch_job(job_id, job_exec_id, nuvla), None,
+                      'Unable to launch job execution container')
+        mock_containers_run.assert_called_once()
+        mock_net_connect.assert_called_once_with(job_exec_id, 'bridge')
+
+    def test_collect_container_metrics_cpu(self):
+        cpu_stat = {
+            "cpu_stats": {
+                "cpu_usage": {
+                    "total_usage": "10"
+                },
+                "system_cpu_usage": "100",
+                "online_cpus": 2
+            },
+        }
+        old_cpu_total = 5
+        old_cpu_system = 50
+        err = []
+        # if all is well, we should expect a float value bigger than 0
+        self.assertIsInstance(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err),
+                              float,
+                              "Received unexpected type of CPU usage percentage for container")
+        self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 20.0,
+                         "The provided default should return a CPU usage of 20%, but that was not the case")
+        self.assertEqual(len(err), 0,
+                         "There should not have been any CPU collection errors")
+
+        # if online_cpus is not reported, then we get 0% usage
+        cpu_stat['cpu_stats'].pop('online_cpus')
+        self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 0.0,
+                         "Expecting 0% CPU usage due to lack of details, but got something else")
+
+        # if a mandatory attribute does not exist, then we get 0% again, but with an error
+        cpu_stat.pop('cpu_stats')
+        self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 0.0,
+                         "Expecting 0% CPU usage due to missing mandatory keys, but got something else")
+        self.assertGreater(len(err), 0,
+                           "Expecting an error due to the lack to CPU info to collect, but did not get any")
+
+    def test_collect_container_metrics_mem(self):
+        mem_stat = {
+            "memory_stats": {
+                "usage": 1024*1024,
+                "limit": 2*1024*1024
+            }
+        }
+        err = []
+        # if all is well, we expect a float value higher than 0.0%
+        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (50.0, 1, 2),
+                         "Expecting a memory usage of 50%, but got something else instead")
+        self.assertEqual(len(err), 0,
+                         "There should not have been any Memory collection errors")
+
+        # if the memory limit is set to 0, then we expect 0%, with no errors
+        mem_stat['memory_stats']['limit'] = 0
+        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (0.0, 1, 0),
+                         "Expecting a memory usage of 50%, but got something else instead")
+        self.assertEqual(len(err), 0,
+                         "There should not have been any Memory collection errors, even though the results was 0%")
+
+        # if there are missing fields, then an error should be added, and 0% should be returned
+        mem_stat.pop('memory_stats')
+        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (0.0, 0.0, 0.0),
+                         "Expecting 0% due to missing fields, but got something else")
+        self.assertGreater(len(err), 1,
+                           "There should have been Memory collection errors since fields are missing")

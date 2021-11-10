@@ -906,6 +906,103 @@ class DockerClient(ContainerRuntimeClient):
         except Exception as e:
             logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
 
+    @staticmethod
+    def collect_container_metrics_cpu(cstats: dict, old_cpu_total: float,
+                                      old_cpu_system: float, errors: list=None) -> float:
+        """
+        Calculates the CPU consumption for a give container
+
+        :param cstats: Docker container statistics
+        :param old_cpu_total: previous total CPU usage
+        :param old_cpu_system: previous system CPU usage
+        :param errors: ongoing list of collection errors to append to if needed
+        :return: CPU consumption in percentage
+        """
+        try:
+            cpu_total = float(cstats["cpu_stats"]["cpu_usage"]["total_usage"])
+            cpu_system = float(cstats["cpu_stats"]["system_cpu_usage"])
+
+            online_cpus = cstats["cpu_stats"] \
+                .get("online_cpus", len(cstats["cpu_stats"]["cpu_usage"].get("percpu_usage", [])))
+
+            cpu_delta = cpu_total - old_cpu_total
+            system_delta = cpu_system - old_cpu_system
+
+            cpu_percent = 0.0
+            if system_delta > 0.0 and online_cpus > 0:
+                cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+        except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
+            errors.append("CPU")
+            cpu_percent = 0.0
+
+        return cpu_percent
+
+    @staticmethod
+    def collect_container_metrics_mem(cstats: dict, errors: list) -> tuple:
+        """
+        Calculates the Memory consumption for a give container
+
+        :param cstats: Docker container statistics
+        :param errors: ongoing list of collection errors to append to if needed
+        :return: Memory consumption tuple with percentage, usage and limit
+        """
+        try:
+            mem_usage = float(cstats["memory_stats"]["usage"] / 1024 / 1024)
+            mem_limit = float(cstats["memory_stats"]["limit"] / 1024 / 1024)
+            if round(mem_limit, 2) == 0.00:
+                mem_percent = 0.00
+            else:
+                mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
+        except (IndexError, KeyError, ValueError) as e:
+            errors.append("Mem")
+            mem_percent = mem_usage = mem_limit = 0.00
+
+        return mem_percent, mem_usage, mem_limit
+
+    @staticmethod
+    def collect_container_metrics_net(cstats: dict) -> tuple:
+        """
+        Calculates the Network consumption for a give container
+
+        :param cstats: Docker container statistics
+        :return: tuple with network bytes IN and OUT
+        """
+        net_in = net_out = 0.0
+        if "networks" in cstats:
+            net_in = sum(cstats["networks"][iface]["rx_bytes"]
+                         for iface in cstats["networks"]) / 1000 / 1000
+            net_out = sum(cstats["networks"][iface]["tx_bytes"]
+                          for iface in cstats["networks"]) / 1000 / 1000
+
+        return net_in, net_out
+
+    @staticmethod
+    def collect_container_metrics_block(cstats: dict, errors: list) -> tuple:
+        """
+        Calculates the block consumption for a give container
+
+        :param cstats: Docker container statistics
+        :param errors: ongoing list of collection errors to append to if needed
+        :return: tuple with block bytes IN and OUT
+        """
+        io_bytes_recursive = cstats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
+        if io_bytes_recursive:
+            try:
+                blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
+            except Exception as e:
+                errors.append("blk_in")
+                blk_in = 0.0
+
+            try:
+                blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
+            except Exception as e:
+                errors.append("blk_out")
+                blk_out = 0.0
+        else:
+            blk_out = blk_in = 0.0
+
+        return blk_out, blk_in
+
     def collect_container_metrics(self):
         docker_stats = []
 
@@ -934,65 +1031,20 @@ class DockerClient(ContainerRuntimeClient):
             #
             # -----------------
             # CPU
-            try:
-                cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
-                cpu_system = float(container_stats["cpu_stats"]["system_cpu_usage"])
-
-                online_cpus = container_stats["cpu_stats"] \
-                    .get("online_cpus", len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", -1)))
-
-                cpu_delta = cpu_total - old_cpu[i][0]
-                system_delta = cpu_system - old_cpu[i][1]
-
-                cpu_percent = 0.0
-                if system_delta > 0.0 and online_cpus > -1:
-                    cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
-            except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
-                collection_errors.append("CPU")
-                cpu_percent = 0.0
-
+            cpu_percent = self.collect_container_metrics_cpu(container_stats, old_cpu[i][0],
+                                                             old_cpu[i][1], collection_errors)
             #
             # -----------------
             # MEM
-            try:
-                mem_usage = float(container_stats["memory_stats"]["usage"] / 1024 / 1024)
-                mem_limit = float(container_stats["memory_stats"]["limit"] / 1024 / 1024)
-                if round(mem_limit, 2) == 0.00:
-                    mem_percent = 0.00
-                else:
-                    mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
-            except (IndexError, KeyError, ValueError) as e:
-                collection_errors.append("Mem")
-                mem_percent = mem_usage = mem_limit = 0.00
-
+            mem_percent, mem_usage, mem_limit = self.collect_container_metrics_mem(container_stats, collection_errors)
             #
             # -----------------
             # NET
-            net_in = net_out = 0.0
-            if "networks" in container_stats:
-                net_in = sum(container_stats["networks"][iface]["rx_bytes"]
-                             for iface in container_stats["networks"]) / 1000 / 1000
-                net_out = sum(container_stats["networks"][iface]["tx_bytes"]
-                              for iface in container_stats["networks"]) / 1000 / 1000
-
+            net_in, net_out = self.collect_container_metrics_net(container_stats)
             #
             # -----------------
             # BLOCK
-            io_bytes_recursive = container_stats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
-            if io_bytes_recursive:
-                try:
-                    blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
-                except Exception as e:
-                    collection_errors.append("blk_in")
-                    blk_in = 0.0
-
-                try:
-                    blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
-                except Exception as e:
-                    collection_errors.append("blk_out")
-                    blk_out = 0.0
-            else:
-                blk_out = blk_in = 0.0
+            blk_out, blk_in = self.collect_container_metrics_block(container_stats, collection_errors)
 
             if collection_errors:
                 logging.error(f"Cannot get {','.join(collection_errors)} stats for container {container.name}")
