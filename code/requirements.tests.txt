@@ -1,2 +1,5 @@
 mock
 pytest
+nuvla-api
+requests
+docker
