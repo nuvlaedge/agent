@@ -5,14 +5,13 @@ import base64
 import json
 import os
 import subprocess
-import docker
+import kubernetes
 import logging
 import mock
 import requests
 import unittest
 import tests.utils.fake as fake
 import yaml
-from types import SimpleNamespace
 
 os.environ.setdefault('KUBERNETES_SERVICE_HOST','force-k8s-coe')
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
@@ -23,6 +22,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
+        os.environ.setdefault('NUVLABOX_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
         with mock.patch('agent.common.NuvlaBoxCommon.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
             with mock.patch('agent.common.NuvlaBoxCommon.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
                 with mock.patch('agent.common.NuvlaBoxCommon.config') as mock_k8s_config:
@@ -61,20 +61,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
     def test_get_host_os(self, mock_get_node_info):
-        node = {
-            'status': {
-                'node_info': {
-                    'os_image': 'FakeOS',
-                    'kernel_version': 'fake kernel v0'
-                }
-            }
-        }
         # if get_node_info returns something valid, we get a valid string out of it
-        mock_get_node_info.return_value = json.loads(json.dumps(node), object_hook=lambda d: SimpleNamespace(**d))
+        node = fake.MockKubernetesNode()
+        mock_get_node_info.return_value = node
         self.assertIsInstance(self.obj.get_host_os(), str,
                               'Host OS should be a string')
         self.assertEqual(self.obj.get_host_os(),
-                         f"{node['status']['node_info']['os_image']} {node['status']['node_info']['kernel_version']}",
+                         f"{node.status.node_info.os_image} {node.status.node_info.kernel_version}",
                          'Did not get the expected host OS value')
 
         # otherwise, we get None
@@ -82,552 +75,306 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertIsNone(self.obj.get_host_os(),
                           'Host OS should be None cause Node is not defined')
 
-   #  @mock.patch('docker.api.swarm.SwarmApiMixin.inspect_swarm')
-   #  def test_get_join_tokens(self, mock_docker):
-   #      # if there are no tokens (Swarm is off), we should get an empty tuple
-   #      mock_docker.return_value = {}
-   #      self.assertEqual(self.obj.get_join_tokens(), (),
-   #                       'Returned Swarm tokens even though Swarm is NOT enabled')
-   #
-   #      # otherwise, the tokens should be received
-   #      mock_docker.return_value = self.fake_swarm_tokens
-   #      self.assertEqual(self.obj.get_join_tokens(),
-   #                       (self.fake_swarm_tokens['JoinTokens']['Manager'],
-   #                        self.fake_swarm_tokens['JoinTokens']['Worker']),
-   #                       'Did not get the expected Swarm tokens')
-   #
-   #      # is there's a Docker error, we should get an empty tuple
-   #      mock_docker.side_effect = docker.errors.APIError("fake", response=requests.Response())
-   #      self.assertEqual(self.obj.get_join_tokens(), (),
-   #                       'Returned Swarm tokens even though Docker threw an exception')
-   #
-   #  @mock.patch('docker.models.nodes.NodeCollection.list')
-   #  def test_list_nodes(self, mock_docker):
-   #      # a filter should be accepted as an arg
-   #      fake_filter = {'test': 'foo'}
-   #      mock_docker.return_value = []
-   #      self.assertEqual(self.obj.list_nodes(optional_filter=fake_filter), [],
-   #                       'Listing Docker nodes when there are none')
-   #      mock_docker.assert_called_once_with(filters=fake_filter)
-   #
-   #      # make sure the returned list is consistent with what's provided by Docker
-   #      mock_docker.return_value = [1, 2, 3]
-   #      self.assertEqual(len(self.obj.list_nodes()), 3,
-   #                       'Number of Docker nodes does not match with true value')
-   #
-   #      # and when Docker throws an error, this shall too
-   #      mock_docker.side_effect = docker.errors.APIError("", response=requests.Response())
-   #      self.assertRaises(docker.errors.APIError, self.obj.list_nodes)
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.list_nodes')
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
-   #  def test_get_cluster_info(self, mock_get_node_info, mock_list_nodes):
-   #      # if Swarm is not enabled, we should get an empty dict
-   #      mock_get_node_info.return_value = {'Swarm': {}}
-   #      self.assertEqual(self.obj.get_cluster_info(), {},
-   #                       'Returned cluster info when there is no cluster')
-   #
-   #      # if not a Swarm manager, then again {} is returned
-   #      mock_get_node_info.return_value = {'Swarm': {'ControlAvailable': ''}}
-   #      self.assertEqual(self.obj.get_cluster_info(), {},
-   #                       'Returned cluster info when node is not a manager')
-   #
-   #      # if nodes exist...
-   #
-   #      mock_get_node_info.return_value = {
-   #          'Swarm': {
-   #              'ControlAvailable': True
-   #          },
-   #          'Cluster': {
-   #              'ID': 'fake-id'
-   #          }
-   #      }
-   #
-   #      # if all nodes are ready, we get them all back
-   #      mock_list_nodes.return_value = [fake.MockDockerNode(), fake.MockDockerNode()]
-   #      self.assertIn('cluster-id', self.obj.get_cluster_info(),
-   #                    'Expecting cluster-id in cluster info')
-   #      self.assertEqual(len(self.obj.get_cluster_info()['cluster-managers']), 2,
-   #                       'Expecting 2 cluster nodes, but got something else')
-   #      self.assertEqual(len(self.obj.get_cluster_info().keys()), 4,
-   #                       'Expecting 4 keys to define cluster, but got something else')
-   #
-   #      # if not all nodes are ready, then we just get the ones which are ready
-   #      mock_list_nodes.return_value = [fake.MockDockerNode(), fake.MockDockerNode(state='not-ready')]
-   #      self.assertIn('cluster-orchestrator', self.obj.get_cluster_info(),
-   #                    'Expecting cluster-orchestrator in cluster info')
-   #      self.assertIn(self.obj.get_cluster_info()['cluster-orchestrator'].lower(), ['docker', 'swarm'],
-   #                    'Expecting Docker-based COE but got a different orchestrator')
-   #      self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 1,
-   #                       'Expecting 1 worker in cluster info, but got something else')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
-   #  def test_get_api_ip_port(self, mock_get_nodes_info):
-   #      # if Swarm info has an address, we should just get that back with port 5000
-   #      node_addr = '1.2.3.4'
-   #      mock_get_nodes_info.return_value = {
-   #          'Swarm': {
-   #              'NodeAddr': node_addr
-   #          }
-   #      }
-   #
-   #      self.assertEqual(self.obj.get_api_ip_port(), (node_addr, 5000),
-   #                       'Expected default Swarm NodeAddr with port 5000, but got something else instead')
-   #
-   #      # otherwise, we try to read the machine IP from the disk
-   #      mock_get_nodes_info.return_value = {'Swarm': {}}
-   #      # if there's a valid IP in this file, we return it
-   #      tcp_file = '''sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   # 6: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 51149 1 ffffffc1c9be2e80 100 0 0 10 0
-   # 7: 0100007F:13D8 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 58062 1 ffffffc1dea25d00 100 0 0 10 0
-   # 8: 2D28A8C0:0016 652AA8C0:D6C9 01 00000024:00000000 01:00000015 00000000     0        0 3610139 4 ffffffc10cd3f440 22 4 29 10 -1
-   # 9: 0100007F:ECA0 0100007F:13D8 06 00000000:00000000 03:00000577 00000000     0        0 0 3 ffffffc0d1887ef0
-   # '''
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=tcp_file)):
-   #          self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', 5000),
-   #                           'Could not get valid IP from filesystem')
-   #
-   #      # if there's no valid IP in this file, then we return 127.0.0.1
-   #      tcp_file = '''sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   # 0: 0100007F:0B83 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 22975 1 ffffffc1dea20000 100 0 0 10 0
-   # 1: 00000000:1388 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 46922 1 ffffffc1c9be1740 100 0 0 10 0
-   # '''
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=tcp_file)):
-   #          self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', 5000),
-   #                           'Could not get default IP from filesystem')
-   #
-   #  @mock.patch('docker.models.containers.ContainerCollection.get')
-   #  def test_has_pull_job_capability(self, mock_containers_get):
-   #      # if the job-lite does not exist, we get False
-   #      mock_containers_get.side_effect = docker.errors.NotFound
-   #      self.assertFalse(self.obj.has_pull_job_capability(),
-   #                       'Job lite can not be found but returned True anyway')
-   #
-   #      # same for any other exception
-   #      mock_containers_get.side_effect = EOFError
-   #      self.assertFalse(self.obj.has_pull_job_capability(),
-   #                       'Error occurred but returned True anyway')
-   #
-   #      # otherwise, we infer its Docker image
-   #      mock_containers_get.reset_mock(side_effect=True)
-   #
-   #      mock_containers_get.return_value = fake.MockContainer(status='running')
-   #
-   #      # if the container is running, we return false
-   #      self.assertFalse(self.obj.has_pull_job_capability(),
-   #                       'Returned True even when job-lite container is not paused')
-   #
-   #      # the container is supposed to be paused
-   #      mock_containers_get.return_value = fake.MockContainer()
-   #      self.assertTrue(self.obj.has_pull_job_capability(),
-   #                      'Should have found the job-lite component, but has not')
-   #      self.assertEqual(self.obj.job_engine_lite_image, 'fake-image',
-   #                       'Set the wrong job-lite Docker image')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.cast_dict_to_list')
-   #  @mock.patch('docker.api.swarm.SwarmApiMixin.inspect_node')
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
-   #  def test_get_node_labels(self, mock_get_node_info, mock_inspect_node, mock_cast_dict_to_list):
-   #      # errors while inspecting node should cause it to return empty list
-   #      mock_inspect_node.side_effect = KeyError
-   #      node = {
-   #          'Swarm': {
-   #              'NodeID': 'fake-id'
-   #          }
-   #      }
-   #      mock_get_node_info.return_value = node
-   #      err = 'Exception not caught while getting node labels'
-   #      self.assertEqual(self.obj.get_node_labels(), [],
-   #                       err)
-   #
-   #      mock_inspect_node.reset_mock(side_effect=True)
-   #      mock_get_node_info.side_effect = docker.errors.NullResource
-   #      self.assertEqual(self.obj.get_node_labels(), [],
-   #                       err)
-   #
-   #      mock_get_node_info.reset_mock(side_effect=True)
-   #      labels = [1, 2]
-   #      mock_inspect_node.return_value = {
-   #          'Spec': {
-   #              'Labels': labels
-   #          }
-   #      }
-   #      mock_cast_dict_to_list.return_value = labels
-   #      self.assertEqual(self.obj.get_node_labels(), labels,
-   #                       'Unable to get node labels')
-   #      mock_cast_dict_to_list.assert_called_once_with(labels)
-   #
-   #  @mock.patch('docker.models.containers.ContainerCollection.get')
-   #  def test_is_vpn_client_running(self, mock_containers_get):
-   #      mock_containers_get.return_value = fake.MockContainer(status='running')
-   #      # if vpn is running, returns True
-   #      self.assertTrue(self.obj.is_vpn_client_running(),
-   #                      'Says vpn-client is not running when it is')
-   #
-   #      # False otherwise
-   #      mock_containers_get.return_value = fake.MockContainer(status='paused')
-   #      self.assertFalse(self.obj.is_vpn_client_running(),
-   #                       'Says vpn-client is running, but it is not')
-   #
-   #  @mock.patch('docker.models.containers.ContainerCollection.run')
-   #  def test_install_ssh_key(self, mock_docker_run):
-   #      # if all goes well, we expect True
-   #      mock_docker_run.return_value = None
-   #      self.assertTrue(self.obj.install_ssh_key('fake-pub-key', 'fake-ssh-folder'),
-   #                      'Unable to install SSH key')
-   #
-   #      # if an exception is thrown, it should be raised and we get no return
-   #      mock_docker_run.side_effect = Exception
-   #      self.assertRaises(Exception, self.obj.install_ssh_key, 'fake-pub-key', 'fake-ssh-folder',
-   #                        'Exception was not thrown when failing to install SSH key')
-   #
-   #  @mock.patch('docker.models.containers.ContainerCollection.get')
-   #  def test_is_nuvla_job_running(self, mock_containers_get):
-   #      job_id = 'fake-id'
-   #      job_exec_id = 'fake-exec-id'
-   #      # if docker cannot find the job container, then return False
-   #      mock_containers_get.side_effect = docker.errors.NotFound('', requests.Response())
-   #      self.assertFalse(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                       'Says job execution container exists when it should not')
-   #
-   #      # any other exception means we can't assess this, so returns True by default
-   #      mock_containers_get.side_effect = TimeoutError
-   #      self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                      'Cannot know if job execution container is running, but says it is not running')
-   #
-   #      mock_containers_get.reset_mock(side_effect=True)
-   #      # if container is found, but the container object is defective, assume it is True
-   #      mock_containers_get.return_value = fake.MockContainer(status='fake-status')
-   #      mock_containers_get.return_value.kill = mock.Mock()
-   #      mock_containers_get.return_value.kill.side_effect = AttributeError
-   #      # throw AttributeError
-   #      self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                      'Says job execution container is not running when it actually does not know if it is')
-   #
-   #      mock_containers_get.return_value = fake.MockContainer(status='created')
-   #      mock_containers_get.return_value.remove = mock.Mock()
-   #      mock_containers_get.return_value.remove.side_effect = docker.errors.NotFound('', requests.Response())
-   #      # throw docker.errors.NotFound
-   #      self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                      'Says job execution container is running when actually it does not even exist')
-   #
-   #      # and running, return True
-   #      mock_containers_get.return_value = fake.MockContainer(status='running')
-   #      self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                      'Says job execution container is not running when it is not')
-   #      # same for status=restarting
-   #      mock_containers_get.return_value = fake.MockContainer(status='restarting')
-   #      self.assertTrue(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                      'Says job execution container is not running but it is restarting')
-   #
-   #      # finally, if status is either created or not known, container is killed and this returns False
-   #      mock_containers_get.return_value = fake.MockContainer(status='created')
-   #      self.assertFalse(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                       'Failed to remove created job execution container')
-   #      mock_containers_get.return_value = fake.MockContainer(status='non-a-status')
-   #      self.assertFalse(self.obj.is_nuvla_job_running(job_id, job_exec_id),
-   #                       'Failed to kill job execution container in unknown state')
-   #
-   #  @mock.patch('docker.api.network.NetworkApiMixin.connect_container_to_network')
-   #  @mock.patch('docker.models.containers.ContainerCollection.run')
-   #  @mock.patch('docker.models.containers.ContainerCollection.get')
-   #  def test_launch_job(self, mock_containers_get, mock_containers_run, mock_net_connect):
-   #      job_id = 'fake-id'
-   #      job_exec_id = 'fake-exec-id'
-   #      nuvla = 'https://fake-nuvla.io'
-   #
-   #      # if there's an error while getting the compute-api, we expect None
-   #      mock_containers_get.side_effect = TimeoutError
-   #      self.assertIs(self.obj.launch_job(job_id, job_exec_id, nuvla), None,
-   #                    'compute-api could not be found, but still got something else than None')
-   #      mock_containers_run.assert_not_called()
-   #
-   #      # otherwise we try to launch the job execution container
-   #      mock_containers_get.reset_mock(side_effect=True)
-   #      mock_containers_get.return_value = fake.MockContainer()
-   #      mock_containers_run.return_value = None
-   #      self.assertIs(self.obj.launch_job(job_id, job_exec_id, nuvla), None,
-   #                    'Unable to launch job execution container')
-   #      mock_containers_run.assert_called_once()
-   #      mock_net_connect.assert_called_once_with(job_exec_id, 'bridge')
-   #
-   #  def test_collect_container_metrics_cpu(self):
-   #      cpu_stat = {
-   #          "cpu_stats": {
-   #              "cpu_usage": {
-   #                  "total_usage": "10"
-   #              },
-   #              "system_cpu_usage": "100",
-   #              "online_cpus": 2
-   #          },
-   #      }
-   #      old_cpu_total = 5
-   #      old_cpu_system = 50
-   #      err = []
-   #      # if all is well, we should expect a float value bigger than 0
-   #      self.assertIsInstance(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err),
-   #                            float,
-   #                            "Received unexpected type of CPU usage percentage for container")
-   #      self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 20.0,
-   #                       "The provided default should return a CPU usage of 20%, but that was not the case")
-   #      self.assertEqual(len(err), 0,
-   #                       "There should not have been any CPU collection errors")
-   #
-   #      # if online_cpus is not reported, then we get 0% usage
-   #      cpu_stat['cpu_stats'].pop('online_cpus')
-   #      self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 0.0,
-   #                       "Expecting 0% CPU usage due to lack of details, but got something else")
-   #
-   #      # if a mandatory attribute does not exist, then we get 0% again, but with an error
-   #      cpu_stat.pop('cpu_stats')
-   #      self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 0.0,
-   #                       "Expecting 0% CPU usage due to missing mandatory keys, but got something else")
-   #      self.assertGreater(len(err), 0,
-   #                         "Expecting an error due to the lack to CPU info to collect, but did not get any")
-   #
-   #  def test_collect_container_metrics_mem(self):
-   #      mem_stat = {
-   #          "memory_stats": {
-   #              "usage": 1024*1024,
-   #              "limit": 2*1024*1024
-   #          }
-   #      }
-   #      err = []
-   #      # if all is well, we expect a float value higher than 0.0%
-   #      self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (50.0, 1, 2),
-   #                       "Expecting a memory usage of 50%, but got something else instead")
-   #      self.assertEqual(len(err), 0,
-   #                       "There should not have been any Memory collection errors")
-   #
-   #      # if the memory limit is set to 0, then we expect 0%, with no errors
-   #      mem_stat['memory_stats']['limit'] = 0
-   #      self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (0.0, 1, 0),
-   #                       "Expecting a memory usage of 50%, but got something else instead")
-   #      self.assertEqual(len(err), 0,
-   #                       "There should not have been any Memory collection errors, even though the results was 0%")
-   #
-   #      # if there are missing fields, then an error should be added, and 0% should be returned
-   #      mem_stat.pop('memory_stats')
-   #      self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (0.0, 0.0, 0.0),
-   #                       "Expecting 0% due to missing fields, but got something else")
-   #      self.assertGreater(len(err), 0,
-   #                         "There should have been Memory collection errors since fields are missing")
-   #
-   #  def test_collect_container_metrics_net(self):
-   #      net_stat = {
-   #          "networks": {
-   #              "iface1": {
-   #                  "rx_bytes": 1*1000*1000,
-   #                  "tx_bytes": 1*1000*1000
-   #              },
-   #              "iface2": {
-   #                  "rx_bytes": 1*1000*1000,
-   #                  "tx_bytes": 1*1000*1000
-   #              }
-   #          }
-   #      }
-   #      # if all goes well, we expect 2MB received and 2MB sent
-   #      self.assertEqual(self.obj.collect_container_metrics_net(net_stat), (2, 2),
-   #                       'Failed to sum network counters')
-   #
-   #  def test_collect_container_metrics_block(self):
-   #      blk_stat = {
-   #          "blkio_stats": {
-   #              "io_service_bytes_recursive": [
-   #                  {
-   #                      "value": 1*1000*1000
-   #                  },
-   #                  {
-   #                      "value": 2*1000*1000
-   #                  }]
-   #          }
-   #      }
-   #      err = []
-   #      # if all goes well, we expect 1MB blk_in and 2MB blk_out, and no errors
-   #      self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (2, 1),
-   #                       'Failed to get block statistics for a container')
-   #      self.assertEqual(err, [],
-   #                       'Reporting errors on blk stats when there should not be any')
-   #
-   #      # if the blk_stats are misformatted or there is any other exception during collection,
-   #      # then we get 0MBs for the corresponding metric, and an error
-   #      blk_stat['blkio_stats']['io_service_bytes_recursive'][0]['value'] = "saasd" # not a number
-   #      self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (2, 0),
-   #                       'Expected 0MBs for blk_in (due to misformatted value, but got something else instead')
-   #      self.assertEqual(err, ['blk_in'],
-   #                       'An error occurred while collecting the container blk_in, but it was not reported')
-   #
-   #      # if blkio stats are missing a field, then we expect (0,0) MBs
-   #      blk_stat.pop('blkio_stats')
-   #      err = []
-   #      self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (0, 0),
-   #                       'Expected 0MBs for container block stats (due to missing stats), but got something else')
-   #      self.assertEqual(err, [],
-   #                       'There should be no errors reported when blk stats are not given by Docker')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_block')
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_net')
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_mem')
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_cpu')
-   #  @mock.patch('docker.api.container.ContainerApiMixin.stats')
-   #  @mock.patch('docker.models.containers.ContainerCollection.list')
-   #  def test_collect_container_metrics(self, mock_containers_list, mock_container_stats, mock_get_cpu,
-   #                                     mock_get_mem, mock_get_net, mock_get_block):
-   #      # if there are no containers, we should get an empty list
-   #      mock_containers_list.return_value = []
-   #      stats = []
-   #      mock_container_stats.return_value = iter(stats)
-   #      self.assertEqual(self.obj.collect_container_metrics(), [],
-   #                       'Get container stats when there are no containers running')
-   #
-   #      # otherwise...
-   #      mock_containers_list.return_value = [fake.MockContainer()]
-   #      mock_get_mem.return_value = (1, 2 ,3)
-   #      mock_get_cpu.return_value = 50
-   #      mock_get_net.return_value = (1, 2)
-   #      mock_get_block.return_value = (1, 2)
-   #      # if one container has malformed CPU stats, the "old_cpu" variable should be set to (0,0) when collecting CPU
-   #      old_cpu_total_usage = 1
-   #      old_cpu_system_cpu_usage = 1
-   #      cpu_stats = {
-   #          "cpu_usage": {
-   #              "total_usage": old_cpu_total_usage
-   #          },
-   #          "system_cpu_usage": old_cpu_system_cpu_usage,
-   #          "online_cpus": 2
-   #      }
-   #      stats = [
-   #          '{"cpu_stats": {}}',
-   #          '{"cpu_stats": %s}' % json.dumps(cpu_stats)
-   #      ]
-   #      mock_container_stats.return_value = iter(stats)
-   #      self.assertIsInstance(self.obj.collect_container_metrics(), list,
-   #                            'Expecting a list from the container metrics collection, but got something else')
-   #      # there is only 1 container, so each collector should only have been called once
-   #      mock_get_cpu.assert_called_once_with(json.loads(stats[1]), 0, 0, [])
-   #
-   #      # if all containers have valid stats though, we should expect the "old_cpu" to be different from (0,0)
-   #      # and the output to container all the expected fields to be included in the telemetry
-   #      mock_get_cpu.reset_mock()
-   #      stats[0] = stats[1]
-   #      mock_container_stats.return_value = iter(stats)
-   #      expected_fields = ['id', 'name', 'container-status',
-   #                         'cpu-percent', 'mem-usage-limit', 'mem-percent',
-   #                         'net-in-out', 'blk-in-out', 'restart-count']
-   #      self.assertTrue(set(expected_fields).issubset(list(self.obj.collect_container_metrics()[0].keys())),
-   #                      'Received malformed container stats from the statistics collection mechanism')
-   #      mock_get_cpu.assert_called_once_with(json.loads(stats[1]), old_cpu_total_usage, old_cpu_system_cpu_usage, [])
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.socket.gethostname')
-   #  @mock.patch('docker.models.containers.ContainerCollection.get')
-   #  @mock.patch('docker.models.containers.ContainerCollection.list')
-   #  def test_get_installation_parameters(self, mock_containers_list, mock_containers_get, mock_gethostname):
-   #      search_label = 'fake-label'
-   #      agent_id = 'my-fake-id'
-   #      # if the agent container cannot find itself, it raises an exception
-   #      mock_containers_list.return_value = [fake.MockContainer(myid=agent_id), fake.MockContainer()]
-   #      mock_gethostname.return_value = 'fake-hostname'
-   #      mock_containers_get.side_effect = docker.errors.NotFound('', requests.Response())
-   #      self.assertRaises(docker.errors.NotFound, self.obj.get_installation_parameters, search_label)
-   #
-   #      # otherwise...
-   #      mock_containers_get.reset_mock(side_effect=True)
-   #      mock_containers_get.return_value = fake.MockContainer(myid=agent_id)
-   #      # since all labels exist, the output should container the respective fields for the telemetry
-   #      expected_fields = ['project-name', 'working-dir', 'config-files', 'environment']
-   #      self.assertIsInstance(self.obj.get_installation_parameters(search_label), dict,
-   #                            'Expecting installation parameters to be a JSON structure')
-   #      self.assertTrue(set(expected_fields).issubset(self.obj.get_installation_parameters(search_label)),
-   #                      f'Installation parameters are missing the required telemetry fields: {expected_fields}')
-   #
-   #      # if containers have labels that are supposed to be ignored, these should not be in the returned value
-   #      new_agent_container = fake.MockContainer(myid=agent_id)
-   #      ignore_env = f'{self.obj.ignore_env_variables[0]}=some-fake-env-value-to-ignore'
-   #      new_agent_container.attrs['Config']['Env'] = [ignore_env]
-   #      mock_containers_list.return_value = [fake.MockContainer(), new_agent_container]
-   #      mock_containers_get.return_value = new_agent_container
-   #      self.assertNotIn(ignore_env,
-   #                       self.obj.get_installation_parameters(search_label)['environment'],
-   #                       'Unwanted environment variables are not being properly ignored')
-   #
-   #      # other environment variables will be included though
-   #      include_env = 'some-env=some-fake-env-value-NOT-to-ignore'
-   #      new_agent_container.attrs['Config']['Env'].append(include_env)
-   #      mock_containers_list.return_value = [fake.MockContainer(), new_agent_container]
-   #      mock_containers_get.return_value = new_agent_container
-   #      self.assertIn(include_env,
-   #                    self.obj.get_installation_parameters(search_label)['environment'],
-   #                    'Expected environment variables are not in the final parameters')
-   #
-   #      # and also make sure the config-files are not duplicated, even if there are many containers reporting
-   #      # the same filenames
-   #      mock_containers_list.return_value = [fake.MockContainer(), new_agent_container, fake.MockContainer()]
-   #      self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
-   #                       sorted(new_agent_container.labels['com.docker.compose.project.config_files'].split(',')),
-   #                       'Installation config files are not reported correctly')
-   #
-   #      # finally, if one of the compose file labels are missing from the agent_container, we get None
-   #      new_agent_container.labels['com.docker.compose.project'] = None
-   #      mock_containers_get.return_value = new_agent_container
-   #      self.assertIsNone(self.obj.get_installation_parameters(search_label),
-   #                        'Expected no installation parameters due to missing Docker Compose labels, but got something')
-   #
-   #  def test_read_system_issues(self):
-   #      node_info = {
-   #          'Swarm': {
-   #              'Error': 'some-fake-error'
-   #          },
-   #          'Warnings': ['fake-warn-1', 'fake-warn-2']
-   #      }
-   #      # if all is good, we should get 1 error and 2 warnings
-   #      self.assertEqual(self.obj.read_system_issues(node_info), ([node_info['Swarm']['Error']], node_info['Warnings']),
-   #                       'Got unexpected system errors/warnings')
-   #
-   #      # and if there are no errors nor warnings, we should get two empty lists
-   #      self.assertEqual(self.obj.read_system_issues({}), ([], []),
-   #                       'Expected no errors nor warnings, but got something instead')
-   #
-   #  def test_get_node_id(self):
-   #      node_info = {
-   #          'Swarm': {
-   #              'NodeID': 'some-fake-id'
-   #          }
-   #      }
-   #      # should always return the ID value indicated in the passed argument
-   #      self.assertEqual(self.obj.get_node_id(node_info), node_info['Swarm']['NodeID'],
-   #                       'Returned NodeID does not match the real one')
-   #
-   #  def test_get_cluster_id(self):
-   #      node_info = {
-   #          'Swarm': {
-   #              'Cluster': {
-   #                  'ID': 'some-fake-cluster-id'
-   #              }
-   #          }
-   #      }
-   #      # should always return the ID value indicated in the passed argument
-   #      # and ignore the named argument
-   #      self.assertEqual(self.obj.get_cluster_id(node_info, default_cluster_name='some-name'),
-   #                       node_info['Swarm']['Cluster']['ID'],
-   #                       'Returned Cluster ID does not match the real one')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
-   #  def test_get_cluster_managers(self, mock_get_node):
-   #      node_info = {
-   #          'Swarm': {
-   #              'RemoteManagers': [{'NodeID': 'manager-1'}, {'NodeID': 'manager-2'}]
-   #          }
-   #      }
-   #      mock_get_node.return_value = node_info
-   #      # if all is good, we should get the managers IDs
-   #      self.assertEqual(self.obj.get_cluster_managers(),
-   #                       list(map(lambda x: x['NodeID'], node_info['Swarm']['RemoteManagers'])),
-   #                       'Did not get the expected cluster managers IDs')
-   #
-   #      # but if there are none, we get an empty list
-   #      mock_get_node.return_value = {}
-   #      self.assertEqual(self.obj.get_cluster_managers(), [],
-   #                       'Did not get the expected cluster managers IDs')
+    def test_get_join_tokens(self):
+        # NOTE: nothing to test for the KubernetesClient
+        self.assertEqual(self.obj.get_join_tokens(), (),
+                         'Kubernetes tokens are now being returned, so this test needs to be updated')
+
+    def test_list_nodes(self):
+        self.obj.client.list_node.return_value.items = [fake.MockKubernetesNode()]
+        self.assertIsInstance(self.obj.list_nodes(), list,
+                              'List nodes should returns its items, a list, but got something else instead')
+        self.obj.client.list_node.assert_called_once()
+
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.list_nodes')
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_cluster_id')
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    def test_get_cluster_info(self, mock_get_node_info, mock_cluster_id, mock_list_nodes):
+        me = fake.MockKubernetesNode(uid='myself-fake-id')
+        mock_cluster_id.return_value = 'fake-id'
+        mock_get_node_info.return_value = me
+        mock_list_nodes.return_value = [me, fake.MockKubernetesNode()]
+
+        expected_fields = ['cluster-id', 'cluster-orchestrator', 'cluster-managers', 'cluster-workers']
+        # if all goes well, we should get the above keys
+        self.assertEqual(sorted(expected_fields), sorted(list(self.obj.get_cluster_info().keys())),
+                         'The expected cluster keys were not given back while getting cluster info')
+
+        # as is, we should expect 2 workers and 0 managers
+        self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 2,
+                         'Expecting 2 k8s workers but got something else')
+        self.assertEqual(len(self.obj.get_cluster_info()['cluster-managers']), 0,
+                         'Expecting no k8s manager but got something else')
+
+        # COE should also match with class' COE
+        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], NuvlaBoxCommon.ORCHESTRATOR_COE,
+                         'Got the wrong cluster-orchestrator')
+
+        # but if one of the nodes is a master, then we should get 1 worker and 1 manager
+        me.metadata.labels = {'node-role.kubernetes.io/master': ''}
+        mock_get_node_info.return_value = me
+        mock_list_nodes.return_value = [me, fake.MockKubernetesNode()]
+        self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 1,
+                         'Expecting 1 k8s workers but got something else')
+        self.assertEqual(len(self.obj.get_cluster_info()['cluster-managers']), 1,
+                         'Expecting 1 k8s manager but got something else')
+        self.assertEqual(self.obj.get_cluster_info()['cluster-managers'][0], me.metadata.name,
+                         'Expecting 2 k8s workers but got something else')
+
+    def test_get_api_ip_port(self):
+        endpoint = fake.MockKubernetesEndpoint('not-kubernetes')
+        self.obj.client.list_endpoints_for_all_namespaces.return_value.items = [endpoint, endpoint]
+        # if the host_node_ip is already defined, then it is straighforward and we get it plus the default port
+        self.obj.host_node_ip = '0.0.0.0'
+        self.assertEqual(self.obj.get_api_ip_port(), ('0.0.0.0', 6443),
+                         'Failed to return k8s API IP and port')
+
+        # otherwise, it looks up k8s endpoints
+        self.obj.host_node_ip = None
+
+        # if there are no kubernetes endpoints, then return None,None
+        self.assertEqual(self.obj.get_api_ip_port(), (None, None),
+                         'Returned API IP and port even though there are no Kubernetes endpoints')
+
+        # even if there are k8s endpoints...if either the IP or port are undefined, return None,None
+        endpoint_k8s = fake.MockKubernetesEndpoint('kubernetes')
+        endpoint_k8s.subsets[0].ports[0].protocol = None
+        self.obj.client.list_endpoints_for_all_namespaces.return_value.items = [endpoint_k8s, endpoint]
+        # if there are no kubernetes endpoints, then return None,None
+        self.assertEqual(self.obj.get_api_ip_port(), (None, None),
+                         'Got k8s API ip/port even though the endpoint port protocol is not TCP')
+
+        # only if the k8s endpoint has all parameters, we get a valid IP and port
+        endpoint_k8s = fake.MockKubernetesEndpoint('kubernetes')
+        self.obj.client.list_endpoints_for_all_namespaces.return_value.items = [endpoint_k8s, endpoint]
+        self.assertIsNotNone(self.obj.get_api_ip_port()[0],
+                             'Should have gotten an API IP but got None')
+        self.assertIsNotNone(self.obj.get_api_ip_port()[1],
+                             'Should have gotten an API port but got None')
+
+    def test_has_pull_job_capability(self):
+        # if the job-lite variable does not exist (is not set), we get False, otherwise, we get True
+        self.assertTrue(self.obj.has_pull_job_capability(),
+                        'Should have found the job-lite image name from env, but has not')
+
+        backup = self.obj.job_engine_lite_image = None
+        self.obj.job_engine_lite_image = None
+        self.assertFalse(self.obj.has_pull_job_capability(),
+                         'job_engine_lite_image is not set, so we should have received False...')
+
+        self.obj.job_engine_lite_image = backup # restore var
+
+    def test_cast_dict_to_list(self):
+        # 1st level casting only
+        ref = {'a': 1.1, 'b': None, 'c': 'string'}
+        exp_out = ['a=1.1', 'b', 'c=string']
+        self.assertEqual(self.obj.cast_dict_to_list(ref), exp_out,
+                         'Unable to convert dict to list')
+
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    def test_get_node_labels(self, mock_get_node_info):
+        node = fake.MockKubernetesNode()
+        node.metadata.labels = {} # no labels are set by default
+        mock_get_node_info.return_value = node
+        self.assertEqual(self.obj.get_node_labels(), [],
+                         'Unable to get k8s empty node labels')
+
+        node.metadata.labels = {'fake-label': 'fake-value'}
+        mock_get_node_info.return_value = node
+        self.assertEqual(self.obj.get_node_labels(), ['fake-label=fake-value'],
+                         'Unable to get k8s node labels')
+
+    def test_is_vpn_client_running(self):
+        pod = fake.MockKubernetesPod()
+        # if there are no pods with the vpn-client label, we get False
+        self.obj.client.list_pod_for_all_namespaces.return_value.items = []
+        self.assertFalse(self.obj.is_vpn_client_running(),
+                         'Saying VPN client is running even though it is not')
+
+        # but if there are matching pods, returns False if no containers match the vpn-client name, True otherwise
+        self.obj.client.list_pod_for_all_namespaces.return_value.items = [pod, pod]
+        self.assertFalse(self.obj.is_vpn_client_running(),
+                         'Says VPN client is running when none of the pods are from the VPN component')
+
+        vpn_pod = fake.MockKubernetesPod()
+        vpn_pod.status.container_statuses[0].name = self.obj.vpn_client_component
+        self.obj.client.list_pod_for_all_namespaces.return_value.items = [pod, vpn_pod]
+        self.assertTrue(self.obj.is_vpn_client_running(),
+                        'Says VPN client is not running, but it is')
+
+    def test_install_ssh_key(self):
+        # if there's an error while looking for an existing SSH installer pod, an exception is raised
+        self.obj.client.read_namespaced_pod.side_effect = kubernetes.client.exceptions.ApiException()
+        self.assertRaises(kubernetes.client.exceptions.ApiException, self.obj.install_ssh_key, '', '')
+
+        # if the pod already exists, and is running, then we need to wait, and we get False
+        self.obj.client.read_namespaced_pod.reset_mock(side_effect=True)
+        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod()
+        self.assertFalse(self.obj.install_ssh_key('', ''),
+                         'Failed to verify that an SSH installer is already running')
+
+        # otherwise, it deletes the finished previous installer and installs a new key
+        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='terminated')
+        self.obj.client.delete_namespaced_pod.return_value = True
+        self.obj.client.create_namespaced_pod.return_value = True
+        self.assertTrue(self.obj.install_ssh_key('', ''),
+                        'Failed to install SSH key')
+        self.obj.client.delete_namespaced_pod.assert_called_once()
+        self.obj.client.create_namespaced_pod.assert_called_once()
+
+        # also, if the initial check for an existing container returns 404, we continue
+        self.obj.client.read_namespaced_pod.side_effect = kubernetes.client.exceptions.ApiException(status=404)
+        self.assertTrue(self.obj.install_ssh_key('', ''),
+                        'Failed to install SSH key')
+        self.obj.client.delete_namespaced_pod.assert_called_once()
+        self.assertEqual(self.obj.client.create_namespaced_pod.call_count, 2,
+                         'Upon a 404, the SSH installer was not deployed as expected')
+
+    def test_is_nuvla_job_running(self):
+        self.obj.client.delete_namespaced_pod.reset_mock()
+        # if there's an error while looking for pod, we default to True
+        self.obj.client.read_namespaced_pod.side_effect = kubernetes.client.exceptions.ApiException()
+        self.assertTrue(self.obj.is_nuvla_job_running('', ''),
+                        'Says Nuvla job is not running even though it cannot be sure of that')
+
+        # if 404, then False
+        self.obj.client.read_namespaced_pod.side_effect = kubernetes.client.exceptions.ApiException(status=404)
+        self.assertFalse(self.obj.is_nuvla_job_running('', ''),
+                         'Says Nuvla job is running, when respective pod could not be found')
+
+        # if found, we continue to see its state
+        self.obj.client.read_namespaced_pod.reset_mock(side_effect=True)
+        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='running')
+        self.assertTrue(self.obj.is_nuvla_job_running('', ''),
+                        'Nuvla job is running, but got the opposite message')
+
+        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='pending')
+        self.assertFalse(self.obj.is_nuvla_job_running('', ''),
+                         'Says Nuvla job is running, when in fact it is pending')
+
+        # for any other state, delete the pod and return False
+        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='succeeded')
+        self.obj.client.delete_namespaced_pod.return_value = True
+        self.assertFalse(self.obj.is_nuvla_job_running('', ''),
+                         'Says Nuvla job is running, even though it should have been deleted')
+        self.obj.client.delete_namespaced_pod.assert_called_once()
+
+        # if deletion fails, return True
+        self.obj.client.delete_namespaced_pod.side_effect = kubernetes.client.exceptions.ApiException()
+        self.assertTrue(self.obj.is_nuvla_job_running('', ''),
+                        'Dunno if job pod is running, but saying that is is not')
+
+    def test_launch_job(self):
+        # no returns. The only test is to make sure there are no exceptions and that the job pod is launched
+        self.obj.client.create_namespaced_pod.reset_mock()
+        self.obj.client.create_namespaced_pod.return_value = True
+        self.assertIsNone(self.obj.launch_job('', '', ''),
+                          'Unable to launch new job')
+        self.obj.client.create_namespaced_pod.assert_called_once()
+
+    @mock.patch('kubernetes.client.CustomObjectsApi.list_cluster_custom_object')
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    def test_collect_container_metrics(self, mock_get_node_info, mock_pod_metrics):
+        pod_list = mock.MagicMock()
+        pod_list.items = [fake.MockKubernetesPod("pod-1"), fake.MockKubernetesPod("pod-2")]
+        self.obj.client.list_pod_for_all_namespaces.return_value = pod_list
+        mock_get_node_info.return_value.status.return_value.capacity = {
+            'cpu': 1,
+            'memory': '1Ki'
+        }
+
+        # if there are no pod to collect metrics from, return []
+        mock_pod_metrics.return_value = {
+            'items': []
+        }
+        self.assertEqual(self.obj.collect_container_metrics(), [],
+                         'Returned container metrics when no pods are running')
+
+        # if there are pod metrics, they must all match with the list of pods
+        new_pod = fake.MockKubernetesPodMetrics('wrong-name')
+        mock_pod_metrics.return_value = {
+            'items': [new_pod]
+        }
+        self.assertEqual(self.obj.collect_container_metrics(), [],
+                         'Returned container metrics when there is a mismatch between existing pods and metrics')
+
+        # if pod metrics match the list of pods, then we should get a non-empty list, with cpu and mem values/container
+        mock_pod_metrics.return_value = {
+            'items': [fake.MockKubernetesPodMetrics("pod-1"), fake.MockKubernetesPodMetrics("pod-2")]
+        }
+        self.assertIsInstance(self.obj.collect_container_metrics(), list,
+                              'Expecting list of pod container metrics, but got something else')
+
+        expected_field = ['container-status', 'name', 'id', 'cpu-percent', 'mem-percent']
+        self.assertEqual(sorted(expected_field), sorted(list(self.obj.collect_container_metrics()[0].keys())),
+                         'Missing container metrics keys')
+        self.assertEqual(len(self.obj.collect_container_metrics()), 2,
+                         'Expecting metrics for 2 containers, but got something else')
+
+    def test_get_installation_parameters(self):
+        self.obj.client_apps.list_namespaced_deployment.return_value.items = []
+        # if no apps, return empty environment and just the project name
+        expected_output = {
+            'project-name': self.obj.namespace,
+            'environment': []
+        }
+        self.assertEqual(self.obj.get_installation_parameters(''), expected_output,
+                         'Got the wrong installation parameters when there are no deployments to list')
+
+        # when there are deployments, get the env vars from them, skipping templated env vars
+        self.obj.client_apps.list_namespaced_deployment.return_value.items = [
+            fake.MockKubernetesDeployment(),
+            fake.MockKubernetesDeployment()
+        ]
+        self.assertGreater(len(self.obj.get_installation_parameters('')['environment']), 0,
+                           'Expecting installation environment variables to be reported')
+
+    def test_read_system_issues(self):
+        # NOT IMPLEMENTED, so just return two []
+        self.assertEqual(self.obj.read_system_issues(''), ([], []),
+                         'System errors are no longer empty by default')
+
+    def test_get_node_id(self):
+        name = 'fake-name'
+        node_info = fake.MockKubernetesNode(name)
+        # should always return the ID value indicated in the passed argument
+        self.assertTrue(self.obj.get_node_id(node_info).startswith(name),
+                        'Returned Node name does not match the real one')
+
+    def test_get_cluster_id(self):
+        node_info = fake.MockKubernetesNode()
+        # should always return the ID value indicated in the passed argument
+
+        # if Node does not have cluster name, then return the default one passed as an arg
+        default_cluster_name = 'fake-cluster'
+        self.assertEqual(self.obj.get_cluster_id(node_info, default_cluster_name=default_cluster_name),
+                         default_cluster_name,
+                         'Returned Cluster name does not match the default one')
+
+        # but if Node has it, take it from there
+        cluster_name = 'new-cluster-name'
+        node_info.metadata.cluster_name = cluster_name
+        self.assertEqual(self.obj.get_cluster_id(node_info, default_cluster_name=default_cluster_name),
+                         cluster_name,
+                         'Returned Cluster name does not match the real one')
+
+    # @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    # def test_get_cluster_managers(self, mock_get_node):
+    #     node_info = {
+    #         'Swarm': {
+    #             'RemoteManagers': [{'NodeID': 'manager-1'}, {'NodeID': 'manager-2'}]
+    #         }
+    #     }
+    #     mock_get_node.return_value = node_info
+    #     # if all is good, we should get the managers IDs
+    #     self.assertEqual(self.obj.get_cluster_managers(),
+    #                      list(map(lambda x: x['NodeID'], node_info['Swarm']['RemoteManagers'])),
+    #                      'Did not get the expected cluster managers IDs')
+    #
+    #     # but if there are none, we get an empty list
+    #     mock_get_node.return_value = {}
+    #     self.assertEqual(self.obj.get_cluster_managers(), [],
+    #                      'Did not get the expected cluster managers IDs')
    #
    #  def test_get_host_architecture(self):
    #      node_info = {

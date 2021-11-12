@@ -369,29 +369,31 @@ class KubernetesClient(ContainerRuntimeClient):
         }
 
     def get_api_ip_port(self):
-        endpoints = self.client.list_endpoints_for_all_namespaces().items
+        all_endpoints = self.client.list_endpoints_for_all_namespaces().items
 
-        ip_port = 6443
+        ip_port = None
         if self.host_node_ip:
-            return self.host_node_ip, ip_port
-        else:
-            for endpoint in endpoints:
-                if endpoint.metadata.name.lower() == 'kubernetes':
-                    for subset in endpoint.subsets:
-                        for addr in subset.addresses:
-                            if addr.ip:
-                                self.host_node_ip = addr.ip
-                                break
+            return self.host_node_ip, 6443
 
-                        for port in subset.ports:
-                            if port.name == 'https' and port.protocol == 'TCP':
-                                ip_port = port.port
-                                break
+        try:
+            endpoint = list(filter(lambda x: x.metadata.name.lower() == 'kubernetes', all_endpoints))[0]
+        except IndexError:
+            logging.error('There are no "kubernetes" endpoints where to get the API IP and port from')
+            return None, None
 
-                        if self.host_node_ip and ip_port:
-                            return self.host_node_ip, ip_port
-
+        for subset in endpoint.subsets:
+            for addr in subset.addresses:
+                if addr.ip:
+                    self.host_node_ip = addr.ip
                     break
+
+            for port in subset.ports:
+                if f'{port.name}/{port.protocol}' == 'https/TCP':
+                    ip_port = port.port
+                    break
+
+            if self.host_node_ip and ip_port:
+                return self.host_node_ip, ip_port
 
         return None, None
 
@@ -600,13 +602,16 @@ class KubernetesClient(ContainerRuntimeClient):
                 try:
                     env = container.env if container.env else []
                     for env_var in env:
-                        if env_var.value_from:
+                        try:
+                            _ = env_var.value_from
                             # this is a templated var. No need to report it
                             continue
+                        except AttributeError:
+                            pass
 
                         environment.append(f'{env_var.name}={env_var.value}')
                 except AttributeError:
-                    continue
+                    pass
 
         unique_env = list(filter(None, set(environment)))
 

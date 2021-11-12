@@ -1,8 +1,129 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import json
 import mock
 import random
+import kubernetes
+from types import SimpleNamespace
+
+
+def MockKubernetesEndpoint(name: str):
+    endpoint = {
+        'metadata': {
+            'name': name
+        },
+        'subsets': [
+            {
+                'addresses': [
+                    {
+                        'ip': '172.17.0.52'
+                    }
+                ],
+                'ports': [
+                    {
+                        'name': 'https',
+                        'port': 6443,
+                        'protocol': 'TCP'
+                    }
+                ]
+            }
+        ]
+    }
+    return json.loads(json.dumps(endpoint), object_hook=lambda d: SimpleNamespace(**d))
+
+
+def base_pod(name: str=None, phase: str='running'):
+    pod = {
+        'metadata': {
+            'namespace': 'namespace',
+            'selfLink': random.randint(100, 999),
+            'name': name if name else random.randint(100, 999)
+        },
+        'status': {
+            'container_statuses': [
+                {
+                    'name': 'container1',
+                    'ready': True,
+                    'restart_count': 1,
+                    'state': ''
+                },
+                {
+                    'name': 'container2',
+                    'ready': True,
+                    'restart_count': 2,
+                    'state': ''
+                }
+            ],
+            'phase': phase
+        }
+    }
+    return pod
+
+
+def MockKubernetesPod(name: str=None, phase: str='running'):
+    pod = json.loads(json.dumps(base_pod(name, phase)), object_hook=lambda d: SimpleNamespace(**d))
+    # add 'state' after serialization cause k8s obj is not serializable
+    for x in pod.status.container_statuses:
+        x.state = kubernetes.client.V1ContainerState(waiting=True)
+    return pod
+
+
+def MockKubernetesPodMetrics(name: str=None, phase: str='running'):
+    pod = base_pod(name, phase)
+    pod['containers'] = [
+        {
+            'name': 'container1',
+            'usage': {
+                'cpu': '100n',
+                'memory': '1Ki'
+            }
+        }
+    ]
+    return pod
+
+
+def MockKubernetesDeployment():
+    depl = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [{
+                                'name': 'FOO',
+                                'value': 'BAR'
+                            }, {
+                                'name': 'templated',
+                                'value_from': 'template'
+                            }
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    return json.loads(json.dumps(depl), object_hook=lambda d: SimpleNamespace(**d))
+
+
+def MockKubernetesNode(uid: str=None):
+    node = {
+        'status': {
+            'node_info': {
+                'os_image': 'FakeOS',
+                'kernel_version': 'fake kernel v0'
+            }
+        },
+        'metadata': {
+            'name': f'{uid} NAME' if uid else random.randint(100, 999),
+            'uid': uid if uid else random.randint(100, 999),
+            'labels': [],
+            'cluster_name': None
+        }
+    }
+
+    return json.loads(json.dumps(node), object_hook=lambda d: SimpleNamespace(**d))
 
 
 class Fake(object):

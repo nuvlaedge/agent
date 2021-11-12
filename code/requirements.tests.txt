@@ -3,3 +3,4 @@ pytest
 nuvla-api
 requests
 docker
+kubernetes
