@@ -107,13 +107,27 @@ def MockKubernetesDeployment():
     return json.loads(json.dumps(depl), object_hook=lambda d: SimpleNamespace(**d))
 
 
-def MockKubernetesNode(uid: str=None):
+def MockKubernetesNode(uid: str=None, ready: bool=True):
     node = {
         'status': {
             'node_info': {
                 'os_image': 'FakeOS',
-                'kernel_version': 'fake kernel v0'
-            }
+                'kernel_version': 'fake kernel v0',
+                'architecture': 'arm',
+                'kubelet_version': 'v1'
+            },
+            'conditions': [{'last_heartbeat_time': 'time',
+                            'last_transition_time': 'time',
+                            'message': 'Flannel is running on this node',
+                            'reason': 'FlannelIsUp',
+                            'status': 'False',
+                            'type': 'NetworkUnavailable'},
+                           {'last_heartbeat_time': 'time',
+                            'last_transition_time': 'time',
+                            'message': 'kubelet is posting ready status. AppArmor enabled',
+                            'reason': 'KubeletReady',
+                            'status': 'True' if ready else 'False',
+                            'type': 'Ready'}]
         },
         'metadata': {
             'name': f'{uid} NAME' if uid else random.randint(100, 999),

@@ -365,242 +365,95 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          cluster_name,
                          'Returned Cluster name does not match the real one')
 
-    # @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
-    # def test_get_cluster_managers(self, mock_get_node):
-    #     node_info = {
-    #         'Swarm': {
-    #             'RemoteManagers': [{'NodeID': 'manager-1'}, {'NodeID': 'manager-2'}]
-    #         }
-    #     }
-    #     mock_get_node.return_value = node_info
-    #     # if all is good, we should get the managers IDs
-    #     self.assertEqual(self.obj.get_cluster_managers(),
-    #                      list(map(lambda x: x['NodeID'], node_info['Swarm']['RemoteManagers'])),
-    #                      'Did not get the expected cluster managers IDs')
-    #
-    #     # but if there are none, we get an empty list
-    #     mock_get_node.return_value = {}
-    #     self.assertEqual(self.obj.get_cluster_managers(), [],
-    #                      'Did not get the expected cluster managers IDs')
-   #
-   #  def test_get_host_architecture(self):
-   #      node_info = {
-   #          'Architecture': 'fake-arch'
-   #      }
-   #      # simple attribute lookup
-   #      self.assertEqual(self.obj.get_host_architecture(node_info), node_info['Architecture'],
-   #                       'Host architecture does not match the real one')
-   #
-   #  def test_get_hostname(self):
-   #      node_info = {
-   #          'Name': 'fake-name'
-   #      }
-   #      # simple attribute lookup
-   #      self.assertEqual(self.obj.get_hostname(node_info), node_info['Name'],
-   #                       'Hostname does not match the real one')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
-   #  def test_get_cluster_join_address(self, mock_get_node):
-   #      node_id = 'fake-node-id'
-   #      node_info = {
-   #          'Swarm': {
-   #              'RemoteManagers': [{'NodeID': node_id, 'Addr': 'good-addr'},
-   #                                 {'NodeID': 'manager-2', 'Addr': 'bad-addr'}]
-   #          }
-   #      }
-   #      # if this node's ID is in the managers list, return its addr
-   #      mock_get_node.return_value = node_info
-   #      self.assertEqual(self.obj.get_cluster_join_address(node_id), node_info['Swarm']['RemoteManagers'][0]['Addr'],
-   #                       'Unable to report the right cluster manager address')
-   #
-   #      # if the Addr attribute is not set, then we should get None
-   #      node_info['Swarm']['RemoteManagers'][0].pop('Addr')
-   #      mock_get_node.return_value = node_info
-   #      self.assertIsNone(self.obj.get_cluster_join_address(node_id),
-   #                        'Returned a join address where there should not be one')
-   #
-   #      # same result if this node ID is not in the list of managers
-   #      self.assertIsNone(self.obj.get_cluster_join_address('some-other-fake-node-id'),
-   #                        'Returned a join address when this node is not a manager')
-   #
-   #  def test_is_node_active(self):
-   #      node = fake.MockDockerNode()
-   #      # if node is ready, should return its ID (in this case a random number)
-   #      self.assertIsNotNone(self.obj.is_node_active(node),
-   #                           'Saying node is not active when it is')
-   #
-   #      # otherwise, always returns None
-   #      node = fake.MockDockerNode(state='pending')
-   #      self.assertIsNone(self.obj.is_node_active(node),
-   #                        'Saying node is active when it is not')
-   #
-   #  @mock.patch('docker.models.plugins.PluginCollection.list')
-   #  def test_get_container_plugins(self, mock_plugins):
-   #      plugin_obj = mock.MagicMock()
-   #      plugin_obj.enabled = True
-   #      plugin_obj.name = 'docker.plugin.fake'
-   #
-   #      mock_plugins.return_value = [plugin_obj, plugin_obj]
-   #      # if there are enabled plugins, we expect a list with their names
-   #      self.assertEqual(self.obj.get_container_plugins(), ['docker.plugin.fake', 'docker.plugin.fake'],
-   #                       'Unable to retrieve container plugins')
-   #
-   #      # if there are no plugins, we get an empty list
-   #      mock_plugins.return_value = []
-   #      self.assertEqual(self.obj.get_container_plugins(), [],
-   #                       'Returned container plugins when there are none')
-   #
-   #      # same for plugins that are not active
-   #      plugin_obj.enabled = False
-   #      mock_plugins.return_value = [plugin_obj, plugin_obj]
-   #      self.assertEqual(self.obj.get_container_plugins(), [],
-   #                       'Returned container plugins when none are active')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.infer_if_additional_coe_exists')
-   #  def test_define_nuvla_infra_service(self, mock_infer_extra_coe):
-   #      mock_infer_extra_coe.return_value = {}
-   #      # if the api_endpoint is not set, the infra is not set either
-   #      self.assertEqual(self.obj.define_nuvla_infra_service('', []), {},
-   #                       'Returned a valid infra service when there is no API endpoint')
-   #
-   #      # otherwise, destructs the TLS keys and gives back the commissioning payload for the IS
-   #      is_keys = ["swarm-client-ca", "swarm-client-cert", "swarm-client-key", "swarm-endpoint"]
-   #      self.assertTrue(set(is_keys).issubset(self.obj.define_nuvla_infra_service('valid-api-endpoint',
-   #                                                                                ['ca', 'cert', 'key'])),
-   #                      'Failed to setup Swarm infrastructure service payload for commissioning')
-   #
-   #      # if there are no TLS keys, they are not included in the IS payload
-   #      mock_infer_extra_coe.return_value = {}
-   #      self.assertEqual(self.obj.define_nuvla_infra_service('valid-api-endpoint', []),
-   #                       {'swarm-endpoint': 'valid-api-endpoint'},
-   #                       'Returned more IS keys than just the expected API endpoint')
-   #
-   #      # the result should not be affected by the inference of the extra COE throwing an exeception
-   #      mock_infer_extra_coe.side_effect = ConnectionError
-   #      self.assertEqual(self.obj.define_nuvla_infra_service('valid-api-endpoint', []),
-   #                       {'swarm-endpoint': 'valid-api-endpoint'},
-   #                       'Infra service definition was affected by k8s discovery function exception')
-   #
-   #      # and if there's an extra k8s infra, it should be appended to the final infra
-   #      mock_infer_extra_coe.reset_mock(side_effect=True)
-   #      mock_infer_extra_coe.return_value = {'k8s-stuff': True}
-   #      self.assertIn('k8s-stuff', self.obj.define_nuvla_infra_service('valid-api-endpoint', ['ca', 'cert', 'key']),
-   #                    'Additional COE was not added to infrastructure service payload')
-   #      self.assertEqual(len(self.obj.define_nuvla_infra_service('valid-api-endpoint', ['ca', 'cert', 'key']).keys()),
-   #                       5,
-   #                       'Unexpected number of infrastructure service fields')
-   #
-   #  def test_get_partial_decommission_attributes(self):
-   #      # returns a constant, so let's just make sure that all return list items start with 'swarm'
-   #      self.assertTrue(all(x.startswith('swarm') for x in self.obj.get_partial_decommission_attributes()),
-   #                      'Received partial decommissioning attributes that are not Swarm related')
-   #
-   #  @mock.patch('yaml.safe_load')
-   #  @mock.patch('os.path.isfile')
-   #  def test_is_k3s_running(self, mock_isfile, mock_yaml):
-   #      # if k3s_addr is not set, we get {}
-   #      self.assertEqual(self.obj.is_k3s_running(''), {},
-   #                       'Received k3s details even though no address was provided')
-   #
-   #      # same if the k3s config file cannot be found
-   #      mock_isfile.return_value = False
-   #      self.assertEqual(self.obj.is_k3s_running('1.1.1.1'), {},
-   #                       'Received k3s details even though k3s config file does not exist')
-   #
-   #      mock_isfile.return_value = True
-   #      # same again if the k3s config is malformed
-   #      mock_yaml.side_effect = yaml.YAMLError
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"notyaml": True}')):
-   #          self.assertEqual(self.obj.is_k3s_running('1.1.1.1'), {},
-   #                           'Received k3s details even though the k3s config file is malformed')
-   #
-   #      mock_yaml.reset_mock(side_effect=True)
-   #      ca = b'ca'
-   #      cert = b'cert'
-   #      key = b'key'
-   #      kubeconfig = {
-   #          'clusters': [
-   #              {
-   #                  'cluster': {
-   #                      'server': 'https://fake-server:6443',
-   #                      'certificate-authority-data': base64.b64encode(ca),
-   #                  }
-   #              }
-   #          ]
-   #      }
-   #      mock_yaml.return_value = kubeconfig
-   #
-   #      # if k3s config can be read, but there's an exception while retrieving the values from it, we again get {}
-   #      # let's force a KeyError by omitting the users from the k3s config
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"notyaml": True}')):
-   #          self.assertEqual(self.obj.is_k3s_running('1.1.1.1'), {},
-   #                           'Received k3s details even though the k3s config cannot be parsed')
-   #
-   #      kubeconfig['users'] = [
-   #          {
-   #              'user': {
-   #                  'client-certificate-data': base64.b64encode(cert),
-   #                  'client-key-data': base64.b64encode(key)
-   #              }
-   #          }
-   #      ]
-   #      mock_yaml.return_value = kubeconfig
-   #
-   #      # and now, with the kubeconfig complete and parsable, we should get all the expected k8s keys
-   #      is_keys = ["kubernetes-client-ca", "kubernetes-client-cert", "kubernetes-client-key", "kubernetes-endpoint"]
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"notyaml": True}')):
-   #          self.assertTrue(set(is_keys).issubset(list(self.obj.is_k3s_running('1.1.1.1').keys())),
-   #                          'Received k3s details even though the k3s config cannot be parsed')
-   #
-   #  @mock.patch('agent.common.NuvlaBoxCommon.run')
-   #  @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.is_k3s_running')
-   #  def test_infer_if_additional_coe_exists(self, mock_k3s, mock_run):
-   #      # if we timeout GREPing for a k8s process, we get {}
-   #      mock_run.side_effect = subprocess.TimeoutExpired('', 0)
-   #      self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
-   #                       'Got additional COE details even though the PID check failed')
-   #
-   #      mock_run.assert_called_once()
-   #      mock_k3s.assert_not_called()
-   #
-   #      # or if the grep result is empty/None, we try to get k3s
-   #      grep = mock.MagicMock()
-   #      grep.stdout = ''
-   #      mock_run.return_value = grep
-   #      mock_run.reset_mock(side_effect=True)
-   #
-   #      mock_k3s.return_value = {'fake-k3s': True}
-   #      self.assertEqual(self.obj.infer_if_additional_coe_exists(), {'fake-k3s': True},
-   #                       'Failed to get additional k3s IS when kube-apiserver PID does not exist')
-   #      mock_k3s.assert_called_once_with(None)
-   #
-   #      # and we get {} again if also the k3s discovery raises an exception
-   #      mock_k3s.side_effect = TimeoutError
-   #      self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
-   #                       'Got additional COE details even though there is not Kubernetes installation available')
-   #
-   #      # if we get a kube PID though, then we try to infer its args to build the IS payload
-   #      grep.stdout = '/fake/proc/pid/comm:foo'
-   #      mock_run.return_value = grep
-   #
-   #      k8s_process = 'exec\x00--arg1=1\n--arg2=2\x00--arg3=3\x00'
-   #      # if an exception is thrown while opening the process cmdline file, we get {}
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=k8s_process)) as mock_open:
-   #          mock_open.side_effect = FileNotFoundError
-   #          self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
-   #                           'Got additional COE details even though the k8s process cmdline file does not exist')
-   #
-   #      # if the file exists, we read it but if it hasn't the right keywords, we get {} again
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=k8s_process)):
-   #          self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
-   #                           'Got additional COE details even though the k8s process cmdline is missing the right args')
-   #
-   #      # finally, if the cmdline args are all there, we should get the whole kubernetes IS payload
-   #      k8s_cmdline_keys = ["advertise-address", "secure-port", "client-ca-file",
-   #                          "kubelet-client-certificate", "kubelet-client-key"]
-   #
-   #      k8s_process = 'exec\n--' + '=fake_value\x00--'.join(k8s_cmdline_keys) + '=1\n'
-   #      is_fields = ['kubernetes-endpoint', 'kubernetes-client-ca', 'kubernetes-client-cert', 'kubernetes-client-key']
-   #      with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=k8s_process)):
-   #          self.assertTrue(set(is_fields).issubset(list(self.obj.infer_if_additional_coe_exists().keys())),
-   #                          'Got unexpected K8s COE IS fields')
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.list_nodes')
+    def test_get_cluster_managers(self, mock_list_nodes):
+        mock_list_nodes.return_value = [fake.MockKubernetesNode(), fake.MockKubernetesNode()]
+        # if there are no managers, then return an empty list
+        self.assertEqual(self.obj.get_cluster_managers(), [],
+                         'There are no manager but got something else than an empty list')
+
+        # if there's one manager, than get only the one's name
+        manager = fake.MockKubernetesNode("manager")
+        manager.metadata.labels = {'node-role.kubernetes.io/master': ''}
+        mock_list_nodes.return_value = [fake.MockKubernetesNode(), fake.MockKubernetesNode(), manager]
+        self.assertEqual(self.obj.get_cluster_managers(), [manager.metadata.name],
+                         'There is one manager (called "manager"), but got some other list of managers')
+
+        # for multiple manager, get them all
+        mock_list_nodes.return_value = [fake.MockKubernetesNode(), fake.MockKubernetesNode(), manager, manager]
+        self.assertEqual(len(self.obj.get_cluster_managers()), 2,
+                         'There are 2 managers, but got a different number')
+
+    def test_get_host_architecture(self):
+        node_info = fake.MockKubernetesNode()
+        # simple attribute lookup
+        self.assertEqual(self.obj.get_host_architecture(node_info), node_info.status.node_info.architecture,
+                         'Host architecture does not match the real one')
+
+    def test_get_hostname(self):
+        # always gives back the class attribute
+        self.assertEqual(self.obj.get_hostname(), self.obj.host_node_name,
+                         'Failed to get hostname')
+
+        # even if an arg is provided
+        node = fake.MockKubernetesNode()
+        self.assertEqual(self.obj.get_hostname(node_info=node), self.obj.host_node_name,
+                         'Failed to get hostname when the node is given as an arg')
+
+    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    def test_get_kubelet_version(self, mock_get_node_info):
+        node = fake.MockKubernetesNode()
+        mock_get_node_info.return_value = node
+        # simple node attr lookup
+        self.assertEqual(self.obj.get_kubelet_version(), node.status.node_info.kubelet_version,
+                         f'Expecting Kubelet version {node.status.node_info.kubelet_version} but got something else')
+
+    def test_get_cluster_join_address(self):
+        # NOT IMPLEMENTED
+        self.assertIsNone(self.obj.get_cluster_join_address('fake-id'),
+                          'Got something out of a function which is not implemented')
+
+    def test_is_node_active(self):
+        node = fake.MockKubernetesNode()
+        # if node is ready, should return its name
+        self.assertEqual(self.obj.is_node_active(node), node.metadata.name,
+                         'Saying node is not active when it is, and failed to give back its name')
+
+        # otherwise, always returns None
+        node = fake.MockKubernetesNode(ready=False)
+        self.assertIsNone(self.obj.is_node_active(node),
+                          'Saying node is active when it is not')
+
+    def test_get_container_plugins(self):
+        # NOT IMPLEMENTED
+        self.assertEqual(self.obj.get_container_plugins(), [],
+                         'Received plugins for K8s even though method is not implemented')
+
+    def test_define_nuvla_infra_service(self):
+        # if api endpoint is not passed, get nothing in return
+        self.assertEqual(self.obj.define_nuvla_infra_service('', []), {},
+                         'Got an infrastructure service even though API endpoint is not defined')
+
+        # otherwise, build the IS
+        # if there are no keys, they are not passed
+        api_endpoint = 'fake.endpoint'
+        self.assertEqual(self.obj.define_nuvla_infra_service(api_endpoint, []), {'kubernetes-endpoint': api_endpoint},
+                         'Returned IS does not match the provided API endpoint')
+
+        # and if there are keys, return everything
+        expected_fields = ["kubernetes-endpoint", "kubernetes-client-ca",
+                           "kubernetes-client-cert", "kubernetes-client-key"]
+
+        self.assertEqual(sorted(expected_fields),
+                         sorted(list(self.obj.define_nuvla_infra_service(api_endpoint, ["ca", "cert", "key"]).keys())),
+                         'Unable to define IS')
+
+    def test_get_partial_decommission_attributes(self):
+        # NOT IMPLEMENTED
+        self.assertEqual(self.obj.get_partial_decommission_attributes(), [],
+                         'Received partial decommissioning attrs for K8s even though method is not implemented')
+
+    def test_infer_if_additional_coe_exists(self):
+        # NOT IMPLEMENTED
+        self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
+                         'Received additional COE even though method is not implemented for K8s')
