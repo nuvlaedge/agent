@@ -12,20 +12,27 @@ import requests
 import unittest
 import tests.utils.fake as fake
 import yaml
-
-os.environ.setdefault('KUBERNETES_SERVICE_HOST','force-k8s-coe')
-import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+import sys
 
 
 class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        os.environ.setdefault('KUBERNETES_SERVICE_HOST', 'force-k8s-coe')
+
+        with mock.patch.dict(sys.modules):
+            # sys.modules.clear()
+            if 'agent.common.NuvlaBoxCommon' in sys.modules:
+                del sys.modules['agent.common.NuvlaBoxCommon']
+            import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+
+        self.NuvlaBoxCommon = NuvlaBoxCommon
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
         os.environ.setdefault('NUVLABOX_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
-        with mock.patch('agent.common.NuvlaBoxCommon.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
-            with mock.patch('agent.common.NuvlaBoxCommon.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
-                with mock.patch('agent.common.NuvlaBoxCommon.config') as mock_k8s_config:
+        with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
+            with mock.patch('kubernetes.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
+                with mock.patch('kubernetes.config.load_incluster_config') as mock_k8s_config:
                     mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
                     mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
                     mock_k8s_config.return_value = True
@@ -37,7 +44,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_init(self):
         # the K8s coe should be set
-        self.assertEqual(NuvlaBoxCommon.ORCHESTRATOR, 'kubernetes',
+        self.assertEqual(self.NuvlaBoxCommon.ORCHESTRATOR, 'kubernetes',
                              'Unable to set Kubernetes as the COE')
         # client should be set as well
         self.assertIsNotNone(self.obj.client,
@@ -107,7 +114,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Expecting no k8s manager but got something else')
 
         # COE should also match with class' COE
-        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], NuvlaBoxCommon.ORCHESTRATOR_COE,
+        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.NuvlaBoxCommon.ORCHESTRATOR_COE,
                          'Got the wrong cluster-orchestrator')
 
         # but if one of the nodes is a master, then we should get 1 worker and 1 manager

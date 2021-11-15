@@ -27,7 +27,7 @@ jobs:
       - name: Run unit tests
         run: |
           pip install -r code/requirements.tests.txt
-          pytest code/tests --junitxml=test-report.xml
+          pytest code/tests --junitxml=test-report.xml -v
 
       - name: Multi-arch docker image build prerequired
         run: sudo docker run --privileged linuxkit/binfmt:v0.8

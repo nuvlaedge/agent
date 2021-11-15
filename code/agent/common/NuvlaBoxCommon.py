@@ -19,7 +19,8 @@ import yaml
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from nuvla.api import Api
-from subprocess import run, STDOUT, PIPE, Popen, TimeoutExpired
+from subprocess import run, PIPE, Popen, TimeoutExpired
+
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
 if KUBERNETES_SERVICE_HOST:
