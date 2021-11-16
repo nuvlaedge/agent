@@ -227,3 +227,6 @@ class FakeNuvlaApi(object):
 
     def add(self, resource, _):
         return self.MockResponse
+
+    def login_apikey(self, key, secret):
+        return self.MockResponse

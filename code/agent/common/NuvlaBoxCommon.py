@@ -68,6 +68,7 @@ class ContainerRuntimeClient(ABC):
         self.vpn_client_component = 'vpn-client'
         self.host_home = host_home
         self.ignore_env_variables = ['NUVLABOX_API_KEY', 'NUVLABOX_API_SECRET']
+        self.data_gateway_name = None
 
     @abstractmethod
     def get_node_info(self):
@@ -320,6 +321,7 @@ class KubernetesClient(ContainerRuntimeClient):
         self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
         self.join_token_manager_keyname = 'kubernetes-token-manager'
         self.join_token_worker_keyname = 'kubernetes-token-worker'
+        self.data_gateway_name = f"data-gateway.{self.namespace}"
 
     def get_node_info(self):
         if self.host_node_name:
@@ -709,6 +711,7 @@ class DockerClient(ContainerRuntimeClient):
         self.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.join_token_manager_keyname = 'swarm-token-manager'
         self.join_token_worker_keyname = 'swarm-token-worker'
+        self.data_gateway_name = "data-gateway"
 
     def get_node_info(self):
         return self.client.info()
@@ -1302,6 +1305,7 @@ class DockerClient(ContainerRuntimeClient):
 class NuvlaBoxCommon():
     """ Common set of methods and variables for the NuvlaBox agent
     """
+
     def __init__(self, shared_data_volume="/srv/nuvlabox/shared"):
         """ Constructs an Infrastructure object, with a status placeholder
 
@@ -1313,68 +1317,17 @@ class NuvlaBoxCommon():
         self.hostfs = "/rootfs"
         self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
         self.host_user_home_file = f'{self.data_volume}/.host_user_home'
-        if os.path.exists(self.host_user_home_file):
-            with open(self.host_user_home_file) as userhome:
-                self.installation_home = userhome.read().strip()
-        else:
-            self.installation_home = os.environ.get('HOST_HOME')
-
-        nuvla_endpoint_raw = None
-        nuvla_endpoint_insecure_raw = None
+        self.installation_home = self.set_installation_home(self.host_user_home_file)
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
         self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
         self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
-
-        if os.path.exists(self.nuvlabox_nuvla_configuration):
-            with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
-                for line in nuvla_conf.read().split():
-                    try:
-                        if line:
-                            line_split = line.split('=')
-                            if self.nuvla_endpoint_key == line_split[0]:
-                                nuvla_endpoint_raw = line_split[1]
-                            if self.nuvla_endpoint_insecure_key == line_split[0]:
-                                nuvla_endpoint_insecure_raw = bool(line_split[1])
-                    except IndexError:
-                        pass
-
-        if not nuvla_endpoint_raw:
-            nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
-
-        while nuvla_endpoint_raw[-1] == "/":
-            nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
-
-        self.nuvla_endpoint = nuvla_endpoint_raw.replace("https://", "")
-
-        if not nuvla_endpoint_insecure_raw:
-            nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
-
-        if isinstance(nuvla_endpoint_insecure_raw, str):
-            if nuvla_endpoint_insecure_raw.lower() == "false":
-                nuvla_endpoint_insecure_raw = False
-            else:
-                nuvla_endpoint_insecure_raw = True
-        else:
-            nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
-
-        self.nuvla_endpoint_insecure = nuvla_endpoint_insecure_raw
-
+        self.nuvla_endpoint, self.nuvla_endpoint_insecure = self.set_nuvla_endpoint()
         # Also store the Nuvla connection details for future restarts
-        if not os.path.exists(self.nuvlabox_nuvla_configuration):
-            with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
-                conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
-                nuvla_conf.write(conf)
+        conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
+        self.save_nuvla_configuration(self.nuvlabox_nuvla_configuration, conf)
 
-        if ORCHESTRATOR == 'kubernetes':
-            self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
-            self.mqtt_broker_host = f"data-gateway.{self.container_runtime.namespace}"
-        else:
-            self.mqtt_broker_host = "data-gateway"
-            if os.path.exists(self.docker_socket_file):
-                self.container_runtime = DockerClient(self.hostfs, self.installation_home)
-            else:
-                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
-
+        self.container_runtime = self.set_runtime_client_details()
+        self.mqtt_broker_host = self.container_runtime.data_gateway_name
         self.activation_flag = "{}/.activated".format(self.data_volume)
         self.swarm_manager_token_file = "swarm-manager-token"
         self.swarm_worker_token_file = "swarm-worker-token"
@@ -1392,7 +1345,6 @@ class NuvlaBoxCommon():
         self.context = ".context"
         self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
         self.vpn_folder = "{}/vpn".format(self.data_volume)
-
         if not os.path.isdir(self.vpn_folder):
             os.makedirs(self.vpn_folder)
 
@@ -1405,25 +1357,9 @@ class NuvlaBoxCommon():
         self.mqtt_broker_keep_alive = 90
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
         self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
-
-        if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
-            self.nuvlabox_id = os.environ['NUVLABOX_UUID']
-        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
-            try:
-                self.nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
-            except json.decoder.JSONDecodeError as e:
-                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
-                                f'{self.data_volume}/{self.context}: {str(e)}')
-        else:
-            # self.nuvlabox_id = get_mac_address('eth0', '')
-            raise Exception(f'NUVLABOX_UUID not provided')
-
-        if not self.nuvlabox_id.startswith("nuvlabox/"):
-            self.nuvlabox_id = 'nuvlabox/{}'.format(self.nuvlabox_id)
-
-        self.nuvlabox_engine_version = None
-        if 'NUVLABOX_ENGINE_VERSION' in os.environ and os.environ['NUVLABOX_ENGINE_VERSION']:
-            self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
+        self.nuvlabox_id = self.set_nuvlabox_id()
+        nbe_version = os.getenv('NUVLABOX_ENGINE_VERSION')
+        self.nuvlabox_engine_version = str(nbe_version) if nbe_version else None
 
         # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
         # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
@@ -1458,8 +1394,102 @@ class NuvlaBoxCommon():
                 }
             }
         }
-
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
+
+    @staticmethod
+    def set_installation_home(host_user_home_file: str) -> str:
+        """
+        Finds the path for the HOME dir used during installation
+
+        :param host_user_home_file: location of the file where the previous installation home value was saved
+        :return: installation home path
+        """
+        if os.path.exists(host_user_home_file):
+            with open(host_user_home_file) as userhome:
+                return userhome.read().strip()
+        else:
+            return os.environ.get('HOST_HOME')
+
+    def set_nuvla_endpoint(self) -> tuple:
+        """
+        Defines the Nuvla endpoint based on the environment
+
+        :return: clean Nuvla endpoint and whether it is insecure or not -> (str, bool)
+        """
+        nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
+        nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
+        try:
+            with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
+                local_nuvla_conf = nuvla_conf.read().split()
+
+            nuvla_endpoint_line = list(filter(lambda x: x.startswith(self.nuvla_endpoint_key), local_nuvla_conf))
+            if nuvla_endpoint_line:
+                nuvla_endpoint_raw = nuvla_endpoint_line[0].split('=')[-1]
+
+            nuvla_endpoint_insecure_line = list(filter(lambda x: x.startswith(self.nuvla_endpoint_insecure_key),
+                                                       local_nuvla_conf))
+            if nuvla_endpoint_insecure_line:
+                nuvla_endpoint_insecure_raw = nuvla_endpoint_insecure_line[0].split('=')[-1]
+        except FileNotFoundError:
+            logging.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaBox Engine...')
+            pass
+        except IndexError as e:
+            logging.debug(f'Unable to read Nuvla configuration from {self.nuvlabox_nuvla_configuration}: {str(e)}')
+            pass
+
+        while nuvla_endpoint_raw[-1] == "/":
+            nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
+
+        if isinstance(nuvla_endpoint_insecure_raw, str):
+            if nuvla_endpoint_insecure_raw.lower() == "false":
+                nuvla_endpoint_insecure_raw = False
+            else:
+                nuvla_endpoint_insecure_raw = True
+        else:
+            nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
+
+        return nuvla_endpoint_raw.replace("https://", ""), nuvla_endpoint_insecure_raw
+
+    @staticmethod
+    def save_nuvla_configuration(file_path, content):
+        if not os.path.exists(file_path):
+            with open(file_path, 'w') as f:
+                f.write(content)
+
+    def set_runtime_client_details(self) -> ContainerRuntimeClient:
+        """
+        Sets the right container runtime client based on the underlying orchestrator, and sets the Data Gateway name
+        :return: instance of a ContainerRuntimeClient
+        """
+        if ORCHESTRATOR == 'kubernetes':
+            return KubernetesClient(self.hostfs, self.installation_home)
+        else:
+            if os.path.exists(self.docker_socket_file):
+                return DockerClient(self.hostfs, self.installation_home)
+            else:
+                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
+
+    def set_nuvlabox_id(self) -> str:
+        """
+        Discovers the NuvlaBox ID either from env or from a previous run
+
+        :return: clean nuvlabox ID as a str
+        """
+        if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
+            nuvlabox_id = os.environ['NUVLABOX_UUID']
+        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
+            try:
+                nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
+            except json.decoder.JSONDecodeError as e:
+                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
+                                f'{self.data_volume}/{self.context}: {str(e)}')
+        else:
+            raise Exception(f'NUVLABOX_UUID not provided')
+
+        if not nuvlabox_id.startswith("nuvlabox/"):
+            nuvlabox_id = 'nuvlabox/{}'.format(nuvlabox_id)
+
+        return nuvlabox_id
 
     @staticmethod
     def get_api_keys():
@@ -1487,7 +1517,7 @@ class NuvlaBoxCommon():
         """
 
         try:
-            self.api().add('event', data=data)
+            self.api().add('event', data)
         except Exception as e:
             logging.error(f'Unable to push event to Nuvla: {data}. Reason: {str(e)}')
 
