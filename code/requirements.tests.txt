@@ -4,3 +4,5 @@ nuvla-api
 requests
 docker
 kubernetes
+psutil
+paho-mqtt

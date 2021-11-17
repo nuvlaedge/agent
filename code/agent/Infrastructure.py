@@ -8,7 +8,6 @@ and respective credentials in Nuvla
 """
 
 import logging
-from re import A
 import docker
 import json
 import requests
@@ -33,9 +32,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         :param data_volume: shared volume
         """
-
-        NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
-        Thread.__init__(self, daemon=True)
+        super(Infrastructure, self).__init__(shared_data_volume=data_volume, daemon=True)
+        # NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
+        # Thread.__init__(self, daemon=True)
         self.telemetry_instance = Telemetry(data_volume, None, enable_container_monitoring=False)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
@@ -281,13 +280,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
         node_info = self.container_runtime.get_node_info()
-        cluster_id = self.container_runtime.get_cluster_id(node_info)
+        # cluster_id = self.container_runtime.get_cluster_id(node_info)
         node_id = self.container_runtime.get_node_id(node_info)
 
         # we only commission the cluster when the NuvlaBox status
         # has already been updated with its "node-id"
         nuvlabox_status = self.get_local_nuvlabox_status()
-
+        logging.error(node_id)
         if not cluster_info:
             # it is not a manager but...
             if node_id and node_id == nuvlabox_status.get('node-id'):
@@ -357,7 +356,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             attr_name (str): name of the attribute to be compared
             payload (dict): minimum commissioning payload
             compare_with_nb_resource (bool): if True, will lookup the local .context file and check if attr has changed.
-                                                NOTE: this flag make the check ignore whatever the previous commission was
+                                            NOTE: this flag make the check ignore whatever the previous commission was
         """
 
         if compare_with_nb_resource:
@@ -373,7 +372,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         elif isinstance(current[attr_name], list):
             if sorted(current[attr_name]) != sorted(old.get(attr_name, [])):
                 payload[attr_name] = current[attr_name]
-
 
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
@@ -452,6 +450,52 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             vpn_server_id
         )
 
+    def validate_local_vpn_credential(self, online_vpn_credential: dict):
+        """
+        When the VPN credential exists in Nuvla, this function checks whether the local copy of that credential
+        matches. If it does not, issue a VPN recommissioning
+
+        :param online_vpn_credential: VPN credential resource received from Nuvla
+        :return:
+        """
+        with open(self.vpn_credential) as vpn_local:
+            local_vpn_credential = json.loads(vpn_local.read())
+
+        if online_vpn_credential['updated'] != local_vpn_credential['updated']:
+            logging.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
+                            .format(online_vpn_credential['updated']))
+            # Recommission
+            self.commission_vpn()
+            remove(self.vpn_credential)
+            return None
+            # else, do nothing cause nothing has changed
+
+    def fix_vpn_credential_mismatch(self, online_vpn_credential: dict):
+        """
+        When a VPN credential exists in Nuvla but not locally, there is a mismatch to be investigated.
+        This function will double-check the local VPN client state, re-commission the VPN credential if needed, and
+        finally save the right VPN credential locally for future reference
+
+        :param online_vpn_credential: VPN credential resource received from Nuvla
+        :return:
+        """
+        try:
+            vpn_client_running = self.container_runtime.is_vpn_client_running()
+        except docker.errors.NotFound as e:
+            vpn_client_running = False
+            logging.info("VPN client is not running")
+
+        if vpn_client_running and self.telemetry_instance.get_vpn_ip():
+            # just save a copy of the VPN credential locally
+            self.write_file(self.vpn_credential, online_vpn_credential, is_json=True)
+            logging.info("VPN client is now running. Saving VPN credential locally at {}"
+                         .format(self.vpn_credential))
+        else:
+            # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
+            # maybe something went wrong, just recommission
+            logging.warning("The local VPN client is either not running or missing its configuration. Forcing VPN recommissioning...")
+            self.commission_vpn()
+
     def watch_vpn_credential(self, vpn_is_id=None):
         """ Watches the VPN credential in Nuvla for changes
 
@@ -484,38 +528,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             # IF there is a VPN credential in Nuvla:
             #  - if we also have one locally, BUT is different, then recommission
             if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0 and path.exists(self.vpn_client_conf_file):
-                with open(self.vpn_credential) as vpn_local:
-                    local_vpn_credential = json.loads(vpn_local.read())
-
-                if vpn_credential_nuvla['updated'] != local_vpn_credential['updated']:
-                    logging.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
-                                    .format(vpn_credential_nuvla['updated']))
-                    # Recommission
-                    self.commission_vpn()
-                    remove(self.vpn_credential)
-                    return None
-                    # else, do nothing cause nothing has changed
+                self.validate_local_vpn_credential(vpn_credential_nuvla)
             else:
                 # - IF we don't have it locally, but there's one in Nuvla, then:
                 #     - IF the vpn-client is already running, then all is good, just save the VPN credential locally
                 logging.warning("VPN credential exists in Nuvla, but not locally")
-
-                try:
-                    vpn_client_running = self.container_runtime.is_vpn_client_running()
-                except docker.errors.NotFound as e:
-                    vpn_client_running = False
-                    logging.info("VPN client is not running")
-
-                if vpn_client_running and self.telemetry_instance.get_vpn_ip():
-                    # just save a copy of the VPN credential locally
-                    self.write_file(self.vpn_credential, vpn_credential_nuvla, is_json=True)
-                    logging.info("VPN client is now running. Saving VPN credential locally at {}"
-                                    .format(self.vpn_credential))
-                else:
-                    # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
-                    # maybe something went wrong, just recommission
-                    logging.warning("The local VPN client is either not running or missing its configuration. Forcing VPN recommissioning...")
-                    self.commission_vpn()
+                self.fix_vpn_credential_mismatch(vpn_credential_nuvla)
 
     def set_immutable_ssh_key(self):
         """
@@ -544,6 +562,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             "severity": "high",
             "timestamp": datetime.utcnow().strftime(self.nuvla_timestamp_format)
         }
+
         if self.ssh_pub_key and self.installation_home:
             ssh_folder = f"{self.hostfs}{self.installation_home}/.ssh"
             if not path.exists(ssh_folder):
@@ -569,8 +588,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 event['content']['state'] = msg
                 self.push_event(event)
 
-            with open(self.ssh_flag, 'w') as sshfw:
-                sshfw.write(self.ssh_pub_key)
+            self.write_file(self.ssh_flag, self.ssh_pub_key)
 
     def run(self):
         """

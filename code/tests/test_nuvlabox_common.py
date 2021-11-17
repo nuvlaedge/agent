@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import base64
 import json
 import os
-import subprocess
-import docker
 import logging
 import mock
 import nuvla.api
-import requests
 import unittest
 import tests.utils.fake as fake
-import yaml
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 
 

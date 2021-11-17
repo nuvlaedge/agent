@@ -66,7 +66,7 @@ class ActivateTestCase(unittest.TestCase):
         # activation is not possible because NuvlaBox has already been activated - there's a file
         mock_read_file.reset_mock(return_value=True, side_effect=True)
         mock_read_file.return_value = json.loads(self.api_key_content)
-        # with mock.patch("agent.Activate.open", mock.mock_open(read_data=self.api_key_content)):
+
         self.assertEqual(self.obj.activation_is_possible(), (False, json.loads(self.api_key_content)),
                          'Cannot read existing activation file with API key credentials')
 

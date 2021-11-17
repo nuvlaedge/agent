@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import base64
-import json
 import os
-import subprocess
 import kubernetes
 import logging
 import mock
-import requests
 import unittest
 import tests.utils.fake as fake
-import yaml
 import sys
 
 
@@ -226,8 +221,8 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.obj.client.create_namespaced_pod.return_value = True
         self.assertTrue(self.obj.install_ssh_key('', ''),
                         'Failed to install SSH key')
-        self.obj.client.delete_namespaced_pod.assert_called_once()
         self.obj.client.create_namespaced_pod.assert_called_once()
+        self.obj.client.delete_namespaced_pod.assert_called_once()
 
         # also, if the initial check for an existing container returns 404, we continue
         self.obj.client.read_namespaced_pod.side_effect = kubernetes.client.exceptions.ApiException(status=404)

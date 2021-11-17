@@ -212,9 +212,7 @@ class FakeNuvlaApi(object):
     class Response(object):
         def __init__(self, id, data):
             self.data = {**{'id': id}, **data}
-
-    def _cimi_post(self, _):
-        return self.api_keys
+            self.resources = [json.loads(json.dumps(self.data), object_hook=lambda d: SimpleNamespace(**d))]
 
     def get(self, id, **kwargs):
         return self.Response(id, self.kwargs.get('data', {}))
@@ -228,5 +226,17 @@ class FakeNuvlaApi(object):
     def add(self, resource, _):
         return self.MockResponse
 
+    def search(self, resource, **kwargs):
+        return self.MockResponse
+
     def login_apikey(self, key, secret):
         return self.MockResponse
+
+    def _cimi_post(self, resource, **kwargs):
+        if kwargs:
+            return self.add(resource, None)
+        else:
+            return self.api_keys
+
+    def _cimi_get(self, id):
+        return self.get(id)
