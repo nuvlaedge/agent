@@ -148,7 +148,7 @@ class Fake(object):
         for other in others:
             for name in other.__dict__:
                 try:
-                    setattr(cls, name, mock.Mock())
+                    setattr(cls, name, mock.MagicMock())
                 except (TypeError, AttributeError):
                     pass
         return cls
@@ -240,3 +240,6 @@ class FakeNuvlaApi(object):
 
     def _cimi_get(self, id):
         return self.get(id)
+
+    def _cimi_put(self, id, **kwargs):
+        return self.edit(id, None)

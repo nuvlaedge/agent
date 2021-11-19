@@ -43,7 +43,7 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.installation_home = '/home'
         self.obj.hostfs = '/rootfs'
         ###
-        # logging.disable(logging.CRITICAL)
+        logging.disable(logging.CRITICAL)
 
     def tearDown(self):
         logging.disable(logging.NOTSET)

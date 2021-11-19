@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from agent.Job import Job
-import json
 import logging
 import mock
-import requests
 import unittest
-from tests.utils.fake import Fake, FakeNuvlaApi
+from tests.utils.fake import Fake
+from agent.Job import Job
 from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
 
 

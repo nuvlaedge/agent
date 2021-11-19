@@ -76,11 +76,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def __init__(self, data_volume, nuvlabox_status_id, enable_container_monitoring=True):
         """ Constructs an Telemetry object, with a status placeholder """
 
-        # self.data_volume = data_volume
-        # self.vpn_folder = "{}/vpn".format(data_volume)
-        NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
+        super(Telemetry, self).__init__(shared_data_volume=data_volume)
+        # NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
 
-        # self.api = nb.ss_api() if not api else api
         self.nb_status_id = nuvlabox_status_id
         self.first_net_stats = {}
         self.container_stats_queue = queue.Queue()
@@ -612,10 +610,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return status_for_nuvla, all_status
 
-    @staticmethod
-    def get_docker_server_version():
+    def get_docker_server_version(self):
         try:
-            return docker.from_env().version()["Version"]
+            return self.container_runtime.client.version()["Version"]
         except:
             return None
 
@@ -632,42 +629,57 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         thermal_fs_path = f'{self.hostfs}/sys/devices/virtual/thermal'
 
         if not os.path.exists(thermal_fs_path):
-            return psutil.sensors_temperatures()
+            return psutil.sensors_temperatures() if hasattr(psutil, 'sensors_temperature') else output
 
-        for subdirs in os.listdir(thermal_fs_path):
-            if subdirs.startswith("thermal"):
-                thermal_zone_file = f'{thermal_fs_path}/{subdirs}/type'
-                temperature_file = f'{thermal_fs_path}/{subdirs}/temp'
-                if not os.path.exists(thermal_zone_file) or not os.path.exists(temperature_file):
-                    logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file}) values do not complement each other')
-                    continue
+        all_dirs = os.listdir(thermal_fs_path)
+        temp_dirs = list(filter(lambda x: x.startswith('thermal'), all_dirs))
 
-                with open(thermal_zone_file) as tzf:
-                    try:
-                        metric_basename = tzf.read().split()[0]
-                    except:
-                        logging.warning(f'Cannot read thermal zone at {thermal_zone_file}')
-                        continue
+        for subdirs in temp_dirs:
+            thermal_zone_file = f'{thermal_fs_path}/{subdirs}/type'
+            temperature_file = f'{thermal_fs_path}/{subdirs}/temp'
+            if not os.path.exists(thermal_zone_file) or not os.path.exists(temperature_file):
+                logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file}) values do not complement each other')
+                continue
 
-                with open(temperature_file) as tf:
-                    try:
-                        temperature_value = tf.read().split()[0]
-                    except:
-                        logging.warning(f'Cannot read temperature at {temperature_file}')
-                        continue
+            metric_basename, temperature_value = self.read_temperature_files(thermal_zone_file, temperature_file)
 
-                if not metric_basename or not temperature_value:
-                    logging.warning(f'Thermal zone {thermal_zone_file} or temperature {temperature_file} value is missing')
-                    continue
+            if not metric_basename or not temperature_value:
+                logging.warning(f'Thermal zone {thermal_zone_file} or temperature {temperature_file} value is missing')
+                continue
 
-                try:
-                    output.append({
-                        "thermal-zone": metric_basename,
-                        "value": float(temperature_value)/1000})
-                except (ValueError, TypeError) as e:
-                    logging.warning(f'Cannot convert temperature at {temperature_file}. Reason: {str(e)}')
+            try:
+                output.append({
+                    "thermal-zone": metric_basename,
+                    "value": float(temperature_value)/1000})
+            except (ValueError, TypeError) as e:
+                logging.warning(f'Cannot convert temperature at {temperature_file}. Reason: {str(e)}')
 
         return output
+
+    @staticmethod
+    def read_temperature_files(thermal_zone_file_path: str, temperature_file_path: str) -> tuple:
+        """
+        Reads files, extract temperature/thermal values and returns them
+
+        :param thermal_zone_file_path: path to thermal_zone_file
+        :param temperature_file_path: path to temperature_file
+        :return: (metric_basename, temperature_value)
+        """
+        with open(thermal_zone_file_path) as tzf:
+            try:
+                metric_basename = tzf.read().split()[0]
+            except:
+                logging.warning(f'Cannot read thermal zone at {thermal_zone_file_path}')
+                metric_basename = None
+
+        with open(temperature_file_path) as tf:
+            try:
+                temperature_value = tf.read().split()[0]
+            except:
+                logging.warning(f'Cannot read temperature at {temperature_file_path}')
+                temperature_value = None
+
+        return metric_basename, temperature_value
 
     def get_power_consumption(self):
         """ Attempts to retrieve power monitoring information, if it exists. It is highly dependant on the
@@ -683,7 +695,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             i2c_fs_path = f'{self.hostfs}/sys/bus/i2c/drivers/{driver}'
 
             if not os.path.exists(i2c_fs_path):
-                return {}
+                return []
 
             i2c_addresses_found = [ addr for addr in os.listdir(i2c_fs_path) if re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr) ]
             i2c_addresses_found.sort()
@@ -725,6 +737,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         ]
 
                         existing_metrics = os.listdir(metrics_folder_path)
+
                         if not all(desired_metric[0].split('/')[-1] in existing_metrics for desired_metric in desired_metrics_files):
                             # one or more power metric files we need, are missing from the directory, skip them
                             continue
@@ -781,11 +794,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             # if we can get the physical pin, we can move on. Pin is the only mandatory attr
 
             for i, exp in enumerate(expected):
-                expected[i]["position"] = indexes[i]
-
                 try:
                     value = locate(exp["type"])
-                    cast_value = value(gpio_values[exp["position"]].rstrip().lstrip())
+                    cast_value = value(gpio_values[indexes[i]].rstrip().lstrip())
 
                     if cast_value or cast_value == 0:
                         gpio_pin[exp["attribute"].lower()] = cast_value
@@ -835,20 +846,20 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return formatted_gpio_status
 
-    def get_ip_geolocation(self):
-        """ Based on a preset of geolocation services, this method tries, one by one, to infer the
-        NuvlaBox physical location based on IP
+    def reuse_previous_geolocation(self, time_now: int) -> dict:
+        """
+        Checks, based on the time elapsed since the last retrieval, if new geolocation must be inferred
 
-        :returns inferred_location. A list ([longitude, latitude, altitude]). Note that 'altitude' might be missing"""
-
-        now = int(datetime.datetime.timestamp(datetime.datetime.now()))
+        :param time_now: current timestamp, used to calculate the time elapsed since the last location retrieval
+        :return: previous geolocation if there's no need to infer again. None otherwise
+        """
         try:
             with open(self.ip_geolocation_file) as ipgeof:
                 previous_geolocation_json = json.loads(ipgeof.read())
 
             before = previous_geolocation_json["timestamp"]
 
-            if now - before <= self.time_between_get_geolocation:
+            if time_now - before <= self.time_between_get_geolocation:
                 # too soon to infer geolocation
                 return previous_geolocation_json.get("coordinates")
         except FileNotFoundError:
@@ -857,6 +868,53 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.exception("Existing IP-based geolocation is malformed. Inferring again...")
         except:
             logging.exception("Error while preparing to infer IP-based geolocation. Forcing infer operation...")
+
+    @staticmethod
+    def parse_geolocation(ip_location_service_name: str, ip_location_service_info: dict,
+                          geolocation_response: dict) -> list:
+        """
+        Gets the output from the IP-based geolocation request made to the online service, parses it, and builds
+        the inferred location, as a list, for the NuvlaBox Status
+
+        :param ip_location_service_name: name of the online service used to get the location
+        :param ip_location_service_info: info about the service queried for retrieving the location
+                                        (as in self.ip_geolocation_services.items)
+        :param geolocation_response: response from the IP-based geolocation service, in JSON format
+
+        :return: inferred-location attribute
+        """
+        inferred_location = []
+        if ip_location_service_info['coordinates_key']:
+            coordinates = geolocation_response[ip_location_service_info['coordinates_key']]
+            # note that Nuvla expects [long, lat], and not [lat, long], thus the reversing
+            if isinstance(coordinates, str):
+                inferred_location = coordinates.split(',')[::-1]
+            elif isinstance(coordinates, list):
+                inferred_location = coordinates[::-1]
+            else:
+                logging.warning(f"Cannot parse coordinates {coordinates} retrieved from geolocation service {ip_location_service_name}")
+                raise TypeError
+        else:
+            longitude = geolocation_response[ip_location_service_info['longitude_key']]
+            latitude = geolocation_response[ip_location_service_info['latitude_key']]
+
+            inferred_location.extend([longitude, latitude])
+            if ip_location_service_info['altitude_key']:
+                inferred_location.append(geolocation_response[ip_location_service_info['altitude_key']])
+
+        return inferred_location
+
+    def get_ip_geolocation(self):
+        """ Based on a preset of geolocation services, this method tries, one by one, to infer the
+        NuvlaBox physical location based on IP
+
+        :returns inferred_location. A list ([longitude, latitude, altitude]). Note that 'altitude' might be missing
+        """
+        now = int(datetime.datetime.timestamp(datetime.datetime.now()))
+
+        previous_coordinates = self.reuse_previous_geolocation(now)
+        if previous_coordinates:
+            return previous_coordinates
 
         inferred_location = []
         for service, service_info in self.ip_geolocation_services.items():
@@ -868,24 +926,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 continue
 
             try:
-                if service_info['coordinates_key']:
-                    coordinates = geolocation[service_info['coordinates_key']]
-                    # note that Nuvla expects [long, lat], and not [lat, long], thus the reversing
-                    if isinstance(coordinates, str):
-                        inferred_location = coordinates.split(',')[::-1]
-                    elif isinstance(coordinates, list):
-                        inferred_location = coordinates[::-1]
-                    else:
-                        logging.warning(f"Cannot parse coordinates {coordinates} retrieved from geolocation service {service}")
-                        continue
-                else:
-                    longitude = geolocation[service_info['longitude_key']]
-                    latitude = geolocation[service_info['latitude_key']]
-
-                    inferred_location.extend([longitude, latitude])
-                    if service_info['altitude_key']:
-                        inferred_location.append(geolocation[service_info['altitude_key']])
-
+                inferred_location.extend(self.parse_geolocation(service, service_info, geolocation))
                 # if we got here, then we already have coordinates, no need for further queries
                 break
             except KeyError:
@@ -915,12 +956,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             ifaces = os.listdir(sysfs_net)
         except FileNotFoundError:
             logging.warning("Cannot find network information for this device")
-            return {}
+            return []
 
         previous_net_stats = {}
         try:
             with open(self.previous_net_stats_file) as pns:
-                previous_net_stats = json.load(pns)
+                previous_net_stats = json.loads(pns.read())
         except (FileNotFoundError, json.decoder.JSONDecodeError):
             pass
 
@@ -1041,8 +1082,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         if output:
             return output
-        else:
-            return output_fallback
+
+        return output_fallback
 
     @staticmethod
     def diff(previous_status, current_status):
@@ -1078,22 +1119,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.status.update(new_status)
 
         return
-
-    def update_operational_status(self, status="RUNNING", status_log=None):
-        """ Update the NuvlaBox status with the current operational status
-
-        :param status: status, according to the allowed set defined in the api server nuvlabox-status schema
-        :param status_log: reason for the specified status
-        :return:
-        """
-
-        new_operational_status = {'status': status}
-        if status_log:
-            new_operational_status["status-log"] = status_log
-
-        self.api()._cimi_put(self.nb_status_id, json=new_operational_status)
-
-        self.set_local_operational_status(status)
 
     def get_vpn_ip(self):
         """ Discovers the NuvlaBox VPN IP  """

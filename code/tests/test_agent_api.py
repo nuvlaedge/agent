@@ -186,13 +186,16 @@ class AgentApiTestCase(unittest.TestCase):
     @mock.patch('agent.AgentApi.delete_peripheral')
     @mock.patch('agent.AgentApi.edit_peripheral')
     @mock.patch('agent.AgentApi.local_peripheral_exists')
-    def test_modify(self, mock_peripheral_exists, mock_edit_peripheral, mock_del_peripheral, mock_rm):
+    @mock.patch('agent.AgentApi.local_peripheral_get_identifier')
+    def test_modify(self, mock_get_identifier, mock_peripheral_exists,
+                    mock_edit_peripheral, mock_del_peripheral, mock_rm):
         # the accepted actions are DELETE or PUT, otherwise we expect a 405
         self.assertEqual(AgentApi.modify(self.peripheral_identifier,
                                          action='GET')[-1], 405,
                          'Peripherals API is accepting the wrong actions')
 
         # if there's no recognizable peripheral identifier, we should get 404
+        mock_get_identifier.return_value = None
         mock_peripheral_exists.return_value = None
         self.assertEqual(AgentApi.modify(self.peripheral_identifier)[-1], 404,
                          'Peripheral ID does not exist but API tried to edit it anyway')

@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from agent.Telemetry import ContainerMonitoring
-import json
 import logging
 import mock
 import queue
-import requests
 import unittest
 import tests.utils.fake as fake
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+from agent.Telemetry import ContainerMonitoring
 from threading import Thread
 
 
