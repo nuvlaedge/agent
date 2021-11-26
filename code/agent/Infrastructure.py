@@ -285,7 +285,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         # we only commission the cluster when the NuvlaBox status
         # has already been updated with its "node-id"
         nuvlabox_status = self.get_local_nuvlabox_status()
-        logging.error(node_id)
+
         if not cluster_info:
             # it is not a manager but...
             if node_id and node_id == nuvlabox_status.get('node-id'):
