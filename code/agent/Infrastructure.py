@@ -280,7 +280,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
         node_info = self.container_runtime.get_node_info()
-        # cluster_id = self.container_runtime.get_cluster_id(node_info)
         node_id = self.container_runtime.get_node_id(node_info)
 
         # we only commission the cluster when the NuvlaBox status
