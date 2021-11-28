@@ -29,6 +29,10 @@ from threading import Thread
 
 
 class MonitoredDict(dict):
+    """
+    Subclass of dict that use logging.debug to inform when a change is made.
+    """
+
     def __init__(self, name, *args, **kwargs):
         self.name = name
         dict.__init__(self, *args, **kwargs)
