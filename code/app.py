@@ -249,12 +249,14 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
 
     if not status_current_time:
         status = {'status-notes': ['NuvlaBox Telemetry is starting']}
+        nb_telemetry.status.update(status)
     else:
         if status_current_time <= previous_status_time:
             status = {
                 'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
                 'status': status.get('status', 'DEGRADED')
             }
+            nb_telemetry.status.update(status)
         else:
             delete_attributes = _delete_attributes
 

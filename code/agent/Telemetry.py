@@ -28,13 +28,12 @@ from pydoc import locate
 from threading import Thread
 
 
-
 class MonitoredDict(dict):
     def __init__(self, name, *args, **kwargs):
         self.name = name
         dict.__init__(self, *args, **kwargs)
         self._log_caller()
-        #self.update(*args, **kwargs)
+        logging.debug(f'{self.name} __init__: args: {args}, kwargs: {kwargs}')
 
     def _log_caller(self):
         stack = inspect.stack()
@@ -44,8 +43,8 @@ class MonitoredDict(dict):
         code_context = cc[0] if cc and len(cc) >= 1 else ''
         logging.debug(f'{self.name}.{cls_fn_name} called by {caller.filename}:{caller.lineno} {caller.function} {code_context}')
 
-    def __setitem__(self, key, val):
-        dict.__setitem__(self, key, val)
+    def __setitem__(self, key, value):
+        dict.__setitem__(self, key, value)
         self._log_caller()
         logging.debug(f'{self.name} set {key} = {value}')
 
@@ -202,6 +201,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # (to avoid network jittering and 3rd party service spamming)
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
+
     @property
     def status_on_nuvla(self):
         return self._status_on_nuvla
