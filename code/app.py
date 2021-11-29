@@ -239,9 +239,14 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     :return: (Nuvla.api response, current heartbeat timestamp)
     """
 
-    status = nb_telemetry.status_for_nuvla
-    status_current_time = status.get('current-time', '')
+    logging.debug(f'send_heartbeat({nb_instance}, {nb_telemetry}, {nb_status_id}, {previous_status_time})')
+
+    status, _delete_attributes = nb_telemetry.diff(nb_telemetry.status_on_nuvla, nb_telemetry.status)
+    status_current_time = nb_telemetry.status.get('current-time', '')
     delete_attributes = []
+
+    logging.debug(f'send_heartbeat: status_current_time = {status_current_time}  _delete_attributes = {_delete_attributes}  status = {status}')
+
     if not status_current_time:
         status = {'status-notes': ['NuvlaBox Telemetry is starting']}
         nb_telemetry.status.update(status)
@@ -249,11 +254,11 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         if status_current_time <= previous_status_time:
             status = {
                 'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
-                'status': status.get('status', 'DEGRADED')
+                'status': 'DEGRADED'
             }
             nb_telemetry.status.update(status)
         else:
-            delete_attributes = nb_telemetry.status_delete_attrs_in_nuvla
+            delete_attributes = _delete_attributes
 
     logging.info('Refresh status: %s' % status)
     if delete_attributes:
@@ -261,8 +266,9 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
 
     try:
         r = nb_instance.api().edit(nb_status_id,
-                                    data=status,
-                                    select=delete_attributes)
+                                   data=status,
+                                   select=delete_attributes)
+        nb_telemetry.status_on_nuvla.update(status)
     except:
         logging.error("Unable to update NuvlaBox status in Nuvla")
         raise
@@ -321,7 +327,7 @@ if __name__ == "__main__":
         infra.set_immutable_ssh_key()
 
     nuvlabox_info_updated_date = ''
-    refresh_interval = 5
+    refresh_interval = 30
 
     app.config["telemetry"] = telemetry
     app.config["infra"] = infra
@@ -356,8 +362,8 @@ if __name__ == "__main__":
 
         if not nb_checker or not nb_checker.is_alive():
             nb_checker = threading.Thread(target=preflight_check,
-                                            args=(activation, infra, nuvlabox_info_updated_date,),
-                                            daemon=True)
+                                          args=(activation, infra, nuvlabox_info_updated_date,),
+                                          daemon=True)
             nb_checker.start()
 
         if not telemetry_thread or not telemetry_thread.is_alive():
@@ -377,5 +383,6 @@ if __name__ == "__main__":
 
         cycle_duration = time.time() - start_cycle
         next_cycle_in = refresh_interval - cycle_duration - 1
+        logging.debug(f'End of cycle. Cycle duration: {cycle_duration} sec. Next cycle in {next_cycle_in} sec.')
 
         e.wait(timeout=next_cycle_in)
