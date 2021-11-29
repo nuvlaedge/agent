@@ -6,7 +6,7 @@ SKIP_CHANGELOG=$2
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
-if [[ "${BRANCH}" == "master" ]] && [[ "${BRANCH}" == "main" ]]
+if [[ "${BRANCH}" != "master" ]] && [[ "${BRANCH}" != "main" ]]
 then
   echo "ERROR: releases can only be done from the master/main branch"
   exit 1
