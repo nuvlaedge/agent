@@ -23,7 +23,6 @@ import time
 from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
-from pydoc import locate
 from threading import Thread
 
 
@@ -776,10 +775,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         :returns a GPIO dict obj with the parsed pin"""
 
         # the expected list of attributes is
-        expected = [{"position": None, "attribute": "BCM", "type": "int"},
-                    {"position": None, "attribute": "NAME", "type": "str"},
-                    {"position": None, "attribute": "MODE", "type": "str"},
-                    {"position": None, "attribute": "VOLTAGE", "type": "int"}]
+        expected = [{"position": None, "type": int, "attribute": "BCM"},
+                    {"position": None, "type": str, "attribute": "NAME"},
+                    {"position": None, "type": str, "attribute": "MODE"},
+                    {"position": None, "type": int, "attribute": "VOLTAGE"}]
 
         needed_indexes_len = 5
 
@@ -795,8 +794,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             for i, exp in enumerate(expected):
                 try:
-                    value = locate(exp["type"])
-                    cast_value = value(gpio_values[indexes[i]].rstrip().lstrip())
+                    cast_value = exp["type"](gpio_values[indexes[i]].rstrip().lstrip())
 
                     if cast_value or cast_value == 0:
                         gpio_pin[exp["attribute"].lower()] = cast_value
