@@ -158,7 +158,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         }
         self._status = MonitoredDict('Telemetry.status', self.status_default.copy())
         self._status_on_nuvla  = MonitoredDict('Telemetry.status_on_nuvla')
-        self.status_delete_attrs_in_nuvla = []
 
         self.mqtt_telemetry = mqtt.Client()
 
