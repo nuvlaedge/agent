@@ -50,7 +50,11 @@ create_tag() {
 
 tag_release() {
     # make the release tag
-    (git add . ; git commit -m "release ${VERSION}"; do_push; create_tag; do_push_tag)
+    git add CHANGELOG.md
+    git commit -m "release ${VERSION}"
+    do_push
+    create_tag
+    do_push_tag
 }
 
 do_tag() {
