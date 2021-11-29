@@ -254,7 +254,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         if status_current_time <= previous_status_time:
             status = {
                 'status-notes': status.get('status-notes', []) + ['NuvlaBox telemetry is falling behind'],
-                'status': status.get('status', 'DEGRADED')
+                'status': 'DEGRADED'
             }
             nb_telemetry.status.update(status)
         else:
