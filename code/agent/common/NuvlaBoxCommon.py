@@ -1211,7 +1211,6 @@ class DockerClient(ContainerRuntimeClient):
 
         k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
-        logging.error(1)
         try:
             ca = k3s["clusters"][0]["cluster"]["certificate-authority-data"]
             cert = k3s["users"][0]["user"]["client-certificate-data"]
@@ -1219,9 +1218,7 @@ class DockerClient(ContainerRuntimeClient):
             k3s_cluster_info['kubernetes-client-ca'] = base64.b64decode(ca).decode()
             k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(cert).decode()
             k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(key).decode()
-            logging.error(1)
         except Exception as e:
-            logging.error(2)
             logging.warning(f'Unable to lookup k3s certificates: {str(e)}')
             return {}
 
