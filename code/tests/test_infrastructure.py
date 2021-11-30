@@ -229,7 +229,6 @@ class InfrastructureTestCase(unittest.TestCase):
         # if compute-api is running, return True
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'
-        # self.obj.container_runtime.client.return_value.containers = mock.MagicMock()
         self.obj.container_runtime.client.containers.get.return_value = compute_api_container
         self.assertFalse(self.obj.compute_api_is_running(''),
                          'Unable to detect that compute-api is not running')

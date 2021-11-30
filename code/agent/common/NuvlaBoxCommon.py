@@ -1432,10 +1432,8 @@ class NuvlaBoxCommon():
                 nuvla_endpoint_insecure_raw = nuvla_endpoint_insecure_line[0].split('=')[-1]
         except FileNotFoundError:
             logging.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaBox Engine...')
-            pass
         except IndexError as e:
             logging.debug(f'Unable to read Nuvla configuration from {self.nuvlabox_nuvla_configuration}: {str(e)}')
-            pass
 
         while nuvla_endpoint_raw[-1] == "/":
             nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
@@ -1747,8 +1745,3 @@ ${vpn_endpoints_mapped}
 
         self.write_vpn_conf(vpn_values)
         return True
-
-
-
-
-
