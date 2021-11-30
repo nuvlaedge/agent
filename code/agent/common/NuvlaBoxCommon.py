@@ -430,10 +430,7 @@ class KubernetesClient(ContainerRuntimeClient):
         try:
             existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
         except client.exceptions.ApiException as e:
-            if e.status == 404:
-                # this is good, we can proceed
-                pass
-            else:
+            if e.status != 404: # If 404, this is good, we can proceed
                 raise
         else:
             if existing_pod.status.phase.lower() not in ['succeeded', 'running']:
