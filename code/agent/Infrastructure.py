@@ -32,9 +32,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         :param data_volume: shared volume
         """
-        super(Infrastructure, self).__init__(shared_data_volume=data_volume, daemon=True)
-        # NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
-        # Thread.__init__(self, daemon=True)
+        super(Infrastructure, self).__init__(shared_data_volume=data_volume)
+        Thread.__init__(self, daemon=True)
         self.telemetry_instance = Telemetry(data_volume, None, enable_container_monitoring=False)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
