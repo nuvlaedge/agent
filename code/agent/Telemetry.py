@@ -1116,8 +1116,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.status.update(new_status)
 
-        return
-
     def get_vpn_ip(self):
         """ Discovers the NuvlaBox VPN IP  """
 

@@ -19,6 +19,8 @@ with mock.patch.object(agent.common.NuvlaBoxCommon, 'NuvlaBoxCommon') as mock_nb
 
 class AgentApiTestCase(unittest.TestCase):
 
+    agent_api_open = 'agent.AgentApi.open'
+
     def setUp(self):
         self.peripheral_filepath = 'mock/peripheral/path'
         self.peripheral_content = {'id': 'nuvlabox-peripheral/fake-peripheral', 'foo': 'bar'}
@@ -316,12 +318,12 @@ class AgentApiTestCase(unittest.TestCase):
         # if these are actually files, then we try to open them
         # but if they are not JSON formatted, we again return no matches
         mock_isdir.return_value = False
-        with mock.patch("agent.AgentApi.open", mock.mock_open(read_data='{param: value}')):
+        with mock.patch(self.agent_api_open, mock.mock_open(read_data='{param: value}')):
             self.assertEqual(AgentApi.find('param', 'value', None), ({}, 200),
                              'Returned matching peripherals when there are no JSON files available')
 
         # if files are proper JSON, but they don't have the desired key-value inside, then there are no matches
-        with mock.patch("agent.AgentApi.open", mock.mock_open(read_data='{"wrong-param": "wrong-value"}')):
+        with mock.patch(self.agent_api_open, mock.mock_open(read_data='{"wrong-param": "wrong-value"}')):
             self.assertEqual(AgentApi.find('param', 'value', None), ({}, 200),
                              'Returned matching peripherals when none of the files have the desired key-value')
 
@@ -329,7 +331,7 @@ class AgentApiTestCase(unittest.TestCase):
         desired_peripheral = {'param': 'value'}
         expected_output = {}
         list(map(lambda y: expected_output.update({y: desired_peripheral}), files))
-        with mock.patch("agent.AgentApi.open", mock.mock_open(read_data=json.dumps(desired_peripheral))):
+        with mock.patch(self.agent_api_open, mock.mock_open(read_data=json.dumps(desired_peripheral))):
             self.assertEqual(AgentApi.find(list(desired_peripheral.keys())[0],
                                            list(desired_peripheral.values())[0],
                                            None),
@@ -345,16 +347,16 @@ class AgentApiTestCase(unittest.TestCase):
 
         mock_peripheral_exists.return_value = True
         # if it exists but its file content is malformed, return a 500
-        with mock.patch("agent.AgentApi.open", mock.mock_open(read_data='bad-json')):
+        with mock.patch(self.agent_api_open, mock.mock_open(read_data='bad-json')):
             self.assertEqual(AgentApi.get(self.peripheral_identifier)[-1], 500,
                              'Not returning 500 when peripheral file is malformed')
 
         # finally, if all is good, it returns the peripheral file content (JSON) and a 200
-        with mock.patch("agent.AgentApi.open", mock.mock_open(read_data=json.dumps(self.peripheral_content))):
+        with mock.patch(self.agent_api_open, mock.mock_open(read_data=json.dumps(self.peripheral_content))):
             self.assertEqual(AgentApi.get(self.peripheral_identifier), (self.peripheral_content, 200),
                              'Failed to find and return existing local peripheral')
 
-    @mock.patch('agent.AgentApi.open')
+    @mock.patch(agent_api_open)
     def test_save_vpn_ip(self, mock_open):
         # if the path does not exist, throw an exception
         mock_open.side_effect = FileNotFoundError
@@ -362,11 +364,11 @@ class AgentApiTestCase(unittest.TestCase):
 
         # otherwise, it writes the file and returns nothing
         mock_open.reset_mock(side_effect=True)
-        with mock.patch("agent.AgentApi.open", mock.mock_open(), create=True):
+        with mock.patch(self.agent_api_open, mock.mock_open(), create=True):
             self.assertIs(AgentApi.save_vpn_ip('1.1.1.1'), None,
                           'Failed to write VPN IP into file')
 
-    @mock.patch('agent.AgentApi.open')
+    @mock.patch(agent_api_open)
     def test_save_vulnerabilities(self, mock_open):
         # if the path does not exist, throw an exception
         mock_open.side_effect = FileNotFoundError
@@ -374,6 +376,6 @@ class AgentApiTestCase(unittest.TestCase):
 
         # otherwise, it writes the file and returns nothing
         mock_open.reset_mock(side_effect=True)
-        with mock.patch("agent.AgentApi.open", mock.mock_open(), create=True):
+        with mock.patch(self.agent_api_open, mock.mock_open(), create=True):
             self.assertIs(AgentApi.save_vulnerabilities({}), None,
                           'Failed to write vulnerabilities into file')

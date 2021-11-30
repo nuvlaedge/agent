@@ -15,6 +15,8 @@ from threading import Thread
 
 class InfrastructureTestCase(unittest.TestCase):
 
+    agent_infrastructure_open = 'agent.Infrastructure.open'
+
     def setUp(self):
         Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon, Thread),)
         with mock.patch('agent.Infrastructure.Telemetry') as mock_telemetry:
@@ -76,7 +78,7 @@ class InfrastructureTestCase(unittest.TestCase):
     def test_swarm_token_diff(self, mock_write_file):
         # if one of the token files is not found, write the current tokens and return True (assume is different)
         mock_write_file.return_value = None
-        with mock.patch('agent.Infrastructure.open') as mock_open:
+        with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertTrue(self.obj.swarm_token_diff('a', 'b'),
                             'Failed to find Swarm token files but did not return True (should have written new tokens)')
@@ -92,14 +94,14 @@ class InfrastructureTestCase(unittest.TestCase):
 
         mock_write_file.reset_mock()
         # if token files can be opened and read, return False
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='test\n')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='test\n')):
            self.assertFalse(self.obj.swarm_token_diff('new_manager', 'new_worker'),
                             'Unable to check diff between Swarm tokens')
            mock_write_file.assert_not_called()
 
     def test_get_tls_keys(self):
         # when failing to find or read any of the TLS key files, return None
-        with mock.patch('agent.Infrastructure.open') as mock_open:
+        with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertIsNone(self.obj.get_tls_keys(),
                               'Returned TLS keys even though their files could not be found')
@@ -109,7 +111,7 @@ class InfrastructureTestCase(unittest.TestCase):
 
         # when everything is ok, return the 3 files content as a tuple
         files_content = 'tls'
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=files_content)):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=files_content)):
             self.assertEqual(self.obj.get_tls_keys(), (files_content, files_content, files_content),
                              'Unable to get TLS keys')
 
@@ -134,7 +136,7 @@ class InfrastructureTestCase(unittest.TestCase):
 
         # otherwise
         payload = {"payload": "", "vpn-csr": "fake-csr"}
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='{"vpn-server-id": "test"}')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='{"vpn-server-id": "test"}')):
             mock_build_filter.return_value = 'filter=arg="value"'
             # if we can not get the VPN credential from Nuvla (for whatever reason), it returns None
             mock_sleep.return_value = None
@@ -176,26 +178,26 @@ class InfrastructureTestCase(unittest.TestCase):
     def test_needs_commission(self):
         # if commission file is not found, return the same arg as input
         current_conf = {'foo': 'bar'}
-        with mock.patch('agent.Infrastructure.open') as mock_open:
+        with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.needs_commission(current_conf), current_conf,
                              'Unable to check if commissioning is needed when commission file does not exist')
 
         # if file exists and content is the same, return empty dict
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(current_conf))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(current_conf))):
             self.assertEqual(self.obj.needs_commission(current_conf), {},
                              'Returned a difference on commissioning payload when there is none')
 
         # if file's content container the current conf, plus other stuff, still return {}
         old_conf = {**current_conf, **{'old': 'var'}}
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(old_conf))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(old_conf))):
             self.assertEqual(self.obj.needs_commission(current_conf), {},
                              'Returned a difference on commissioning payload when new conf is a subset of the old')
 
         # however, if the new conf has new attrs or values, return them as the diff
         new_conf = {'old': 'var_new', 'foo2': 'bar2'}
         current_conf.update(new_conf)
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(old_conf))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(old_conf))):
             self.assertEqual(self.obj.needs_commission(current_conf), new_conf,
                              'Failed to calculate difference between new commissioning payload and old')
 
@@ -246,13 +248,13 @@ class InfrastructureTestCase(unittest.TestCase):
                         'Unable to detect that compute-api is running')
 
     def test_get_local_nuvlabox_status(self):
-        with mock.patch('agent.Infrastructure.open') as mock_open:
+        with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.get_local_nuvlabox_status(), {},
                              'Returned something other than {} even though NB status file does not exist')
 
         nb_status = {'foo': 'bar'}
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(nb_status))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(nb_status))):
             self.assertEqual(self.obj.get_local_nuvlabox_status(), nb_status,
                              'Unable to get NuvlaBox Status from local file')
 
@@ -269,13 +271,13 @@ class InfrastructureTestCase(unittest.TestCase):
 
     def test_read_commissioning_file(self):
         # if file does not exist, return {}
-        with mock.patch('agent.Infrastructure.open') as mock_open:
+        with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.read_commissioning_file(), {},
                              'Failed to return {} when commissioning file does not exist')
 
         commission_content = {'foo': 'bar'}
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(commission_content))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(commission_content))):
             self.assertEqual(self.obj.read_commissioning_file(), commission_content,
                              'Failed to read commissioning file')
 
@@ -398,7 +400,7 @@ class InfrastructureTestCase(unittest.TestCase):
 
         # when using compare_with_nb_resource, the old[attr] is ignored
         current = old.copy()
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='{"str-attr": "older-value"}')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='{"str-attr": "older-value"}')):
             self.obj.commissioning_attr_has_changed(current, old, 'str-attr', payload, compare_with_nb_resource=True)
             # old has been updated
             self.assertEqual(old['str-attr'], 'older-value',
@@ -486,7 +488,7 @@ class InfrastructureTestCase(unittest.TestCase):
         local_vpn_content = {
             'updated': 'old'
         }
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(local_vpn_content))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))):
             # when the timestamps of both local and online VPN creds are the same, nothing is done
             self.assertIsNone(self.obj.validate_local_vpn_credential(local_vpn_content),
                               'Failed to validate local VPN credential')
@@ -497,7 +499,7 @@ class InfrastructureTestCase(unittest.TestCase):
         online_cred = {
             'updated': 'new'
         }
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data=json.dumps(local_vpn_content))):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))):
             # when the timestamps of both local and online VPN creds are the same, nothing is done
             self.assertIsNone(self.obj.validate_local_vpn_credential(online_cred),
                               'Failed to validate local VPN credential when local VPN credential is outdated')
@@ -598,7 +600,7 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_write_file.return_value = None
         # if ssh flag already exists, get None
         mock_exists.return_value = True
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='ssh key')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='ssh key')):
             self.assertIsNone(self.obj.set_immutable_ssh_key(),
                               'Trying to set immutable SSH key when it was already set')
 
@@ -623,7 +625,7 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_push_event.reset_mock()
         # if key cannot be set, just ignore and return
         self.obj.container_runtime.install_ssh_key.return_value = None
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='{"owner": "user"}')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='{"owner": "user"}')):
             self.assertIsNone(self.obj.set_immutable_ssh_key(),
                               'Unable to handle failure to set immutable SSH key')
 
@@ -635,7 +637,7 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_exists.side_effect = [False, True]
         self.obj.container_runtime.install_ssh_key.return_value = True
 
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='{"owner": "user"}')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='{"owner": "user"}')):
             self.assertIsNone(self.obj.set_immutable_ssh_key(),
                               'Unable to set immutable SSH key')
 
@@ -645,7 +647,7 @@ class InfrastructureTestCase(unittest.TestCase):
         # if there's an error while setting key, push event
         mock_exists.side_effect = [False, True]
         self.obj.container_runtime.install_ssh_key.side_effect = TimeoutError
-        with mock.patch('agent.Infrastructure.open', mock.mock_open(read_data='{"owner": "user"}')):
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data='{"owner": "user"}')):
             self.assertIsNone(self.obj.set_immutable_ssh_key(),
                               'Unable to push event when failing to set immutable SSH key')
 
@@ -668,5 +670,3 @@ class InfrastructureTestCase(unittest.TestCase):
         self.assertRaises(InterruptedError, self.obj.run)
         mock_commission.assert_called_once()
         mock_sleep.assert_called_once()
-
-

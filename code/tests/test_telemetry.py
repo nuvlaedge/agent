@@ -17,6 +17,8 @@ from agent.Telemetry import Telemetry
 
 class TelemetryTestCase(unittest.TestCase):
 
+    agent_telemetry_open = 'agent.Telemetry.open'
+
     def setUp(self):
         fake_nuvlabox_common = fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon)
         setattr(fake_nuvlabox_common, 'container_runtime', mock.MagicMock())
@@ -617,12 +619,12 @@ class TelemetryTestCase(unittest.TestCase):
 
     def test_read_temperature_files(self):
         # if there's an error reading files, return None,None
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data=None)):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data=None)):
             self.assertEqual(self.obj.read_temperature_files('', ''), (None, None),
                              'Failed to read temperature files when one cannot be read')
 
         # if files can be read, return their content
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='test')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='test')):
             self.assertEqual(self.obj.read_temperature_files('', ''), ('test', 'test'),
                              'Failed to read temperature files')
 
@@ -645,7 +647,7 @@ class TelemetryTestCase(unittest.TestCase):
         mock_listdir.return_value = ['0-0040', '0-0041']
         # if metrics_folder_path does not exist, get []
         mock_exists.side_effect = [True] + \
-                                  [False for i in
+                                  [False for _ in
                                    range(0,
                                          len(self.obj.nvidia_software_power_consumption_model['ina3221x']['boards']))]
         self.assertEqual(self.obj.get_power_consumption(), [],
@@ -659,7 +661,7 @@ class TelemetryTestCase(unittest.TestCase):
                          'Got power consumption even though I2C rail files do not exist')
 
         # if rail files exist, open them, unless there is an error, which means = []
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data=None)):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data=None)):
             mock_exists.side_effect = [True] + \
                                       [False, True] + [True, True, True]     # 2 boards matching + 3 channels
             self.assertEqual(self.obj.get_power_consumption(), [],
@@ -670,7 +672,7 @@ class TelemetryTestCase(unittest.TestCase):
                                   [False, True] + [True, True, True]     # 2 boards matching + 3 channels
         mock_listdir.side_effect = [['0-0040', '0-0041'],
                                     [], [], []]   # 3 channel reading
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='valid_data')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='valid_data')):
             self.assertEqual(self.obj.get_power_consumption(), [],
                              'Got power consumption when rail files cannot be read')
 
@@ -685,7 +687,7 @@ class TelemetryTestCase(unittest.TestCase):
                                     f'crit_current_limit_{channel}'], [], []]   # 3 channel reading (1st valid)
         mock_listdir.side_effect = list_dir_right_sequence
 
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='not-float-data')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='not-float-data')):
             self.assertEqual(self.obj.get_power_consumption(), [],
                              'Got power consumption when rail files can be read but do not have data as a float')
 
@@ -700,7 +702,7 @@ class TelemetryTestCase(unittest.TestCase):
             {'energy-consumption': 1, 'metric-name': '1_critical_current_limit', 'unit': 'mA'}
         ]
 
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='1')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='1')):
             self.assertEqual(self.obj.get_power_consumption(), expected_output,
                              'Unable to get power consumption')
 
@@ -712,7 +714,7 @@ class TelemetryTestCase(unittest.TestCase):
                           'Vulnerabilities file does not exist but still returned something')
 
         mock_exists.return_value = True
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='{"foo": "bar"}')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='{"foo": "bar"}')):
             self.assertEqual(self.obj.get_security_vulnerabilities(), {"foo": "bar"},
                              'Unable to get security vulnerabilities')
 
@@ -808,13 +810,13 @@ class TelemetryTestCase(unittest.TestCase):
 
     def test_reuse_previous_geolocation(self):
         # if a previous geolocation file doesn't exist, then return None
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertIsNone(self.obj.reuse_previous_geolocation(0),
                               'Tried to reuse a previous geolocation that does not exist')
 
         # same for any other exception
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             mock_open.side_effect = [json.decoder.JSONDecodeError, KeyError, Exception]
             for _ in range(0, 3):
                 self.assertIsNone(self.obj.reuse_previous_geolocation(0),
@@ -823,13 +825,13 @@ class TelemetryTestCase(unittest.TestCase):
         # if it exists, read it, and compare timestamps
         self.obj.time_between_get_geolocation = 10
         # if the time elapsed is greater than interval, then get None
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='{"timestamp": 1}')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='{"timestamp": 1}')):
             # 19 sec difference, > than 10
             self.assertIsNone(self.obj.reuse_previous_geolocation(20),
                               'Tried to reuse a previous geolocation when a new one should be used instead')
 
         # otherwise, get coordinates
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='{"timestamp": 1, "coordinates": "test"}')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='{"timestamp": 1, "coordinates": "test"}')):
             # 1 sec difference, < than 10
             self.assertEqual(self.obj.reuse_previous_geolocation(2), "test",
                              'Failed to reuse previous geolocation coordinates')
@@ -929,7 +931,7 @@ class TelemetryTestCase(unittest.TestCase):
         mock_parse_geolocation.reset_mock(side_effect=True)
         mock_parse_geolocation.return_value = [1, 2]
 
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             self.assertEqual(self.obj.get_ip_geolocation(), [1, 2],
                              'Unable to get geolocation')
             # file must have been written
@@ -945,7 +947,7 @@ class TelemetryTestCase(unittest.TestCase):
 
         mock_ls.reset_mock(side_effect=True)
         # if previous net file cannot be found, or is malformed, don't load it
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             mock_open.side_effect = [FileNotFoundError, mock.MagicMock()]
             mock_ls.return_value = []   # no interfaces, get []
             self.assertEqual(self.obj.get_network_info(), [],
@@ -955,7 +957,7 @@ class TelemetryTestCase(unittest.TestCase):
         # if there are interfaces
         mock_ls.return_value = ['iface1', 'iface2']
         # try to open but if it fails, get []
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             mock_open.side_effect = [FileNotFoundError, FileNotFoundError, NotADirectoryError, mock.MagicMock()]
             self.assertEqual(self.obj.get_network_info(), [],
                              'Got net info even though interfaces files cannot be read')
@@ -978,7 +980,7 @@ class TelemetryTestCase(unittest.TestCase):
                 "bytes-received-carry": 0
             }
         }
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             # 4 readers because open tx and rx per interface (2x2)
             mock_open.side_effect = [FileNotFoundError,
                                      mock.mock_open(read_data='1').return_value,
@@ -996,7 +998,7 @@ class TelemetryTestCase(unittest.TestCase):
                              'Unable to set first_net_stats after first run')
 
         # now that first_net_stats exists, if system counter are still going, get the diff and return values
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             # 4 readers because open tx and rx per interface (2x2)
             mock_open.side_effect = [FileNotFoundError,
                                      mock.mock_open(read_data='10').return_value,
@@ -1014,7 +1016,7 @@ class TelemetryTestCase(unittest.TestCase):
                              'first_net_stats were changed when they should not have')
 
         # when system counters are reset, the reads are smaller than the first ones
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             # 4 readers because open tx and rx per interface (2x2)
             mock_open.side_effect = [FileNotFoundError,
                                      mock.mock_open(read_data='0').return_value,
@@ -1046,7 +1048,7 @@ class TelemetryTestCase(unittest.TestCase):
                              'first_net_stats did not change after system counters reset')
 
         # finally, if previous stats exist, and counters are reset, get their value + current readings
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             previous_net_stats = {
                 'iface1': {
                     "bytes-transmitted": 1,
@@ -1164,7 +1166,6 @@ class TelemetryTestCase(unittest.TestCase):
     @mock.patch.object(Telemetry, 'diff')
     @mock.patch.object(Telemetry, 'get_status')
     def test_update_status(self, mock_get_status, mock_diff):
-        previous_status_for_nuvla = self.obj.status_for_nuvla.copy()
         previous_status = self.obj.status.copy()
         new_status = {**previous_status, **{'new-value': 'fake-value'}}
         all_status = {**new_status, **{'extra': 'value'}}
@@ -1172,7 +1173,7 @@ class TelemetryTestCase(unittest.TestCase):
         mock_diff.return_value = ({'new-value': 'fake-value'}, set())
 
         # make sure the right status is updated and saved
-        with mock.patch('agent.Telemetry.open') as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open:
             mock_open.return_value.write.return_value = None
             self.assertIsNone(self.obj.update_status(),
                               'Failed to update status')
@@ -1201,7 +1202,6 @@ class TelemetryTestCase(unittest.TestCase):
 
         # otherwise, read the file and return the IP
         mock_stat.return_value.st_size = 1
-        with mock.patch('agent.Telemetry.open', mock.mock_open(read_data='1.1.1.1')):
+        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='1.1.1.1')):
             self.assertEqual(self.obj.get_vpn_ip(), '1.1.1.1',
                              'Failed to get VPN IP')
-

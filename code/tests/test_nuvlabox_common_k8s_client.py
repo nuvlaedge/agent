@@ -64,7 +64,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
     def test_get_host_os(self, mock_get_node_info):
         # if get_node_info returns something valid, we get a valid string out of it
-        node = fake.MockKubernetesNode()
+        node = fake.mock_kubernetes_node()
         mock_get_node_info.return_value = node
         self.assertIsInstance(self.obj.get_host_os(), str,
                               'Host OS should be a string')
@@ -83,7 +83,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Kubernetes tokens are now being returned, so this test needs to be updated')
 
     def test_list_nodes(self):
-        self.obj.client.list_node.return_value.items = [fake.MockKubernetesNode()]
+        self.obj.client.list_node.return_value.items = [fake.mock_kubernetes_node()]
         self.assertIsInstance(self.obj.list_nodes(), list,
                               'List nodes should returns its items, a list, but got something else instead')
         self.obj.client.list_node.assert_called_once()
@@ -92,10 +92,10 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_cluster_id')
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
     def test_get_cluster_info(self, mock_get_node_info, mock_cluster_id, mock_list_nodes):
-        me = fake.MockKubernetesNode(uid='myself-fake-id')
+        me = fake.mock_kubernetes_node(uid='myself-fake-id')
         mock_cluster_id.return_value = 'fake-id'
         mock_get_node_info.return_value = me
-        mock_list_nodes.return_value = [me, fake.MockKubernetesNode()]
+        mock_list_nodes.return_value = [me, fake.mock_kubernetes_node()]
 
         expected_fields = ['cluster-id', 'cluster-orchestrator', 'cluster-managers', 'cluster-workers']
         # if all goes well, we should get the above keys
@@ -115,7 +115,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         # but if one of the nodes is a master, then we should get 1 worker and 1 manager
         me.metadata.labels = {'node-role.kubernetes.io/master': ''}
         mock_get_node_info.return_value = me
-        mock_list_nodes.return_value = [me, fake.MockKubernetesNode()]
+        mock_list_nodes.return_value = [me, fake.mock_kubernetes_node()]
         self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 1,
                          'Expecting 1 k8s workers but got something else')
         self.assertEqual(len(self.obj.get_cluster_info()['cluster-managers']), 1,
@@ -124,7 +124,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Expecting 2 k8s workers but got something else')
 
     def test_get_api_ip_port(self):
-        endpoint = fake.MockKubernetesEndpoint('not-kubernetes')
+        endpoint = fake.mock_kubernetes_endpoint('not-kubernetes')
         self.obj.client.list_endpoints_for_all_namespaces.return_value.items = [endpoint, endpoint]
         # if the host_node_ip is already defined, then it is straighforward and we get it plus the default port
         self.obj.host_node_ip = '0.0.0.0'
@@ -139,7 +139,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Returned API IP and port even though there are no Kubernetes endpoints')
 
         # even if there are k8s endpoints...if either the IP or port are undefined, return None,None
-        endpoint_k8s = fake.MockKubernetesEndpoint('kubernetes')
+        endpoint_k8s = fake.mock_kubernetes_endpoint('kubernetes')
         endpoint_k8s.subsets[0].ports[0].protocol = None
         self.obj.client.list_endpoints_for_all_namespaces.return_value.items = [endpoint_k8s, endpoint]
         # if there are no kubernetes endpoints, then return None,None
@@ -147,7 +147,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Got k8s API ip/port even though the endpoint port protocol is not TCP')
 
         # only if the k8s endpoint has all parameters, we get a valid IP and port
-        endpoint_k8s = fake.MockKubernetesEndpoint('kubernetes')
+        endpoint_k8s = fake.mock_kubernetes_endpoint('kubernetes')
         self.obj.client.list_endpoints_for_all_namespaces.return_value.items = [endpoint_k8s, endpoint]
         self.assertIsNotNone(self.obj.get_api_ip_port()[0],
                              'Should have gotten an API IP but got None')
@@ -175,7 +175,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
     def test_get_node_labels(self, mock_get_node_info):
-        node = fake.MockKubernetesNode()
+        node = fake.mock_kubernetes_node()
         node.metadata.labels = {} # no labels are set by default
         mock_get_node_info.return_value = node
         self.assertEqual(self.obj.get_node_labels(), [],
@@ -187,7 +187,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Unable to get k8s node labels')
 
     def test_is_vpn_client_running(self):
-        pod = fake.MockKubernetesPod()
+        pod = fake.mock_kubernetes_pod()
         # if there are no pods with the vpn-client label, we get False
         self.obj.client.list_pod_for_all_namespaces.return_value.items = []
         self.assertFalse(self.obj.is_vpn_client_running(),
@@ -198,7 +198,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertFalse(self.obj.is_vpn_client_running(),
                          'Says VPN client is running when none of the pods are from the VPN component')
 
-        vpn_pod = fake.MockKubernetesPod()
+        vpn_pod = fake.mock_kubernetes_pod()
         vpn_pod.status.container_statuses[0].name = self.obj.vpn_client_component
         self.obj.client.list_pod_for_all_namespaces.return_value.items = [pod, vpn_pod]
         self.assertTrue(self.obj.is_vpn_client_running(),
@@ -211,12 +211,12 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
         # if the pod already exists, and is running, then we need to wait, and we get False
         self.obj.client.read_namespaced_pod.reset_mock(side_effect=True)
-        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod()
+        self.obj.client.read_namespaced_pod.return_value = fake.mock_kubernetes_pod()
         self.assertFalse(self.obj.install_ssh_key('', ''),
                          'Failed to verify that an SSH installer is already running')
 
         # otherwise, it deletes the finished previous installer and installs a new key
-        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='terminated')
+        self.obj.client.read_namespaced_pod.return_value = fake.mock_kubernetes_pod(phase='terminated')
         self.obj.client.delete_namespaced_pod.return_value = True
         self.obj.client.create_namespaced_pod.return_value = True
         self.assertTrue(self.obj.install_ssh_key('', ''),
@@ -246,16 +246,16 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
         # if found, we continue to see its state
         self.obj.client.read_namespaced_pod.reset_mock(side_effect=True)
-        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='running')
+        self.obj.client.read_namespaced_pod.return_value = fake.mock_kubernetes_pod(phase='running')
         self.assertTrue(self.obj.is_nuvla_job_running('', ''),
                         'Nuvla job is running, but got the opposite message')
 
-        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='pending')
+        self.obj.client.read_namespaced_pod.return_value = fake.mock_kubernetes_pod(phase='pending')
         self.assertFalse(self.obj.is_nuvla_job_running('', ''),
                          'Says Nuvla job is running, when in fact it is pending')
 
         # for any other state, delete the pod and return False
-        self.obj.client.read_namespaced_pod.return_value = fake.MockKubernetesPod(phase='succeeded')
+        self.obj.client.read_namespaced_pod.return_value = fake.mock_kubernetes_pod(phase='succeeded')
         self.obj.client.delete_namespaced_pod.return_value = True
         self.assertFalse(self.obj.is_nuvla_job_running('', ''),
                          'Says Nuvla job is running, even though it should have been deleted')
@@ -278,7 +278,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
     def test_collect_container_metrics(self, mock_get_node_info, mock_pod_metrics):
         pod_list = mock.MagicMock()
-        pod_list.items = [fake.MockKubernetesPod("pod-1"), fake.MockKubernetesPod("pod-2")]
+        pod_list.items = [fake.mock_kubernetes_pod("pod-1"), fake.mock_kubernetes_pod("pod-2")]
         self.obj.client.list_pod_for_all_namespaces.return_value = pod_list
         mock_get_node_info.return_value.status.return_value.capacity = {
             'cpu': 1,
@@ -293,7 +293,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Returned container metrics when no pods are running')
 
         # if there are pod metrics, they must all match with the list of pods
-        new_pod = fake.MockKubernetesPodMetrics('wrong-name')
+        new_pod = fake.mock_kubernetes_pod_metrics('wrong-name')
         mock_pod_metrics.return_value = {
             'items': [new_pod]
         }
@@ -302,7 +302,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
         # if pod metrics match the list of pods, then we should get a non-empty list, with cpu and mem values/container
         mock_pod_metrics.return_value = {
-            'items': [fake.MockKubernetesPodMetrics("pod-1"), fake.MockKubernetesPodMetrics("pod-2")]
+            'items': [fake.mock_kubernetes_pod_metrics("pod-1"), fake.mock_kubernetes_pod_metrics("pod-2")]
         }
         self.assertIsInstance(self.obj.collect_container_metrics(), list,
                               'Expecting list of pod container metrics, but got something else')
@@ -325,8 +325,8 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
         # when there are deployments, get the env vars from them, skipping templated env vars
         self.obj.client_apps.list_namespaced_deployment.return_value.items = [
-            fake.MockKubernetesDeployment(),
-            fake.MockKubernetesDeployment()
+            fake.mock_kubernetes_deployment(),
+            fake.mock_kubernetes_deployment()
         ]
         self.assertGreater(len(self.obj.get_installation_parameters('')['environment']), 0,
                            'Expecting installation environment variables to be reported')
@@ -338,13 +338,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_get_node_id(self):
         name = 'fake-name'
-        node_info = fake.MockKubernetesNode(name)
+        node_info = fake.mock_kubernetes_node(name)
         # should always return the ID value indicated in the passed argument
         self.assertTrue(self.obj.get_node_id(node_info).startswith(name),
                         'Returned Node name does not match the real one')
 
     def test_get_cluster_id(self):
-        node_info = fake.MockKubernetesNode()
+        node_info = fake.mock_kubernetes_node()
         # should always return the ID value indicated in the passed argument
 
         # if Node does not have cluster name, then return the default one passed as an arg
@@ -362,25 +362,25 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.list_nodes')
     def test_get_cluster_managers(self, mock_list_nodes):
-        mock_list_nodes.return_value = [fake.MockKubernetesNode(), fake.MockKubernetesNode()]
+        mock_list_nodes.return_value = [fake.mock_kubernetes_node(), fake.mock_kubernetes_node()]
         # if there are no managers, then return an empty list
         self.assertEqual(self.obj.get_cluster_managers(), [],
                          'There are no manager but got something else than an empty list')
 
         # if there's one manager, than get only the one's name
-        manager = fake.MockKubernetesNode("manager")
+        manager = fake.mock_kubernetes_node("manager")
         manager.metadata.labels = {'node-role.kubernetes.io/master': ''}
-        mock_list_nodes.return_value = [fake.MockKubernetesNode(), fake.MockKubernetesNode(), manager]
+        mock_list_nodes.return_value = [fake.mock_kubernetes_node(), fake.mock_kubernetes_node(), manager]
         self.assertEqual(self.obj.get_cluster_managers(), [manager.metadata.name],
                          'There is one manager (called "manager"), but got some other list of managers')
 
         # for multiple manager, get them all
-        mock_list_nodes.return_value = [fake.MockKubernetesNode(), fake.MockKubernetesNode(), manager, manager]
+        mock_list_nodes.return_value = [fake.mock_kubernetes_node(), fake.mock_kubernetes_node(), manager, manager]
         self.assertEqual(len(self.obj.get_cluster_managers()), 2,
                          'There are 2 managers, but got a different number')
 
     def test_get_host_architecture(self):
-        node_info = fake.MockKubernetesNode()
+        node_info = fake.mock_kubernetes_node()
         # simple attribute lookup
         self.assertEqual(self.obj.get_host_architecture(node_info), node_info.status.node_info.architecture,
                          'Host architecture does not match the real one')
@@ -391,13 +391,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Failed to get hostname')
 
         # even if an arg is provided
-        node = fake.MockKubernetesNode()
+        node = fake.mock_kubernetes_node()
         self.assertEqual(self.obj.get_hostname(node_info=node), self.obj.host_node_name,
                          'Failed to get hostname when the node is given as an arg')
 
     @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
     def test_get_kubelet_version(self, mock_get_node_info):
-        node = fake.MockKubernetesNode()
+        node = fake.mock_kubernetes_node()
         mock_get_node_info.return_value = node
         # simple node attr lookup
         self.assertEqual(self.obj.get_kubelet_version(), node.status.node_info.kubelet_version,
@@ -409,13 +409,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                           'Got something out of a function which is not implemented')
 
     def test_is_node_active(self):
-        node = fake.MockKubernetesNode()
+        node = fake.mock_kubernetes_node()
         # if node is ready, should return its name
         self.assertEqual(self.obj.is_node_active(node), node.metadata.name,
                          'Saying node is not active when it is, and failed to give back its name')
 
         # otherwise, always returns None
-        node = fake.MockKubernetesNode(ready=False)
+        node = fake.mock_kubernetes_node(ready=False)
         self.assertIsNone(self.obj.is_node_active(node),
                           'Saying node is active when it is not')
 

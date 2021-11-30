@@ -12,6 +12,9 @@ import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 
 
 class NuvlaBoxCommonTestCase(unittest.TestCase):
+
+    agent_nuvlabox_common_open = 'agent.common.NuvlaBoxCommon.open'
+
     @mock.patch('os.path.isdir')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_nuvlabox_id')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_runtime_client_details')
@@ -67,7 +70,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         # if it exists, it reads the value from the file (with strip())
         mock_exists.return_value = True
         file_value = '/home/fake3'
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=file_value+'\n')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=file_value+'\n')):
             self.assertEqual(self.obj.set_installation_home('fake-file'), file_value,
                              'Unable to get installation home path from file')
 
@@ -75,7 +78,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         # first time, will read vars from env
         os.environ['NUVLA_ENDPOINT'] = 'fake.nuvla.io'
         os.environ['NUVLA_ENDPOINT_INSECURE'] = 'True'
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_nuvla_conf:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_nuvla_conf:
             mock_nuvla_conf.side_effect = FileNotFoundError
             self.assertEqual(self.obj.set_nuvla_endpoint(), ('fake.nuvla.io', True),
                              'Failed to retrieve Nuvla endpoint conf from env during first run')
@@ -107,13 +110,13 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
 
         # but if local conf exists, read from it
         local_conf = 'NUVLA_ENDPOINT=fake.nuvla.local.io\nNUVLA_ENDPOINT_INSECURE=False'
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=local_conf)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=local_conf)):
             self.assertEqual(self.obj.set_nuvla_endpoint(), ('fake.nuvla.local.io', False),
                              'Unable to get Nuvla endpoint details from local file')
 
     @mock.patch('os.path.exists')
     def test_save_nuvla_configuration(self, mock_exists):
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             # if file exists, don't do anything
             mock_exists.return_value = True
             self.assertIsNone(self.obj.save_nuvla_configuration('', ''),
@@ -156,11 +159,11 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
 
         # if the file exists, but is malformed, also raise exception
         mock_exists.return_value = True
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='foo: bar')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='foo: bar')):
             self.assertRaises(Exception, self.obj.set_nuvlabox_id)
 
         # if file is correct, read from it and cleanup ID
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"id": "fake-id"}')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
             self.assertEqual(self.obj.set_nuvlabox_id(), 'nuvlabox/fake-id',
                              'Unable to correctly get NuvlaBox ID from context file')
 
@@ -223,7 +226,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
 
     @mock.patch('json.dumps')
     def test_write_json_to_file(self, mock_json_dumps):
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             # if there's an open error, return False
             mock_open.side_effect = FileNotFoundError
             self.assertFalse(self.obj.write_json_to_file('path', {}),
@@ -234,7 +237,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
                              'Returned True when there was an error with the JSON content')
 
         # if all goes well, return True
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             mock_open.return_value.write.return_value = None
             mock_json_dumps.reset_mock(side_effect=True)
             self.assertTrue(self.obj.write_json_to_file('path', {}),
@@ -243,7 +246,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
     def test_read_json_file(self):
         # always return a dict
         file_value = '{"foo": "bar"}'
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=file_value)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=file_value)):
             self.assertEqual(self.obj.read_json_file('fake-file'), json.loads(file_value),
                              'Unable to read JSON from file')
 
@@ -271,7 +274,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
 
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_local_operational_status')
     def test_get_operational_status(self, mock_set_status):
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             # if file not found, return UNKNOWN
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.get_operational_status(), 'UNKNOWN',
@@ -285,32 +288,32 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
 
         # otherwise, read file and get status out of it
         file_value = 'OPERATIONAL\nsomething else\njunk'
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=file_value)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=file_value)):
             self.assertEqual(self.obj.get_operational_status(), 'OPERATIONAL',
                              'Unable to fetch valid operational status')
 
     def test_get_operational_status_notes(self):
         # on any error, give back []
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.get_operational_status_notes(), [],
                              'Got operational status notes when there should not be any')
 
         # otherwise, give back the notes as a list
         file_value = 'note1\nnote2\nnote3\n'
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=file_value)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=file_value)):
             self.assertEqual(self.obj.get_operational_status_notes(), file_value.splitlines(),
                              'Unable to get operational status notes')
 
     def test_set_local_operational_status(self):
         # should just write and return None
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             mock_open.return_value.write.return_value = None
             self.assertIsNone(self.obj.set_local_operational_status(''),
                               'Setting the operational status should return nothing')
 
     def test_write_vpn_conf(self):
-        with mock.patch("agent.common.NuvlaBoxCommon.open") as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             mock_open.return_value.write.return_value = None
             # if vpn fiels are not dict, it should raise a TypeError
             self.assertRaises(TypeError, self.obj.write_vpn_conf, "wrong-type")
@@ -351,7 +354,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
 
         # if cred files exist, read them, and return their value
         mock_exists.return_value = True
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='csr/key')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='csr/key')):
             self.assertEqual(self.obj.prepare_vpn_certificates(), ('csr/key', 'csr/key'),
                              'Failed to get VPN CSR and Key values from local files')
 

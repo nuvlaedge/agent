@@ -1555,7 +1555,8 @@ class NuvlaBoxCommon():
         try:
             with open(file_path, mode) as f:
                 f.write(json.dumps(content))
-        except:
+        except Exception as e:
+            logging.exception(f'Exception in write_json_to_file: {e}')
             return False
 
         return True

@@ -8,7 +8,7 @@ import kubernetes
 from types import SimpleNamespace
 
 
-def MockKubernetesEndpoint(name: str):
+def mock_kubernetes_endpoint(name: str):
     endpoint = {
         'metadata': {
             'name': name
@@ -61,7 +61,7 @@ def base_pod(name: str=None, phase: str='running'):
     return pod
 
 
-def MockKubernetesPod(name: str=None, phase: str='running'):
+def mock_kubernetes_pod(name: str=None, phase: str='running'):
     pod = json.loads(json.dumps(base_pod(name, phase)), object_hook=lambda d: SimpleNamespace(**d))
     # add 'state' after serialization cause k8s obj is not serializable
     for x in pod.status.container_statuses:
@@ -69,7 +69,7 @@ def MockKubernetesPod(name: str=None, phase: str='running'):
     return pod
 
 
-def MockKubernetesPodMetrics(name: str=None, phase: str='running'):
+def mock_kubernetes_pod_metrics(name: str=None, phase: str='running'):
     pod = base_pod(name, phase)
     pod['containers'] = [
         {
@@ -83,7 +83,7 @@ def MockKubernetesPodMetrics(name: str=None, phase: str='running'):
     return pod
 
 
-def MockKubernetesDeployment():
+def mock_kubernetes_deployment():
     depl = {
         'spec': {
             'template': {
@@ -107,7 +107,7 @@ def MockKubernetesDeployment():
     return json.loads(json.dumps(depl), object_hook=lambda d: SimpleNamespace(**d))
 
 
-def MockKubernetesNode(uid: str=None, ready: bool=True):
+def mock_kubernetes_node(uid: str=None, ready: bool=True):
     node = {
         'status': {
             'node_info': {
@@ -177,9 +177,11 @@ class MockContainer(object):
         }
 
     def remove(self):
+        """ Not implemented """
         pass
 
     def kill(self):
+        """ Not implemented """
         pass
 
 
@@ -207,7 +209,7 @@ class FakeNuvlaApi(object):
     def __init__(self, reference_api_keys, **kwargs):
         self.api_keys = reference_api_keys
         self.kwargs = kwargs
-        self.MockResponse = self.Response(self.kwargs.get('id', 'fake/id'), self.kwargs.get('data', {}))
+        self.mock_response = self.Response(self.kwargs.get('id', 'fake/id'), self.kwargs.get('data', {}))
 
     class Response(object):
         def __init__(self, id, data):
@@ -218,19 +220,19 @@ class FakeNuvlaApi(object):
         return self.Response(id, self.kwargs.get('data', {}))
 
     def edit(self, nuvlabox_id, payload):
-        return self.MockResponse
+        return self.mock_response
 
     def delete(self, nuvlabox_id):
-        return self.MockResponse
+        return self.mock_response
 
     def add(self, resource, _):
-        return self.MockResponse
+        return self.mock_response
 
     def search(self, resource, **kwargs):
-        return self.MockResponse
+        return self.mock_response
 
     def login_apikey(self, key, secret):
-        return self.MockResponse
+        return self.mock_response
 
     def _cimi_post(self, resource, **kwargs):
         if kwargs:

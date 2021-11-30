@@ -15,6 +15,9 @@ import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 
 
 class ContainerRuntimeDockerTestCase(unittest.TestCase):
+
+    agent_nuvlabox_common_open = 'agent.common.NuvlaBoxCommon.open'
+
     def setUp(self) -> None:
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
@@ -160,7 +163,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
    8: 2D28A8C0:0016 652AA8C0:D6C9 01 00000024:00000000 01:00000015 00000000     0        0 3610139 4 ffffffc10cd3f440 22 4 29 10 -1
    9: 0100007F:ECA0 0100007F:13D8 06 00000000:00000000 03:00000577 00000000     0        0 0 3 ffffffc0d1887ef0
    '''
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=tcp_file)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=tcp_file)):
             self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', 5000),
                              'Could not get valid IP from filesystem')
 
@@ -169,7 +172,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
    0: 0100007F:0B83 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 22975 1 ffffffc1dea20000 100 0 0 10 0
    1: 00000000:1388 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 46922 1 ffffffc1c9be1740 100 0 0 10 0
    '''
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=tcp_file)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=tcp_file)):
             self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', 5000),
                              'Could not get default IP from filesystem')
 
@@ -733,7 +736,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_isfile.return_value = True
         # same again if the k3s config is malformed
         mock_yaml.side_effect = yaml.YAMLError
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"notyaml": True}')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"notyaml": True}')):
             self.assertEqual(self.obj.is_k3s_running('1.1.1.1'), {},
                              'Received k3s details even though the k3s config file is malformed')
 
@@ -755,7 +758,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
 
         # if k3s config can be read, but there's an exception while retrieving the values from it, we again get {}
         # let's force a KeyError by omitting the users from the k3s config
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"notyaml": True}')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"notyaml": True}')):
             self.assertEqual(self.obj.is_k3s_running('1.1.1.1'), {},
                              'Received k3s details even though the k3s config cannot be parsed')
 
@@ -771,7 +774,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
 
         # and now, with the kubeconfig complete and parsable, we should get all the expected k8s keys
         is_keys = ["kubernetes-client-ca", "kubernetes-client-cert", "kubernetes-client-key", "kubernetes-endpoint"]
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data='{"notyaml": True}')):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"notyaml": True}')):
             self.assertTrue(set(is_keys).issubset(list(self.obj.is_k3s_running('1.1.1.1').keys())),
                             'Received k3s details even though the k3s config cannot be parsed')
 
@@ -808,13 +811,13 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
 
         k8s_process = 'exec\x00--arg1=1\n--arg2=2\x00--arg3=3\x00'
         # if an exception is thrown while opening the process cmdline file, we get {}
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=k8s_process)) as mock_open:
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=k8s_process)) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
                              'Got additional COE details even though the k8s process cmdline file does not exist')
 
         # if the file exists, we read it but if it hasn't the right keywords, we get {} again
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=k8s_process)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=k8s_process)):
             self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
                              'Got additional COE details even though the k8s process cmdline is missing the right args')
 
@@ -824,6 +827,6 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
 
         k8s_process = 'exec\n--' + '=fake_value\x00--'.join(k8s_cmdline_keys) + '=1\n'
         is_fields = ['kubernetes-endpoint', 'kubernetes-client-ca', 'kubernetes-client-cert', 'kubernetes-client-key']
-        with mock.patch("agent.common.NuvlaBoxCommon.open", mock.mock_open(read_data=k8s_process)):
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=k8s_process)):
             self.assertTrue(set(is_fields).issubset(list(self.obj.infer_if_additional_coe_exists().keys())),
                             'Got unexpected K8s COE IS fields')
