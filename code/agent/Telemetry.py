@@ -19,11 +19,46 @@ import requests
 import paho.mqtt.client as mqtt
 import queue
 import time
+import inspect
 
 from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
+
+
+class MonitoredDict(dict):
+    """
+    Subclass of dict that use logging.debug to inform when a change is made.
+    """
+
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
+        dict.__init__(self, *args, **kwargs)
+        self._log_caller()
+        logging.debug(f'{self.name} __init__: args: {args}, kwargs: {kwargs}')
+
+    def _log_caller(self):
+        stack = inspect.stack()
+        cls_fn_name = stack[1].function
+        caller = stack[2]
+        cc = caller.code_context
+        code_context = cc[0] if cc and len(cc) >= 1 else ''
+        logging.debug(f'{self.name}.{cls_fn_name} called by {caller.filename}:{caller.lineno} {caller.function} {code_context}')
+
+    def __setitem__(self, key, value):
+        dict.__setitem__(self, key, value)
+        self._log_caller()
+        logging.debug(f'{self.name} set {key} = {value}')
+
+    def __repr__(self):
+        return '%s(%s)' % (type(self).__name__,  dict.__repr__(self))
+
+    def update(self, *args, **kwargs):
+        dict.update(self, *args, **kwargs)
+        self._log_caller()
+        logging.debug(f'{self.name} update: args: {args}, kwargs: {kwargs}')
+        logging.debug(f'{self.name} updated: {self}')
 
 
 class ContainerMonitoring(Thread):
@@ -118,10 +153,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             'container-plugins': None,
             'kubelet-version': None
         }
-        self.status = self.status_default.copy()
-
-        self.status_for_nuvla = {}
-        self.status_delete_attrs_in_nuvla = []
+        self._status = MonitoredDict('Telemetry.status', self.status_default.copy())
+        self._status_on_nuvla  = MonitoredDict('Telemetry.status_on_nuvla')
 
         self.mqtt_telemetry = mqtt.Client()
 
@@ -168,6 +201,28 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # (to avoid network jittering and 3rd party service spamming)
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
+
+    @property
+    def status_on_nuvla(self):
+        return self._status_on_nuvla
+
+    @status_on_nuvla.setter
+    def status_on_nuvla(self, value):
+        self._status_on_nuvla = MonitoredDict('Telemetry.status_on_nuvla', value)
+        caller = inspect.stack()[1]
+        logging.debug(f'Telemetry.status_on_nuvla setter called by {caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
+        logging.debug(f'Telemetry.status_on_nuvla updated: {value}')
+
+    @property
+    def status(self):
+        return self._status
+
+    @status.setter
+    def status(self, value):
+        self._status = MonitoredDict('Telemetry.status', value)
+        caller = inspect.stack()[1]
+        logging.debug(f'Telemetry.status setter called by {caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
+        logging.debug(f'Telemetry.status updated: {value}')
 
     def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
@@ -541,6 +596,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Gets several types of information to populate the NuvlaBox status """
 
         status_for_nuvla = self.status_default.copy()
+
+        status_for_nuvla['id'] = self.nb_status_id
+
         node_info = self.container_runtime.get_node_info()
         status_for_nuvla.update({
             'operating-system': self.container_runtime.get_host_os(),
@@ -588,6 +646,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # - VULNERABILITIES attr
         self.set_status_vulnerabilities(status_for_nuvla)
+
+        # - CURRENT TIME attr
+        status_for_nuvla['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
 
         # Publish the telemetry into the Data Gateway
         self.send_mqtt(status_for_nuvla,
@@ -1102,13 +1163,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
 
         new_status, all_status = self.get_status()
-
-        updated_status, delete_attributes = self.diff(self.status, new_status)
-        updated_status['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
-        updated_status['id'] = self.nb_status_id
-
-        self.status_for_nuvla = updated_status
-        self.status_delete_attrs_in_nuvla = delete_attributes
 
         # write all status into the shared volume for the other components to re-use if necessary
         with open(self.nuvlabox_status_file, 'w') as nbsf:
