@@ -1,4 +1,9 @@
 # Changelog
+## [2.4.1] - 2021-11-29
+### Added
+### Changed
+ - Improved telemetry to send all changes to Nuvla and reduce the chance of a "split brain" like scenario
+ - Delete ignored files
 ## [2.4.0] - 2021-11-03
 ### Added 
  - Kubernetes infrastructure discovery for kubeadm, k0s and k3s installations
