@@ -1182,10 +1182,12 @@ class TelemetryTestCase(unittest.TestCase):
         self.assertEqual(self.obj.status, new_status,
                          'NuvlaBox status was not updated in memory')
 
-        self.assertEqual(['current-time', 'id', 'new-value'], sorted(list(self.obj.status_for_nuvla.keys())),
+        minimum_payload_keys = {'current-time', 'id', 'new-value'}
+        self.assertEqual(minimum_payload_keys & set(new_status.keys()), minimum_payload_keys,
                          'Failed to set minimum payload for updating nuvlabox-status in Nuvla')
 
-        self.assertEqual(self.obj.status_delete_attrs_in_nuvla, set(),
+        _, delete_attrs = self.obj.diff(new_status, self.obj.status)
+        self.assertEqual(delete_attrs, set(),
                          'Saying there are attrs to delete when there are none')
 
     @mock.patch('agent.Telemetry.path.exists')
