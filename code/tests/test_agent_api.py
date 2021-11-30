@@ -220,7 +220,7 @@ class AgentApiTestCase(unittest.TestCase):
         mock_edit_peripheral.reset_mock(side_effect=True)
         new_updated_peripheral = {**self.peripheral_content, **{'new-attr': 'foo'}}
         mock_edit_peripheral.return_value = FakeNuvlaApi(self.api_key,
-                                                         data=new_updated_peripheral).MockResponse
+                                                         data=new_updated_peripheral).mock_response
         edit_output = AgentApi.modify(self.peripheral_identifier,
                                       peripheral_nuvla_id=self.peripheral_content['id'],
                                       payload=new_updated_peripheral)
@@ -256,7 +256,7 @@ class AgentApiTestCase(unittest.TestCase):
         # - finally, is all goes well, peripheral is deleted and we get a 200
         mock_del_peripheral.reset_mock(side_effect=True)
         mock_del_peripheral.return_value = FakeNuvlaApi(self.api_key,
-                                                        data={'status': 200}).MockResponse
+                                                        data={'status': 200}).mock_response
         delete_output = AgentApi.modify(self.peripheral_identifier,
                                         peripheral_nuvla_id=self.peripheral_content['id'],
                                         action='DELETE')
