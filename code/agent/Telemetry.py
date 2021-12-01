@@ -152,7 +152,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             'temperatures': None,
             'container-plugins': None,
             'kubelet-version': None,
-            'current-time': None,
+            'current-time': '',
             'id': None
         }
         self._status = MonitoredDict('Telemetry.status', self.status_default.copy())
