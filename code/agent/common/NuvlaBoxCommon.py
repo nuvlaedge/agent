@@ -19,7 +19,8 @@ import yaml
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from nuvla.api import Api
-from subprocess import run, STDOUT, PIPE, Popen, TimeoutExpired
+from subprocess import run, PIPE, Popen, TimeoutExpired
+
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
 if KUBERNETES_SERVICE_HOST:
@@ -67,6 +68,7 @@ class ContainerRuntimeClient(ABC):
         self.vpn_client_component = 'vpn-client'
         self.host_home = host_home
         self.ignore_env_variables = ['NUVLABOX_API_KEY', 'NUVLABOX_API_SECRET']
+        self.data_gateway_name = None
 
     @abstractmethod
     def get_node_info(self):
@@ -319,6 +321,7 @@ class KubernetesClient(ContainerRuntimeClient):
         self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
         self.join_token_manager_keyname = 'kubernetes-token-manager'
         self.join_token_worker_keyname = 'kubernetes-token-worker'
+        self.data_gateway_name = f"data-gateway.{self.namespace}"
 
     def get_node_info(self):
         if self.host_node_name:
@@ -369,29 +372,31 @@ class KubernetesClient(ContainerRuntimeClient):
         }
 
     def get_api_ip_port(self):
-        endpoints = self.client.list_endpoints_for_all_namespaces().items
+        all_endpoints = self.client.list_endpoints_for_all_namespaces().items
 
-        ip_port = 6443
+        ip_port = None
         if self.host_node_ip:
-            return self.host_node_ip, ip_port
-        else:
-            for endpoint in endpoints:
-                if endpoint.metadata.name.lower() == 'kubernetes':
-                    for subset in endpoint.subsets:
-                        for addr in subset.addresses:
-                            if addr.ip:
-                                self.host_node_ip = addr.ip
-                                break
+            return self.host_node_ip, 6443
 
-                        for port in subset.ports:
-                            if port.name == 'https' and port.protocol == 'TCP':
-                                ip_port = port.port
-                                break
+        try:
+            endpoint = list(filter(lambda x: x.metadata.name.lower() == 'kubernetes', all_endpoints))[0]
+        except IndexError:
+            logging.error('There are no "kubernetes" endpoints where to get the API IP and port from')
+            return None, None
 
-                        if self.host_node_ip and ip_port:
-                            return self.host_node_ip, ip_port
-
+        for subset in endpoint.subsets:
+            for addr in subset.addresses:
+                if addr.ip:
+                    self.host_node_ip = addr.ip
                     break
+
+            for port in subset.ports:
+                if f'{port.name}/{port.protocol}' == 'https/TCP':
+                    ip_port = port.port
+                    break
+
+            if self.host_node_ip and ip_port:
+                return self.host_node_ip, ip_port
 
         return None, None
 
@@ -425,10 +430,7 @@ class KubernetesClient(ContainerRuntimeClient):
         try:
             existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
         except client.exceptions.ApiException as e:
-            if e.status == 404:
-                # this is good, we can proceed
-                pass
-            else:
+            if e.status != 404: # If 404, this is good, we can proceed
                 raise
         else:
             if existing_pod.status.phase.lower() not in ['succeeded', 'running']:
@@ -600,13 +602,16 @@ class KubernetesClient(ContainerRuntimeClient):
                 try:
                     env = container.env if container.env else []
                     for env_var in env:
-                        if env_var.value_from:
+                        try:
+                            _ = env_var.value_from
                             # this is a templated var. No need to report it
                             continue
+                        except AttributeError:
+                            pass
 
                         environment.append(f'{env_var.name}={env_var.value}')
                 except AttributeError:
-                    continue
+                    pass
 
         unique_env = list(filter(None, set(environment)))
 
@@ -703,6 +708,7 @@ class DockerClient(ContainerRuntimeClient):
         self.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.join_token_manager_keyname = 'swarm-token-manager'
         self.join_token_worker_keyname = 'swarm-token-worker'
+        self.data_gateway_name = "data-gateway"
 
     def get_node_info(self):
         return self.client.info()
@@ -776,6 +782,7 @@ class DockerClient(ContainerRuntimeClient):
             except:
                 ip = '127.0.0.1'
             else:
+                # TODO: double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaBox API IP!")
                     return None, 5000
@@ -905,6 +912,103 @@ class DockerClient(ContainerRuntimeClient):
         except Exception as e:
             logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
 
+    @staticmethod
+    def collect_container_metrics_cpu(cstats: dict, old_cpu_total: float,
+                                      old_cpu_system: float, errors: list=None) -> float:
+        """
+        Calculates the CPU consumption for a give container
+
+        :param cstats: Docker container statistics
+        :param old_cpu_total: previous total CPU usage
+        :param old_cpu_system: previous system CPU usage
+        :param errors: ongoing list of collection errors to append to if needed
+        :return: CPU consumption in percentage
+        """
+        try:
+            cpu_total = float(cstats["cpu_stats"]["cpu_usage"]["total_usage"])
+            cpu_system = float(cstats["cpu_stats"]["system_cpu_usage"])
+
+            online_cpus = cstats["cpu_stats"] \
+                .get("online_cpus", len(cstats["cpu_stats"]["cpu_usage"].get("percpu_usage", [])))
+
+            cpu_delta = cpu_total - old_cpu_total
+            system_delta = cpu_system - old_cpu_system
+
+            cpu_percent = 0.0
+            if system_delta > 0.0 and online_cpus > 0:
+                cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
+        except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
+            errors.append("CPU")
+            cpu_percent = 0.0
+
+        return cpu_percent
+
+    @staticmethod
+    def collect_container_metrics_mem(cstats: dict, errors: list) -> tuple:
+        """
+        Calculates the Memory consumption for a give container
+
+        :param cstats: Docker container statistics
+        :param errors: ongoing list of collection errors to append to if needed
+        :return: Memory consumption tuple with percentage, usage and limit
+        """
+        try:
+            mem_usage = float(cstats["memory_stats"]["usage"] / 1024 / 1024)
+            mem_limit = float(cstats["memory_stats"]["limit"] / 1024 / 1024)
+            if round(mem_limit, 2) == 0.00:
+                mem_percent = 0.00
+            else:
+                mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
+        except (IndexError, KeyError, ValueError) as e:
+            errors.append("Mem")
+            mem_percent = mem_usage = mem_limit = 0.00
+
+        return mem_percent, mem_usage, mem_limit
+
+    @staticmethod
+    def collect_container_metrics_net(cstats: dict) -> tuple:
+        """
+        Calculates the Network consumption for a give container
+
+        :param cstats: Docker container statistics
+        :return: tuple with network bytes IN and OUT
+        """
+        net_in = net_out = 0.0
+        if "networks" in cstats:
+            net_in = sum(cstats["networks"][iface]["rx_bytes"]
+                         for iface in cstats["networks"]) / 1000 / 1000
+            net_out = sum(cstats["networks"][iface]["tx_bytes"]
+                          for iface in cstats["networks"]) / 1000 / 1000
+
+        return net_in, net_out
+
+    @staticmethod
+    def collect_container_metrics_block(cstats: dict, errors: list) -> tuple:
+        """
+        Calculates the block consumption for a give container
+
+        :param cstats: Docker container statistics
+        :param errors: ongoing list of collection errors to append to if needed
+        :return: tuple with block bytes IN and OUT
+        """
+        io_bytes_recursive = cstats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
+        if io_bytes_recursive:
+            try:
+                blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
+            except Exception as e:
+                errors.append("blk_in")
+                blk_in = 0.0
+
+            try:
+                blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
+            except Exception as e:
+                errors.append("blk_out")
+                blk_out = 0.0
+        else:
+            blk_out = blk_in = 0.0
+
+        return blk_out, blk_in
+
     def collect_container_metrics(self):
         docker_stats = []
 
@@ -933,65 +1037,20 @@ class DockerClient(ContainerRuntimeClient):
             #
             # -----------------
             # CPU
-            try:
-                cpu_total = float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"])
-                cpu_system = float(container_stats["cpu_stats"]["system_cpu_usage"])
-
-                online_cpus = container_stats["cpu_stats"] \
-                    .get("online_cpus", len(container_stats["cpu_stats"]["cpu_usage"].get("percpu_usage", -1)))
-
-                cpu_delta = cpu_total - old_cpu[i][0]
-                system_delta = cpu_system - old_cpu[i][1]
-
-                cpu_percent = 0.0
-                if system_delta > 0.0 and online_cpus > -1:
-                    cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
-            except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
-                collection_errors.append("CPU")
-                cpu_percent = 0.0
-
+            cpu_percent = self.collect_container_metrics_cpu(container_stats, old_cpu[i][0],
+                                                             old_cpu[i][1], collection_errors)
             #
             # -----------------
             # MEM
-            try:
-                mem_usage = float(container_stats["memory_stats"]["usage"] / 1024 / 1024)
-                mem_limit = float(container_stats["memory_stats"]["limit"] / 1024 / 1024)
-                if round(mem_limit, 2) == 0.00:
-                    mem_percent = 0.00
-                else:
-                    mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
-            except (IndexError, KeyError, ValueError) as e:
-                collection_errors.append("Mem")
-                mem_percent = mem_usage = mem_limit = 0.00
-
+            mem_percent, mem_usage, mem_limit = self.collect_container_metrics_mem(container_stats, collection_errors)
             #
             # -----------------
             # NET
-            net_in = net_out = 0.0
-            if "networks" in container_stats:
-                net_in = sum(container_stats["networks"][iface]["rx_bytes"]
-                             for iface in container_stats["networks"]) / 1000 / 1000
-                net_out = sum(container_stats["networks"][iface]["tx_bytes"]
-                              for iface in container_stats["networks"]) / 1000 / 1000
-
+            net_in, net_out = self.collect_container_metrics_net(container_stats)
             #
             # -----------------
             # BLOCK
-            io_bytes_recursive = container_stats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
-            if io_bytes_recursive:
-                try:
-                    blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
-                except Exception as e:
-                    collection_errors.append("blk_in")
-                    blk_in = 0.0
-
-                try:
-                    blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
-                except Exception as e:
-                    collection_errors.append("blk_out")
-                    blk_out = 0.0
-            else:
-                blk_out = blk_in = 0.0
+            blk_out, blk_in = self.collect_container_metrics_block(container_stats, collection_errors)
 
             if collection_errors:
                 logging.error(f"Cannot get {','.join(collection_errors)} stats for container {container.name}")
@@ -1030,11 +1089,11 @@ class DockerClient(ContainerRuntimeClient):
 
             environment.append(env_var)
 
+        nuvlabox_containers = list(filter(lambda x: x.id != myself.id, nuvlabox_containers))
         for container in nuvlabox_containers:
             c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
-                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir and \
-                    container.id != myself.id:
+                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir:
                 config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
                 environment += container.attrs.get('Config', {}).get('Env', [])
 
@@ -1152,7 +1211,6 @@ class DockerClient(ContainerRuntimeClient):
 
         k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
-
         try:
             ca = k3s["clusters"][0]["cluster"]["certificate-authority-data"]
             cert = k3s["users"][0]["user"]["client-certificate-data"]
@@ -1201,6 +1259,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             args = { args_list[i].split('=')[0]: args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
         except IndexError:
+            # should never get into this exception, but keep it anyway, just to be safe
             logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
             return k8s_cluster_info
 
@@ -1240,6 +1299,7 @@ class DockerClient(ContainerRuntimeClient):
 class NuvlaBoxCommon():
     """ Common set of methods and variables for the NuvlaBox agent
     """
+
     def __init__(self, shared_data_volume="/srv/nuvlabox/shared"):
         """ Constructs an Infrastructure object, with a status placeholder
 
@@ -1251,68 +1311,17 @@ class NuvlaBoxCommon():
         self.hostfs = "/rootfs"
         self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
         self.host_user_home_file = f'{self.data_volume}/.host_user_home'
-        if os.path.exists(self.host_user_home_file):
-            with open(self.host_user_home_file) as userhome:
-                self.installation_home = userhome.read().strip()
-        else:
-            self.installation_home = os.environ.get('HOST_HOME')
-
-        nuvla_endpoint_raw = None
-        nuvla_endpoint_insecure_raw = None
+        self.installation_home = self.set_installation_home(self.host_user_home_file)
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
         self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
         self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
-
-        if os.path.exists(self.nuvlabox_nuvla_configuration):
-            with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
-                for line in nuvla_conf.read().split():
-                    try:
-                        if line:
-                            line_split = line.split('=')
-                            if self.nuvla_endpoint_key == line_split[0]:
-                                nuvla_endpoint_raw = line_split[1]
-                            if self.nuvla_endpoint_insecure_key == line_split[0]:
-                                nuvla_endpoint_insecure_raw = bool(line_split[1])
-                    except IndexError:
-                        pass
-
-        if not nuvla_endpoint_raw:
-            nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
-
-        while nuvla_endpoint_raw[-1] == "/":
-            nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
-
-        self.nuvla_endpoint = nuvla_endpoint_raw.replace("https://", "")
-
-        if not nuvla_endpoint_insecure_raw:
-            nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
-
-        if isinstance(nuvla_endpoint_insecure_raw, str):
-            if nuvla_endpoint_insecure_raw.lower() == "false":
-                nuvla_endpoint_insecure_raw = False
-            else:
-                nuvla_endpoint_insecure_raw = True
-        else:
-            nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
-
-        self.nuvla_endpoint_insecure = nuvla_endpoint_insecure_raw
-
+        self.nuvla_endpoint, self.nuvla_endpoint_insecure = self.set_nuvla_endpoint()
         # Also store the Nuvla connection details for future restarts
-        if not os.path.exists(self.nuvlabox_nuvla_configuration):
-            with open(self.nuvlabox_nuvla_configuration, 'w') as nuvla_conf:
-                conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
-                nuvla_conf.write(conf)
+        conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
+        self.save_nuvla_configuration(self.nuvlabox_nuvla_configuration, conf)
 
-        if ORCHESTRATOR == 'kubernetes':
-            self.container_runtime = KubernetesClient(self.hostfs, self.installation_home)
-            self.mqtt_broker_host = f"data-gateway.{self.container_runtime.namespace}"
-        else:
-            self.mqtt_broker_host = "data-gateway"
-            if os.path.exists(self.docker_socket_file):
-                self.container_runtime = DockerClient(self.hostfs, self.installation_home)
-            else:
-                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
-
+        self.container_runtime = self.set_runtime_client_details()
+        self.mqtt_broker_host = self.container_runtime.data_gateway_name
         self.activation_flag = "{}/.activated".format(self.data_volume)
         self.swarm_manager_token_file = "swarm-manager-token"
         self.swarm_worker_token_file = "swarm-worker-token"
@@ -1330,7 +1339,6 @@ class NuvlaBoxCommon():
         self.context = ".context"
         self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
         self.vpn_folder = "{}/vpn".format(self.data_volume)
-
         if not os.path.isdir(self.vpn_folder):
             os.makedirs(self.vpn_folder)
 
@@ -1343,25 +1351,9 @@ class NuvlaBoxCommon():
         self.mqtt_broker_keep_alive = 90
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
         self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
-
-        if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
-            self.nuvlabox_id = os.environ['NUVLABOX_UUID']
-        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
-            try:
-                self.nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
-            except json.decoder.JSONDecodeError as e:
-                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
-                                f'{self.data_volume}/{self.context}: {str(e)}')
-        else:
-            # self.nuvlabox_id = get_mac_address('eth0', '')
-            raise Exception(f'NUVLABOX_UUID not provided')
-
-        if not self.nuvlabox_id.startswith("nuvlabox/"):
-            self.nuvlabox_id = 'nuvlabox/{}'.format(self.nuvlabox_id)
-
-        self.nuvlabox_engine_version = None
-        if 'NUVLABOX_ENGINE_VERSION' in os.environ and os.environ['NUVLABOX_ENGINE_VERSION']:
-            self.nuvlabox_engine_version = str(os.environ['NUVLABOX_ENGINE_VERSION'])
+        self.nuvlabox_id = self.set_nuvlabox_id()
+        nbe_version = os.getenv('NUVLABOX_ENGINE_VERSION')
+        self.nuvlabox_engine_version = str(nbe_version) if nbe_version else None
 
         # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
         # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
@@ -1396,8 +1388,100 @@ class NuvlaBoxCommon():
                 }
             }
         }
-
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
+
+    @staticmethod
+    def set_installation_home(host_user_home_file: str) -> str:
+        """
+        Finds the path for the HOME dir used during installation
+
+        :param host_user_home_file: location of the file where the previous installation home value was saved
+        :return: installation home path
+        """
+        if os.path.exists(host_user_home_file):
+            with open(host_user_home_file) as userhome:
+                return userhome.read().strip()
+        else:
+            return os.environ.get('HOST_HOME')
+
+    def set_nuvla_endpoint(self) -> tuple:
+        """
+        Defines the Nuvla endpoint based on the environment
+
+        :return: clean Nuvla endpoint and whether it is insecure or not -> (str, bool)
+        """
+        nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
+        nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
+        try:
+            with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
+                local_nuvla_conf = nuvla_conf.read().split()
+
+            nuvla_endpoint_line = list(filter(lambda x: x.startswith(self.nuvla_endpoint_key), local_nuvla_conf))
+            if nuvla_endpoint_line:
+                nuvla_endpoint_raw = nuvla_endpoint_line[0].split('=')[-1]
+
+            nuvla_endpoint_insecure_line = list(filter(lambda x: x.startswith(self.nuvla_endpoint_insecure_key),
+                                                       local_nuvla_conf))
+            if nuvla_endpoint_insecure_line:
+                nuvla_endpoint_insecure_raw = nuvla_endpoint_insecure_line[0].split('=')[-1]
+        except FileNotFoundError:
+            logging.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaBox Engine...')
+        except IndexError as e:
+            logging.debug(f'Unable to read Nuvla configuration from {self.nuvlabox_nuvla_configuration}: {str(e)}')
+
+        while nuvla_endpoint_raw[-1] == "/":
+            nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
+
+        if isinstance(nuvla_endpoint_insecure_raw, str):
+            if nuvla_endpoint_insecure_raw.lower() == "false":
+                nuvla_endpoint_insecure_raw = False
+            else:
+                nuvla_endpoint_insecure_raw = True
+        else:
+            nuvla_endpoint_insecure_raw = bool(nuvla_endpoint_insecure_raw)
+
+        return nuvla_endpoint_raw.replace("https://", ""), nuvla_endpoint_insecure_raw
+
+    @staticmethod
+    def save_nuvla_configuration(file_path, content):
+        if not os.path.exists(file_path):
+            with open(file_path, 'w') as f:
+                f.write(content)
+
+    def set_runtime_client_details(self) -> ContainerRuntimeClient:
+        """
+        Sets the right container runtime client based on the underlying orchestrator, and sets the Data Gateway name
+        :return: instance of a ContainerRuntimeClient
+        """
+        if ORCHESTRATOR == 'kubernetes':
+            return KubernetesClient(self.hostfs, self.installation_home)
+        else:
+            if os.path.exists(self.docker_socket_file):
+                return DockerClient(self.hostfs, self.installation_home)
+            else:
+                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
+
+    def set_nuvlabox_id(self) -> str:
+        """
+        Discovers the NuvlaBox ID either from env or from a previous run
+
+        :return: clean nuvlabox ID as a str
+        """
+        if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
+            nuvlabox_id = os.environ['NUVLABOX_UUID']
+        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
+            try:
+                nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
+            except json.decoder.JSONDecodeError as e:
+                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
+                                f'{self.data_volume}/{self.context}: {str(e)}')
+        else:
+            raise Exception(f'NUVLABOX_UUID not provided')
+
+        if not nuvlabox_id.startswith("nuvlabox/"):
+            nuvlabox_id = 'nuvlabox/{}'.format(nuvlabox_id)
+
+        return nuvlabox_id
 
     @staticmethod
     def get_api_keys():
@@ -1425,7 +1509,7 @@ class NuvlaBoxCommon():
         """
 
         try:
-            self.api().add('event', data=data)
+            self.api().add('event', data)
         except Exception as e:
             logging.error(f'Unable to push event to Nuvla: {data}. Reason: {str(e)}')
 
@@ -1449,6 +1533,51 @@ class NuvlaBoxCommon():
         p = Popen(cmd, stdout=PIPE, stderr=PIPE)
         stdout, stderr = p.communicate()
         return {'stdout': stdout, 'stderr': stderr, 'returncode': p.returncode}
+
+    @staticmethod
+    def write_json_to_file(file_path: str, content: dict, mode: str = 'w') -> bool:
+        """
+        Write JSON content into a file
+
+        :param file_path: path of the file to be written
+        :param content: JSON content
+        :param mode: mode in which to open the file for writing
+        :return: True if file was written with success. False otherwise
+        """
+        try:
+            with open(file_path, mode) as f:
+                f.write(json.dumps(content))
+        except Exception as e:
+            logging.exception(f'Exception in write_json_to_file: {e}')
+            return False
+
+        return True
+
+    @staticmethod
+    def read_json_file(file_path: str) -> dict:
+        """
+        Reads a JSON file. Error should be caught by the calling module
+
+        :param file_path: path of the file to be read
+        :return: content of the file, as a dict
+        """
+        with open(file_path) as f:
+            return json.load(f)
+
+    def get_nuvlabox_version(self) -> int:
+        """
+        Gives back this NuvlaBox Engine's version
+
+        :return: major version of the NuvlaBox Engine, as an integer
+        """
+        if self.nuvlabox_engine_version:
+            version = int(self.nuvlabox_engine_version.split('.')[0])
+        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
+            version = self.read_json_file(f"{self.data_volume}/{self.context}")['version']
+        else:
+            version = 2
+
+        return version
 
     def get_operational_status(self):
         """ Retrieves the operational status of the NuvlaBox from the .status file """
@@ -1610,8 +1739,3 @@ ${vpn_endpoints_mapped}
 
         self.write_vpn_conf(vpn_values)
         return True
-
-
-
-
-

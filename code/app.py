@@ -83,7 +83,8 @@ def preflight_check(activation_class_object: Activate, infra_class_object: Infra
         refresh_interval = nuvlabox_resource['refresh-interval']
         logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
         nuvlabox_info_updated_date = nuvlabox_resource['updated']
-        activation_class_object.create_nb_document_file(nuvlabox_resource)
+        old_nuvlabox_resource = activation_class_object.create_nb_document_file(nuvlabox_resource)
+        activation_class_object.vpn_commission_if_needed(nuvlabox_resource, old_nuvlabox_resource)
 
     # if there's a mention to the VPN server, then watch the VPN credential
     if nuvlabox_resource.get("vpn-server-id"):
@@ -313,7 +314,9 @@ if __name__ == "__main__":
         # this NuvlaBox hasn't been activated yet
         user_info = activation.activate()
 
-    nuvlabox_status_id = activation.update_nuvlabox_resource()
+    nuvlabox_resource, old_nuvlabox_resource = activation.update_nuvlabox_resource()
+    nuvlabox_status_id = nuvlabox_resource["nuvlabox-status"]
+    activation.vpn_commission_if_needed(nuvlabox_resource, old_nuvlabox_resource)
 
     telemetry = Telemetry(data_volume, nuvlabox_status_id)
     infra = Infrastructure(data_volume)
