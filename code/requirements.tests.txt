@@ -1,8 +1,8 @@
-mock
-pytest
-nuvla-api
+psutil
 requests
+nuvla-api>=3.0.4
 docker
 kubernetes
-psutil
 paho-mqtt
+mock
+pytest
