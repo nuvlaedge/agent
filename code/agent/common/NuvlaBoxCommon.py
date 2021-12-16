@@ -1498,7 +1498,7 @@ class NuvlaBoxCommon():
         """ Returns an Api object """
 
         return Api(endpoint='https://{}'.format(self.nuvla_endpoint),
-                   insecure=self.nuvla_endpoint_insecure, reauthenticate=True)
+                   insecure=self.nuvla_endpoint_insecure, reauthenticate=True, compress=True)
 
     def push_event(self, data):
         """

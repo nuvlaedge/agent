@@ -1,8 +1,8 @@
-requests
+-r requirements.base.txt
 docker
-nuvla-api
-psutil==5.6.6
 Flask==1.0.0
-paho-mqtt
-six
 kubernetes
+nuvla-api>=3.0.4
+paho-mqtt
+requests
+six
