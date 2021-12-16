@@ -1,4 +1,9 @@
 # Changelog
+## [2.5.0] - 2021-12-16
+### Added 
+ - Enable compression when sending data to api-server
+### Changed
+ - Code refactor and bufixes
 ## [2.4.1] - 2021-11-29
 ### Added
 ### Changed
