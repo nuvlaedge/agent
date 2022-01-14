@@ -171,8 +171,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         # if not equal, raise exception
         with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
             os.environ['NUVLABOX_UUID'] = 'nuvlabox/fake-id-2'
-            self.assertRaises(Exception, self.obj.set_nuvlabox_id,
-                              'Failed to check that an old NuvlaBox installation was already in place')
+            self.assertRaises(RuntimeError, self.obj.set_nuvlabox_id)
 
         # if they are the same, all good
         with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"id": "fake-id-2"}')):
