@@ -1467,8 +1467,6 @@ class NuvlaBoxCommon():
 
         :return: clean nuvlabox ID as a str
         """
-        # if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
-        #     nuvlabox_id = os.environ['NUVLABOX_UUID']
         new_nuvlabox_id = os.getenv('NUVLABOX_UUID')
 
         if os.path.exists("{}/{}".format(self.data_volume, self.context)):
