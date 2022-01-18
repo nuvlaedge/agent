@@ -1080,6 +1080,7 @@ class DockerClient(ContainerRuntimeClient):
             raise
 
         config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
+        last_update = myself.attrs.get('Created', '')
         working_dir = myself.labels['com.docker.compose.project.working_dir']
         project_name = myself.labels['com.docker.compose.project']
         environment = []
@@ -1094,7 +1095,9 @@ class DockerClient(ContainerRuntimeClient):
             c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
                     c_labels.get('com.docker.compose.project.working_dir', '') == working_dir:
-                config_files += c_labels.get('com.docker.compose.project.config_files', '').split(',')
+                if container.attrs.get('Created', '') > last_update:
+                    last_update = container.attrs.get('Created', '')
+                    config_files = c_labels.get('com.docker.compose.project.config_files', '').split(',')
                 environment += container.attrs.get('Config', {}).get('Env', [])
 
         unique_config_files = list(filter(None, set(config_files)))
