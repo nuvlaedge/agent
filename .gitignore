@@ -45,3 +45,5 @@ pom.xml.asc
 
 __pycache__
 test-report.xml
+
+.lsp

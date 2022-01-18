@@ -1467,14 +1467,21 @@ class NuvlaBoxCommon():
 
         :return: clean nuvlabox ID as a str
         """
-        if 'NUVLABOX_UUID' in os.environ and os.environ['NUVLABOX_UUID']:
-            nuvlabox_id = os.environ['NUVLABOX_UUID']
-        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
+        new_nuvlabox_id = os.getenv('NUVLABOX_UUID')
+
+        if os.path.exists("{}/{}".format(self.data_volume, self.context)):
             try:
                 nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
+                if new_nuvlabox_id and new_nuvlabox_id.split('/')[-1] != nuvlabox_id.split('/')[-1]:
+                    raise RuntimeError(f'You are trying to install a new NuvlaBox {new_nuvlabox_id} even though a '
+                                       f'previous NuvlaBox installation ({nuvlabox_id}) still exists in the system! '
+                                       f'You can either delete the previous installation (removing all data volumes) or '
+                                       f'fix the NUVLABOX_UUID environment variable to match the old {nuvlabox_id}')
             except json.decoder.JSONDecodeError as e:
                 raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
                                 f'{self.data_volume}/{self.context}: {str(e)}')
+        elif new_nuvlabox_id:
+            nuvlabox_id = new_nuvlabox_id
         else:
             raise Exception(f'NUVLABOX_UUID not provided')
 

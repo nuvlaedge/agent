@@ -167,9 +167,22 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
             self.assertEqual(self.obj.set_nuvlabox_id(), 'nuvlabox/fake-id',
                              'Unable to correctly get NuvlaBox ID from context file')
 
-        # and if provided by env, take it from there
-        os.environ['NUVLABOX_UUID'] = 'nuvlabox/fake-id-2'
-        self.assertEqual(self.obj.set_nuvlabox_id(), 'nuvlabox/fake-id-2',
+        # and if provided by env, compare it
+        # if not equal, raise exception
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
+            os.environ['NUVLABOX_UUID'] = 'nuvlabox/fake-id-2'
+            self.assertRaises(RuntimeError, self.obj.set_nuvlabox_id)
+
+        # if they are the same, all good
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"id": "fake-id-2"}')):
+            os.environ['NUVLABOX_UUID'] = 'nuvlabox/fake-id-2'
+            self.assertEqual(self.obj.set_nuvlabox_id(), 'nuvlabox/fake-id-2',
+                             'Failed to check that the provided NUVLABOX_UUID env var is the same as the existing one')
+
+        # if old file does not exist but env is provided, take it
+        mock_exists.return_value = False
+        os.environ['NUVLABOX_UUID'] = 'nuvlabox/fake-id-3'
+        self.assertEqual(self.obj.set_nuvlabox_id(), 'nuvlabox/fake-id-3',
                          'Unable to correctly get NuvlaBox ID from env')
 
     def test_get_api_keys(self):
