@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import datetime
 import json
 import subprocess
 import docker
@@ -545,6 +546,15 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
                          sorted(new_agent_container.labels['com.docker.compose.project.config_files'].split(',')),
                          'Installation config files are not reported correctly')
+
+        # we only take the config-files from the last updated container
+        updated_container = fake.MockContainer()
+        updated_container.attrs['Created'] = datetime.datetime.utcnow().isoformat()
+        updated_container.labels['com.docker.compose.project.config_files'] = 'c.yml'
+        mock_containers_list.return_value = [new_agent_container, updated_container]
+        self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
+                         ['c.yml'],
+                         'Installation config files are not reported correctly after an update')
 
         # finally, if one of the compose file labels are missing from the agent_container, we get None
         new_agent_container.labels['com.docker.compose.project'] = None
