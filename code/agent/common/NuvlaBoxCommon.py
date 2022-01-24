@@ -302,6 +302,15 @@ class ContainerRuntimeClient(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_all_nuvlabox_components(self) -> list:
+        """
+        Finds the names of all NuvlaBox components installed on the edge device
+
+        :return: list of components' names
+        """
+        pass
+
 class KubernetesClient(ContainerRuntimeClient):
     """
     Kubernetes client
@@ -694,6 +703,10 @@ class KubernetesClient(ContainerRuntimeClient):
         # For k8s installations, we might want to see if there's also Docker running alongside
         # TODO
         return {}
+
+    def get_all_nuvlabox_components(self) -> list:
+        # TODO
+        return []
 
 #
 class DockerClient(ContainerRuntimeClient):
@@ -1293,6 +1306,12 @@ class DockerClient(ContainerRuntimeClient):
             return {}
 
         return k8s_cluster_info
+
+    def get_all_nuvlabox_components(self) -> list:
+        nuvlabox_containers = self.client.containers.list(filters={'label': 'nuvlabox.component=True'},
+                                                          all=True)
+
+        return list(map(lambda y: y.name, nuvlabox_containers))
 
 
 # --------------------
