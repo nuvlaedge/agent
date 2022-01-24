@@ -830,3 +830,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=k8s_process)):
             self.assertTrue(set(is_fields).issubset(list(self.obj.infer_if_additional_coe_exists().keys())),
                             'Got unexpected K8s COE IS fields')
+
+    @mock.patch('docker.models.containers.ContainerCollection.list')
+    def test_get_all_nuvlabox_components(self, mock_containers_list):
+        mock_containers_list.return_value = [fake.MockContainer(myid='fake-container')]
+        self.assertEqual(self.obj.get_all_nuvlabox_components(), ['fake-container'],
+                         'Failed to get all NuvlaBox containers')
