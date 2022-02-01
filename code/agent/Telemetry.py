@@ -153,7 +153,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             'container-plugins': None,
             'kubelet-version': None,
             'current-time': '',
-            'id': None
+            'id': None,
+            'components': None
         }
         self._status = MonitoredDict('Telemetry.status', self.status_default.copy())
         self._status_on_nuvla  = MonitoredDict('Telemetry.status_on_nuvla')
@@ -594,6 +595,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             body['vulnerabilities'] = formatted_vulnerabilities
 
+    def set_status_components(self, body: dict):
+        """
+        Sets the name of the NuvlaBox components currently installed in the edge device
+
+        :param body: payload for the nuvlabox-status update request
+        """
+        components = self.container_runtime.get_all_nuvlabox_components()
+        if components:
+            body['components'] = components
+
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
 
@@ -648,6 +659,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # - VULNERABILITIES attr
         self.set_status_vulnerabilities(status_for_nuvla)
+
+        # - COMPONENTS attr
+        self.set_status_components(status_for_nuvla)
 
         # - CURRENT TIME attr
         status_for_nuvla['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
