@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import datetime
 import json
 import subprocess
 import docker
@@ -546,6 +547,15 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                          sorted(new_agent_container.labels['com.docker.compose.project.config_files'].split(',')),
                          'Installation config files are not reported correctly')
 
+        # we only take the config-files from the last updated container
+        updated_container = fake.MockContainer()
+        updated_container.attrs['Created'] = datetime.datetime.utcnow().isoformat()
+        updated_container.labels['com.docker.compose.project.config_files'] = 'c.yml'
+        mock_containers_list.return_value = [new_agent_container, updated_container]
+        self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
+                         ['c.yml'],
+                         'Installation config files are not reported correctly after an update')
+
         # finally, if one of the compose file labels are missing from the agent_container, we get None
         new_agent_container.labels['com.docker.compose.project'] = None
         mock_containers_get.return_value = new_agent_container
@@ -830,3 +840,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data=k8s_process)):
             self.assertTrue(set(is_fields).issubset(list(self.obj.infer_if_additional_coe_exists().keys())),
                             'Got unexpected K8s COE IS fields')
+
+    @mock.patch('docker.models.containers.ContainerCollection.list')
+    def test_get_all_nuvlabox_components(self, mock_containers_list):
+        mock_containers_list.return_value = [fake.MockContainer(myid='fake-container')]
+        self.assertEqual(self.obj.get_all_nuvlabox_components(), ['fake-container'],
+                         'Failed to get all NuvlaBox containers')

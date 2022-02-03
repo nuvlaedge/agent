@@ -15,26 +15,41 @@ Arguments:
 :param v/volume: (optional) shared volume where all NuvlaBox data can be found
 """
 
+import argparse
 import socket
 import threading
 import json
 import logging
 import sys
-import agent.AgentApi as AgentApi
+import os
 import requests
 import time
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify
+from threading import Event
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
 from agent.Telemetry import Telemetry
 from agent.Infrastructure import Infrastructure
 from agent.Job import Job
-from threading import Event
 
 __copyright__ = "Copyright (C) 2019 SixSq"
 __email__ = "support@sixsq.com"
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="NuvlaBox Agent")
+    parser.add_argument('--debug', dest='debug', default=False, action='store_true',
+                        help='use for increasing the verbosity level')
+
+    if parser.parse_args().debug:
+        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    else:
+        try:
+            logging.basicConfig(stream=sys.stdout, level=logging.getLevelName(os.getenv('NUVLABOX_LOG_LEVEL')))
+        except ValueError:
+            logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
+# finish imports with logging
+import agent.AgentApi as AgentApi
 
 app = Flask(__name__)
 data_volume = "/srv/nuvlabox/shared"
