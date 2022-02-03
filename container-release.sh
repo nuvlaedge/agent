@@ -39,6 +39,7 @@ for platform in "${platforms[@]}"; do
            --opt build-arg:GIT_COMMIT_ID=${GITHUB_SHA} \
            --opt build-arg:GITHUB_RUN_NUMBER=${GITHUB_RUN_NUMBER} \
            --opt build-arg:GITHUB_RUN_ID=${GITHUB_RUN_ID} \
+           --opt build-arg:PROJECT_URL=${GIHUB_SERVER_URL}/${GITHUB_REPOSITORY} \
            --output type=docker,name=${MANIFEST}-${platform},dest=/tmp/work/target/${DOCKER_IMAGE}-${platform}.docker.tar \
            --local context=/tmp/work \
            --local dockerfile=/tmp/work \
