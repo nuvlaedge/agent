@@ -419,7 +419,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         body.update({
             "status": operational_status,
-            "status-notes": operational_status_notes,
+            "status-notes": list(filter(len, operational_status_notes)),
         })
 
     def set_status_ip(self, body: dict):
