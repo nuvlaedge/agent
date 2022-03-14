@@ -25,6 +25,7 @@ from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
+from agent.monitor.IPAddressMonitor import IPAddressTelemetry, NetworkTelemetryStructure
 
 
 class MonitoredDict(dict):
@@ -119,9 +120,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.enable_container_monitoring = enable_container_monitoring
         if enable_container_monitoring:
             self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-                                                            self.container_runtime,
-                                                            self.container_stats_json_file)
-            self.container_stats_monitor.setDaemon(True)
+                                                               self.container_runtime,
+                                                               self.container_stats_json_file)
+            self.container_stats_monitor.daemon = True
             self.container_stats_monitor.start()
 
         self.status_default = {
@@ -157,7 +158,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             'components': None
         }
         self._status = MonitoredDict('Telemetry.status', self.status_default.copy())
-        self._status_on_nuvla  = MonitoredDict('Telemetry.status_on_nuvla')
+        self._status_on_nuvla = MonitoredDict('Telemetry.status_on_nuvla')
 
         self.mqtt_telemetry = mqtt.Client()
 
@@ -175,14 +176,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 "coordinates_key": None,
                 "longitude_key": "lon",
                 "latitude_key": "lat",
-                "altitude_key": None
+                "altitude_key": None,
+                "ip": "query"
             },
             "ipinfo.io": {
                 "url": "https://ipinfo.io/json",
                 "coordinates_key": "loc",
                 "longitude_key": None,
                 "latitude_key": None,
-                "altitude_key": None
+                "altitude_key": None,
+                "ip": "ip"
             },
             "ipapi.co": {
                 "url": "https://ipapi.co/json",
@@ -204,6 +207,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # (to avoid network jittering and 3rd party service spamming)
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
+
+        # TODO: IP Gathering tests
+        self.network_monitor: IPAddressTelemetry = IPAddressTelemetry(self.vpn_ip_file,
+                                                                      self.vpn_ip_file,
+                                                                      self.container_runtime)
 
     @property
     def status_on_nuvla(self):
@@ -428,8 +436,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         :param body: payload for the nuvlabox-status update request
         """
+        self.network_monitor.update_data()
+
         ip = self.get_vpn_ip()
-        body["ip"] = ip if ip else self.container_runtime.get_api_ip_port()[0]
+        body["ip"] = self.network_monitor.data.public.ip
+        # body["ip"] = ip if ip else self.container_runtime.get_api_ip_port()[0]
 
     def set_status_coe_version(self, body: dict):
         """
