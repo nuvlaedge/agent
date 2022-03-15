@@ -1,9 +1,16 @@
 # Changelog
+## Unreleased
+### Added
+- New future data structure provided to IP interfaces. Still need to adapt server-side to enable it in Agent.
+- Added host device network interfaces reading. Using an auxiliary Docker container connected to host network.
+- Added public IP(v4&v6) reading via ping to external server.
+### Changed
+
 ## [2.5.0] - 2021-12-16
 ### Added 
  - Enable compression when sending data to api-server
 ### Changed
- - Code refactor and bufixes
+ - Code refactor and bugfixes
 ## [2.4.1] - 2021-11-29
 ### Added
 ### Changed

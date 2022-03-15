@@ -6,3 +6,4 @@ nuvla-api>=3.0.4
 paho-mqtt
 requests
 six
+pydantic==1.9.0

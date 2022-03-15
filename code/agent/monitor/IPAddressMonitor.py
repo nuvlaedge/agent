@@ -8,11 +8,12 @@ corresponding interface name. It will also report and handle the IP geolocation 
 """
 import time
 import json
-import docker
+import logging
+
 import requests
 
 from docker import errors
-from os import path, stat
+import os
 from pydantic import BaseModel, IPvAnyAddress
 from agent.monitor.Monitor import Monitor, BaseDataStructure
 from typing import Union, List, NoReturn, Dict
@@ -20,15 +21,27 @@ from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
 
 
 class NetworkInterface(BaseModel):
+    """
+    Pydantic BaseModel definition for Network interfaces. This includes public, vpn and swarm addresses
+    """
+
     iface_name: Union[str, None]
     ip: Union[IPvAnyAddress, None]
-    ip_v6: Union[IPvAnyAddress, None]
     default: bool = False
+    # Future feature, to include IPv6
+    # ip_v6: Union[IPvAnyAddress, None]
 
 
 class NetworkTelemetryStructure(BaseDataStructure):
+    """
+    Base model to gather all the IP addresses in the NuvlaEdge device
+        public: Public IPv4 and IPv6 addresses
+        local: Host device local interfaces and its corresponding IP addresses
+        vpn: VPN IPv4 address provided by OpenVpn server (If present)
+        swarm: SWARM node IP address (If present)
+    """
     public: NetworkInterface = NetworkInterface(iface_name="public")
-    local: Union[Dict[str, NetworkInterface], None] = {}
+    local: Dict[str, NetworkInterface] = {}
     vpn: Union[NetworkInterface, None]
     swarm: Union[NetworkInterface, None]
 
@@ -38,34 +51,35 @@ class IPAddressTelemetry(Monitor):
     Handles the retrieval of IP networking data
     """
 
-    def __init__(self, vpn_ip_file: str, local_ip_file: str,
-                 runtime_client: ContainerRuntimeClient):
+    def __init__(self, vpn_ip_file: str, runtime_client: ContainerRuntimeClient):
+
         self.custom_data: NetworkTelemetryStructure = NetworkTelemetryStructure(telemetry_name=self.__class__.__name__)
         super().__init__(self.__class__.__name__, self.custom_data)
-        self.updaters: List = [self.set_public_data, self.set_local_data, self.set_swarm_data]
+        self.updaters: List = [self.set_public_data, self.set_local_data, self.set_swarm_data, self.set_vpn_data]
         self.vpn_ip_file: str = vpn_ip_file
-        self.local_ip_file: str = local_ip_file
         self.runtime_client: ContainerRuntimeClient = runtime_client
-        # self.runtime_client = docker.from_env()
+        self.main_remote_api: str = "https://api.ipify.org?format=json"
 
     def set_public_data(self) -> NoReturn:
         """
         Reads the IP from the GeoLocation systems
         """
-        it_v4_response: requests.Response = requests.get("https://api.ipify.org?format=json")
-        it_v6_response: requests.Response = requests.get("https://api64.ipify.org?format=json")
+        try:
+            it_v4_response: requests.Response = requests.get(self.main_remote_api)
 
-        self.log.error("{} -- {}".format(it_v4_response.status_code,
-                                         it_v6_response.status_code))
+            if it_v4_response.status_code == 200:
+                self.custom_data.public.ip = json.loads(it_v4_response.content.decode("utf-8")).get("ip")
 
-        if it_v4_response.status_code == 200:
-            self.custom_data.public.ip = json.loads(it_v4_response.content.decode("utf-8")).get("ip")
+        except requests.Timeout as errorTimed:
+            self.log.error("Cannot retrieve public IP, connection to server timed out: {}".format(errorTimed))
 
-        if it_v6_response.status_code == 200:
-            self.custom_data.public.ip_v6 = json.loads(it_v6_response.content.decode("utf-8")).get("ip")
+        # Future feature, to include IPv6
+        # it_v6_response: requests.Response = requests.get("https://api64.ipify.org?format=json")
+        # Future feature, to include IPv6
+        # if it_v6_response.status_code == 200:
+        #     self.custom_data.public.ip_v6 = json.loads(it_v6_response.content.decode("utf-8")).get("ip")
 
-    @staticmethod
-    def parse_host_ip_json(iface_data: Dict) -> NetworkInterface:
+    def parse_host_ip_json(self, iface_data: Dict) -> NetworkInterface:
         """
         Receives a dict with the information of a host interface and returns a BaseModel data class
         of NetworkInterface
@@ -73,16 +87,13 @@ class IPAddressTelemetry(Monitor):
         @param iface_data: Single interface data entry.
         @return: NetworkInterface class
         """
-        it_ifname: str = iface_data.get("ifname", "")
-        # self.log.error(iface_data)
-        address_info: List = iface_data.get("addr_info", [])
-        if address_info:
-            it_local_addr: str = iface_data.get("addr_info", [])[0].get("local", "")
-
-            if address_info[0].get('family', "inet") == "inet":
-                return NetworkInterface(iface_name=it_ifname, ip=it_local_addr)
-            else:
-                return NetworkInterface(iface_name=it_ifname, ip_v6=it_local_addr)
+        try:
+            return NetworkInterface(iface_name=iface_data['dev'],
+                                    ip=iface_data['prefsrc'],
+                                    default=True if iface_data.get('dst', '') == 'default' else False
+                                    )
+        except KeyError as err:
+            self.log.warning("Interface key not found {}".format(err))
 
     def set_local_data(self) -> NoReturn:
         """
@@ -90,40 +101,52 @@ class IPAddressTelemetry(Monitor):
         output return
         """
         # TODO: Run container and read output return
-        t_time = time.time()
-        ip_info: str = ""
+        ip_route: str = ""
         try:
-            ip_info = self.runtime_client.client.containers.run(
+            ip_route = self.runtime_client.client.containers.run(
                 'sixsq/iproute2:0.0.1',
+                name="ip_aux_tools",
+                command="-j route",
                 remove=True,
-                command="-j a",
                 network="host"
             ).decode("utf-8")
 
         except errors.NotFound as imageNotFound:
             self.log.warning("Auxiliary IP reading image not found with error {}".format(imageNotFound.explanation))
+        except errors.ContainerError as containerError:
+            ...
+        except errors.APIError as dockerApiError:
+            ...
 
-        readable_info: List = []
+        # Gather default Gateway
+        readable_route: List = []
         try:
-            readable_info = json.loads(ip_info)
+            readable_route = json.loads(ip_route)
         except json.decoder.JSONDecodeError as jsonError:
-            self.log.warning("Error parsing IP info {} -- {}".format(ip_info, jsonError))
+            self.log.warning("Error parsing IP info -- {}".format(jsonError))
 
-        for j in readable_info:
-            it_ifname_data: NetworkInterface = self.parse_host_ip_json(j)
-            if it_ifname_data:
-                self.custom_data.local[it_ifname_data.iface_name] = it_ifname_data
+        if readable_route:
+            for route in readable_route:
 
-        print(time.time() - t_time)
-        ...
+                # Handle special cases
+                if route.get('dst', '127.').startswith('127.') or route.get('dev','') in self.custom_data.local.keys():
+                    continue
+
+                # Create new interface data structure
+                it_iface: NetworkInterface = self.parse_host_ip_json(route)
+                if it_iface:
+                    self.custom_data.local[it_iface.iface_name] = it_iface
 
     def set_vpn_data(self) -> NoReturn:
         """ Discovers the NuvlaBox VPN IP  """
 
-        if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
-            ip = str(open(self.vpn_ip_file).read().splitlines()[0])
-            self.custom_data.vpn.append(NetworkInterface(iface_name="vpn",
-                                                         ip=ip))
+        # Check if file exists and not empty
+        if os.path.exists(self.vpn_ip_file) and os.stat(self.vpn_ip_file).st_size != 0:
+            with open(self.vpn_ip_file, 'r') as file:
+                it_line = file.read()
+                ip = str(it_line.splitlines()[0])
+            self.custom_data.vpn = NetworkInterface(iface_name="vpn",
+                                                    ip=ip)
         else:
             self.log.warning("Cannot infer the NuvlaBox VPN IP!")
 
@@ -134,15 +157,29 @@ class IPAddressTelemetry(Monitor):
 
     def update_data(self) -> NoReturn:
         self.log.info("Updating IP data")
+        t_time = time.time()
         [i() for i in self.updaters]
+        self.log.error("IP gathering time: {}".format(time.time() - t_time))
+
         self.data = self.custom_data.copy(deep=True)
+        self.log.error(self.data.dict())
 
+    def get_data(self):
+        # TODO: Until server is adapted, we only return a single IP address as a string following the next priority.
+        # 1.- VPN
+        # 2.- Default Local Gateway
+        # 3.- Public
+        # 4.- Swarm
+        if self.data.vpn:
+            return str(self.data.vpn.ip)
 
-# x = IPAddressTelemetry()
-# t = time.time()
-# x.update_data()
-# print(time.time() - t)
-# print(x.data.public)
-# for k, v in x.data.local.items():
-#     print(k, v)
-# print(x.data.vpn)
+        if self.data.local:
+            for k, v in self.data.local.items():
+                if v.default:
+                    return str(v.ip)
+
+        if self.data.public.ip:
+            return str(self.data.public.ip)
+
+        if self.data.swarm:
+            return str(self.data.swarm.ip)

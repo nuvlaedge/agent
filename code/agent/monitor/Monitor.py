@@ -25,3 +25,7 @@ class Monitor(ABC):
     @abstractmethod
     def update_data(self):
         ...
+
+    @abstractmethod
+    def get_data(self):
+        ...

@@ -210,7 +210,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # TODO: IP Gathering tests
         self.network_monitor: IPAddressTelemetry = IPAddressTelemetry(self.vpn_ip_file,
-                                                                      self.vpn_ip_file,
                                                                       self.container_runtime)
 
     @property
@@ -439,7 +438,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.network_monitor.update_data()
 
         ip = self.get_vpn_ip()
-        body["ip"] = self.network_monitor.data.public.ip
+        body["ip"] = self.network_monitor.get_data()
+        logging.error(body["ip"])
         # body["ip"] = ip if ip else self.container_runtime.get_api_ip_port()[0]
 
     def set_status_coe_version(self, body: dict):
