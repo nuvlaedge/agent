@@ -45,17 +45,18 @@ class TestIPAddressMonitor(unittest.TestCase):
     def test_set_vpn_data(self):
         vpn_file = Mock()
         test_ip_monitor: IPAddressTelemetry = IPAddressTelemetry(vpn_file, Mock())
+        built_open: str = "builtins.open"
         with patch("os.stat") as stat_mock, \
                 patch("os.path.exists") as exists_mock:
             exists_mock.return_value = True
             stat_mock.return_value = Mock(st_size=30)
 
-            with patch("builtins.open", mock_open(read_data="192.168.0.1")):
+            with patch(built_open, mock_open(read_data="192.168.0.1")):
                 test_ip_monitor.set_vpn_data()
                 self.assertEqual(str(test_ip_monitor.custom_data.vpn.ip), "192.168.0.1")
 
-            with patch("builtins.open", mock_open(read_data="NOTANIP")):
-                with self.assertRaises(ValidationError) as content:
+            with patch(built_open, mock_open(read_data="NOTANIP")):
+                with self.assertRaises(ValidationError):
                     test_ip_monitor.set_vpn_data()
 
         with patch("os.stat") as stat_mock, \
@@ -63,7 +64,7 @@ class TestIPAddressMonitor(unittest.TestCase):
             exists_mock.return_value = True
             stat_mock.return_value = Mock(st_size=0)
 
-            with patch("builtins.open", mock_open(read_data="")):
+            with patch(built_open, mock_open(read_data="")):
                 test_ip_monitor.custom_data.vpn = NetworkInterface(iface_name="vpn")
                 test_ip_monitor.set_vpn_data()
                 self.assertIsNone(test_ip_monitor.custom_data.vpn.ip)

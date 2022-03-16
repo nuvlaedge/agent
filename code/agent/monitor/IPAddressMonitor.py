@@ -6,14 +6,12 @@ This class is devoted to finding and reporting IP addresses of the Host, Docker 
 corresponding interface name. It will also report and handle the IP geolocation system
 
 """
+import os
 import time
 import json
-import logging
-
 import requests
 
 from docker import errors
-import os
 from pydantic import BaseModel, IPvAnyAddress
 from agent.monitor.Monitor import Monitor, BaseDataStructure
 from typing import Union, List, NoReturn, Dict
@@ -100,7 +98,6 @@ class IPAddressTelemetry(Monitor):
         Runs the auxiliary container that reads the host network interfaces and parses the
         output return
         """
-        # TODO: Run container and read output return
         ip_route: str = ""
         try:
             ip_route = self.runtime_client.client.containers.run(
@@ -113,10 +110,12 @@ class IPAddressTelemetry(Monitor):
 
         except errors.NotFound as imageNotFound:
             self.log.warning("Auxiliary IP reading image not found with error {}".format(imageNotFound.explanation))
+
         except errors.ContainerError as containerError:
-            ...
+            self.log.warning("Container run error: {}".format(containerError))
+
         except errors.APIError as dockerApiError:
-            ...
+            self.log.warning("Docker API error: {}".format(dockerApiError))
 
         # Gather default Gateway
         readable_route: List = []
