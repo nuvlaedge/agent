@@ -27,7 +27,6 @@ from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
 from agent.monitor.IPAddressMonitor import IPAddressTelemetry
-from agent.common.NuvlaBoxCommon import NuvlaBoxCommon, ContainerRuntimeClient
 
 
 class MonitoredDict(dict):
@@ -74,7 +73,7 @@ class ContainerMonitoring(Thread):
         log: a logging object
     """
 
-    def __init__(self, q: queue.Queue, cr: ContainerRuntimeClient,
+    def __init__(self, q: queue.Queue, cr: NuvlaBoxCommon.ContainerRuntimeClient,
                  save_to: str = None, log: logging = logging):
         Thread.__init__(self)
         self.q = q
@@ -102,7 +101,7 @@ class ContainerMonitoring(Thread):
             time.sleep(10)
 
 
-class Telemetry(NuvlaBoxCommon):
+class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaBox and send all
     data into the respective NuvlaBox status at Nuvla

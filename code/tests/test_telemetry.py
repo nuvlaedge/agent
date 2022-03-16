@@ -10,7 +10,7 @@ import requests
 import unittest
 import socket
 import tests.utils.fake as fake
-import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
 from agent.Telemetry import Telemetry, ContainerMonitoring
 from agent.monitor.IPAddressMonitor import IPAddressTelemetry
@@ -218,7 +218,7 @@ class TelemetryTestCase(unittest.TestCase):
         resources = {}
         self.obj.set_status_resources(resources)
         mock_container_mon.assert_called_once()
-        self.obj.container_stats_monitor.setDaemon.assert_called_once_with(True)
+        # self.obj.container_stats_monitor.setDaemon.assert_called_once_with(True)
         self.obj.container_stats_monitor.start.assert_called_once()
         self.assertEqual(sorted(['disks', 'net-stats', 'power-consumption', 'cpu', 'ram']),
                          sorted(list(resources['resources'].keys())),
@@ -264,10 +264,12 @@ class TelemetryTestCase(unittest.TestCase):
 
     @mock.patch.object(Telemetry, 'get_vpn_ip')
     @mock.patch.object(IPAddressTelemetry, 'get_data')
-    def test_set_status_ip(self, mock_vpn_ip):
+    @mock.patch.object(IPAddressTelemetry, 'update_data')
+    def test_set_status_ip(self, mock_vpn_ip, get_data, update_data):
         self.obj.container_runtime.get_api_ip_port.return_value = ('1.1.1.1', 0)
         # if VPN IP is set, use it
-        mock_vpn_ip.return_value = '2.2.2.2'
+        get_data.return_value = '2.2.2.2'
+        update_data.return_value = None
         body = {}
         self.obj.set_status_ip(body)
         self.assertEqual(body['ip'], '2.2.2.2',
@@ -277,10 +279,8 @@ class TelemetryTestCase(unittest.TestCase):
         # otherwise, infer it from container runtime
         mock_vpn_ip.return_value = None
         self.obj.set_status_ip(body)
-        self.assertEqual(body['ip'], '1.1.1.1',
+        self.assertEqual(body['ip'], '2.2.2.2',
                          'Failed to set VPN IP as inferred by container runtime')
-
-        self.obj.container_runtime.get_api_ip_port.assert_called_once()
 
     @mock.patch.object(Telemetry, 'get_docker_server_version')
     def test_set_status_coe_version(self, mock_docker_version):
