@@ -12,7 +12,8 @@ import socket
 import tests.utils.fake as fake
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 import paho.mqtt.client as mqtt
-from agent.Telemetry import Telemetry
+from agent.Telemetry import Telemetry, ContainerMonitoring
+from agent.monitor.IPAddressMonitor import IPAddressTelemetry
 
 
 class TelemetryTestCase(unittest.TestCase):
@@ -23,6 +24,7 @@ class TelemetryTestCase(unittest.TestCase):
         fake_nuvlabox_common = fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon)
         setattr(fake_nuvlabox_common, 'container_runtime', mock.MagicMock())
         setattr(fake_nuvlabox_common, 'container_stats_json_file', 'fake-stats-file')
+        setattr(fake_nuvlabox_common, 'vpn_ip_file', 'fake-vpn-file')
         Telemetry.__bases__ = (fake_nuvlabox_common,)
 
         self.shared_volume = "mock/path"
@@ -261,6 +263,7 @@ class TelemetryTestCase(unittest.TestCase):
                          'Failed to set operational status to DEGRADED when there are reported errors')
 
     @mock.patch.object(Telemetry, 'get_vpn_ip')
+    @mock.patch.object(IPAddressTelemetry, 'get_data')
     def test_set_status_ip(self, mock_vpn_ip):
         self.obj.container_runtime.get_api_ip_port.return_value = ('1.1.1.1', 0)
         # if VPN IP is set, use it

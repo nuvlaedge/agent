@@ -21,11 +21,13 @@ import queue
 import time
 import inspect
 
+from docker.errors import APIError
 from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
-from agent.monitor.IPAddressMonitor import IPAddressTelemetry, NetworkTelemetryStructure
+from agent.monitor.IPAddressMonitor import IPAddressTelemetry
+from agent.common.NuvlaBoxCommon import NuvlaBoxCommon, ContainerRuntimeClient
 
 
 class MonitoredDict(dict):
@@ -45,7 +47,8 @@ class MonitoredDict(dict):
         caller = stack[2]
         cc = caller.code_context
         code_context = cc[0] if cc and len(cc) >= 1 else ''
-        logging.debug(f'{self.name}.{cls_fn_name} called by {caller.filename}:{caller.lineno} {caller.function} {code_context}')
+        logging.debug(
+            f'{self.name}.{cls_fn_name} called by {caller.filename}:{caller.lineno} {caller.function} {code_context}')
 
     def __setitem__(self, key, value):
         dict.__setitem__(self, key, value)
@@ -53,7 +56,7 @@ class MonitoredDict(dict):
         logging.debug(f'{self.name} set {key} = {value}')
 
     def __repr__(self):
-        return '%s(%s)' % (type(self).__name__,  dict.__repr__(self))
+        return '%s(%s)' % (type(self).__name__, dict.__repr__(self))
 
     def update(self, *args, **kwargs):
         dict.update(self, *args, **kwargs)
@@ -71,7 +74,7 @@ class ContainerMonitoring(Thread):
         log: a logging object
     """
 
-    def __init__(self, q: queue.Queue, cr: NuvlaBoxCommon.ContainerRuntimeClient,
+    def __init__(self, q: queue.Queue, cr: ContainerRuntimeClient,
                  save_to: str = None, log: logging = logging):
         Thread.__init__(self)
         self.q = q
@@ -99,7 +102,7 @@ class ContainerMonitoring(Thread):
             time.sleep(10)
 
 
-class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
+class Telemetry(NuvlaBoxCommon):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaBox and send all
     data into the respective NuvlaBox status at Nuvla
@@ -220,7 +223,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def status_on_nuvla(self, value):
         self._status_on_nuvla = MonitoredDict('Telemetry.status_on_nuvla', value)
         caller = inspect.stack()[1]
-        logging.debug(f'Telemetry.status_on_nuvla setter called by {caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
+        logging.debug(f'Telemetry.status_on_nuvla setter called by '
+                      f'{caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
         logging.debug(f'Telemetry.status_on_nuvla updated: {value}')
 
     @property
@@ -231,7 +235,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def status(self, value):
         self._status = MonitoredDict('Telemetry.status', value)
         caller = inspect.stack()[1]
-        logging.debug(f'Telemetry.status setter called by {caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
+        logging.debug(f'Telemetry.status setter called by '
+                      f'{caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
         logging.debug(f'Telemetry.status updated: {value}')
 
     def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
@@ -240,7 +245,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         :param nuvlabox_status: full dump of the NB status {}
         :param cpu: tuple (capacity, load)
         :param ram: tuple (capacity, used)
-        :param disk: list of {device: partition_name, capacity: value, used: value}
+        :param disks: list of {device: partition_name, capacity: value, used: value}
         :param energy: energy consumption metric
         """
 
@@ -359,8 +364,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # MEMORY
         ram_sample = {
-            "capacity": int(round(psutil.virtual_memory()[0]/1024/1024)),
-            "used": int(round(psutil.virtual_memory()[3]/1024/1024))
+            "capacity": int(round(psutil.virtual_memory()[0] / 1024 / 1024)),
+            "used": int(round(psutil.virtual_memory()[3] / 1024 / 1024))
         }
         ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
         ram.update(ram_sample)
@@ -372,9 +377,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         except queue.Empty:
             if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
                 self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-                                                                self.container_runtime,
-                                                                self.container_stats_json_file)
-                self.container_stats_monitor.setDaemon(True)
+                                                                   self.container_runtime,
+                                                                   self.container_stats_json_file)
+                self.container_stats_monitor.daemon = True
                 self.container_stats_monitor.start()
 
         # NETWORK
@@ -436,11 +441,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         :param body: payload for the nuvlabox-status update request
         """
         self.network_monitor.update_data()
-
-        ip = self.get_vpn_ip()
         body["ip"] = self.network_monitor.get_data()
-        logging.error(body["ip"])
-        # body["ip"] = ip if ip else self.container_runtime.get_api_ip_port()[0]
 
     def set_status_coe_version(self, body: dict):
         """
@@ -474,7 +475,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         try:
             all_cluster_nodes = self.container_runtime.list_nodes()
-        except docker.errors.APIError as e:
+        except APIError as e:
             logging.error(f'Cannot get Docker cluster nodes: {str(e)}')
         else:
             for node in all_cluster_nodes:
@@ -692,7 +693,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "memory-usage": psutil.virtual_memory()[2],
             "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
             "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
-            "disk": int(psutil.disk_usage('/')[0]/1024/1024/1024)
+            "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
         })
 
         return status_for_nuvla, all_status
@@ -725,7 +726,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             thermal_zone_file = f'{thermal_fs_path}/{subdirs}/type'
             temperature_file = f'{thermal_fs_path}/{subdirs}/temp'
             if not os.path.exists(thermal_zone_file) or not os.path.exists(temperature_file):
-                logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file}) values do not complement each other')
+                logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file})'
+                                f' values do not complement each other')
                 continue
 
             metric_basename, temperature_value = self.read_temperature_files(thermal_zone_file, temperature_file)
@@ -737,7 +739,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             try:
                 output.append({
                     "thermal-zone": metric_basename,
-                    "value": float(temperature_value)/1000})
+                    "value": float(temperature_value) / 1000})
             except (ValueError, TypeError) as e:
                 logging.warning(f'Cannot convert temperature at {temperature_file}. Reason: {str(e)}')
 
@@ -784,7 +786,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             if not os.path.exists(i2c_fs_path):
                 return []
 
-            i2c_addresses_found = [ addr for addr in os.listdir(i2c_fs_path) if re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr) ]
+            i2c_addresses_found = \
+                [addr for addr in os.listdir(i2c_fs_path) if re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr)]
             i2c_addresses_found.sort()
             channels = self.nvidia_software_power_consumption_model[driver]['channels']
             for nvidia_board, power_info in self.nvidia_software_power_consumption_model[driver]['boards'].items():
@@ -815,7 +818,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         rail_power_file = f'{metrics_folder_path}/in_power{channel}_input'
                         rail_critical_current_limit_file = f'{metrics_folder_path}/crit_current_limit_{channel}'
 
-                        # (filename, metricname, units)
+                        # (filename, metric name, units)
                         desired_metrics_files = [
                             (rail_current_file, f"{metric_basename}_current", "mA"),
                             (rail_voltage_file, f"{metric_basename}_voltage", "mV"),
@@ -825,7 +828,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
                         existing_metrics = os.listdir(metrics_folder_path)
 
-                        if not all(desired_metric[0].split('/')[-1] in existing_metrics for desired_metric in desired_metrics_files):
+                        if not all(desired_metric[0].split('/')[-1] in
+                                   existing_metrics for desired_metric in desired_metrics_files):
                             # one or more power metric files we need, are missing from the directory, skip them
                             continue
 
@@ -859,6 +863,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Parses one cell of the output from gpio readall, which has 2 pins
 
         :param indexes: the index numbers for the values of BCM, Name, Mode, V and Physical (in this order)
+        :param line:
 
         :returns a GPIO dict obj with the parsed pin"""
 
@@ -978,7 +983,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             elif isinstance(coordinates, list):
                 inferred_location = coordinates[::-1]
             else:
-                logging.warning(f"Cannot parse coordinates {coordinates} retrieved from geolocation service {ip_location_service_name}")
+                logging.warning(f"Cannot parse coordinates {coordinates} "
+                                f"retrieved from geolocation service {ip_location_service_name}")
                 raise TypeError
         else:
             longitude = geolocation_response[ip_location_service_info['longitude_key']]
@@ -1016,7 +1022,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 # if we got here, then we already have coordinates, no need for further queries
                 break
             except KeyError:
-                logging.exception(f"Cannot get coordination from geolocation JSON {geolocation}, with service {service}")
+                logging.exception(f"Cannot get coordination from geolocation JSON {geolocation}, "
+                                  f"with service {service}")
                 continue
             except:
                 logging.exception(f"Error while parsing geolocation from {service}")
@@ -1025,8 +1032,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if inferred_location:
             # we have valid coordinates, so let's keep a local record of it
             content = {"coordinates": inferred_location, "timestamp": now}
-            with open(self.ip_geolocation_file, 'w') as ipgeof:
-                ipgeof.write(json.dumps(content))
+            with open(self.ip_geolocation_file, 'w') as ip_geo:
+                ip_geo.write(json.dumps(content))
 
         return inferred_location
 
@@ -1090,11 +1097,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     #
                     # current - first + carry
                     rx_bytes_report = rx_bytes - \
-                                        self.first_net_stats[interface].get('bytes-received', 0) + \
-                                        self.first_net_stats[interface].get('bytes-received-carry', 0)
+                                      self.first_net_stats[interface].get('bytes-received', 0) + \
+                                      self.first_net_stats[interface].get('bytes-received-carry', 0)
                     tx_bytes_report = tx_bytes - \
-                                        self.first_net_stats[interface].get('bytes-transmitted', 0) + \
-                                        self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
+                                      self.first_net_stats[interface].get('bytes-transmitted', 0) + \
+                                      self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
             else:
                 rx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-received', 0)
                 tx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-transmitted', 0)
@@ -1128,8 +1135,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         output = []
         output_fallback = [{'device': 'overlay',
-                            'capacity': int(psutil.disk_usage('/')[0]/1024/1024/1024),
-                            'used': int(psutil.disk_usage('/')[1]/1024/1024/1024)
+                            'capacity': int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024),
+                            'used': int(psutil.disk_usage('/')[1] / 1024 / 1024 / 1024)
                             }]
 
         lsblk_command = ["lsblk", "--json", "-o", "NAME,SIZE,MOUNTPOINT,FSUSED", "-b", "-a"]
@@ -1149,14 +1156,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     if dev.get('mountpoint'):
                         # means it is mounted, so we can get its usage
                         try:
-                            capacity = round(int(dev['size'])/1024/1024/1024)
+                            capacity = round(int(dev['size']) / 1024 / 1024 / 1024)
 
                             # TODO: delete this condition once the Nuvla server starts accepting float values
                             if capacity <= 0:
                                 continue
 
                             fused = dev['fsused'] if dev.get('fsused') else "0"
-                            used = round(int(fused)/1024/1024/1024)
+                            used = round(int(fused) / 1024 / 1024 / 1024)
                             output.append({
                                 'device': dev['name'],
                                 'capacity': capacity,
