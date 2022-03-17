@@ -3,7 +3,7 @@
 
 import unittest
 from typing import List
-from random import randint
+from random import SystemRandom, randint
 from pydantic.error_wrappers import ValidationError
 from mock import Mock, mock_open, patch
 from agent.monitor.IPAddressMonitor import IPAddressTelemetry, NetworkInterface
@@ -11,7 +11,8 @@ from typing import Dict, Any
 
 
 def generate_random_ip_address():
-    it_str: List[str] = [str(randint(0, 255)) for _ in range(4)]
+    rand_bits = SystemRandom().getrandbits(8)
+    it_str: List[str] = [str(rand_bits) for _ in range(4)]
     return ".".join(it_str)
 
 
