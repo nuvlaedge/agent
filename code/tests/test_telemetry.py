@@ -14,6 +14,7 @@ from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
 from agent.Telemetry import Telemetry, ContainerMonitoring
 from agent.monitor.IPAddressMonitor import IPAddressTelemetry
+from tests.monitor.test_IPAdressMonitor import generate_random_ip_address
 
 
 class TelemetryTestCase(unittest.TestCase):
@@ -266,20 +267,22 @@ class TelemetryTestCase(unittest.TestCase):
     @mock.patch.object(IPAddressTelemetry, 'get_data')
     @mock.patch.object(IPAddressTelemetry, 'update_data')
     def test_set_status_ip(self, mock_vpn_ip, get_data, update_data):
-        self.obj.container_runtime.get_api_ip_port.return_value = ('1.1.1.1', 0)
+        it_ip_1: str = generate_random_ip_address()
+        it_ip_2: str = generate_random_ip_address()
+        self.obj.container_runtime.get_api_ip_port.return_value = (it_ip_1, 0)
         # if VPN IP is set, use it
-        get_data.return_value = '2.2.2.2'
+        get_data.return_value = it_ip_2
         update_data.return_value = None
         body = {}
         self.obj.set_status_ip(body)
-        self.assertEqual(body['ip'], '2.2.2.2',
+        self.assertEqual(body['ip'], it_ip_2,
                          'Failed to set VPN IP')
 
         self.obj.container_runtime.get_api_ip_port.assert_not_called()
         # otherwise, infer it from container runtime
         mock_vpn_ip.return_value = None
         self.obj.set_status_ip(body)
-        self.assertEqual(body['ip'], '2.2.2.2',
+        self.assertEqual(body['ip'], it_ip_2,
                          'Failed to set VPN IP as inferred by container runtime')
 
     @mock.patch.object(Telemetry, 'get_docker_server_version')

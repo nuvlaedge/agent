@@ -2,13 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import unittest
-
-import mock
+from typing import List
+from random import randint
 from pydantic.error_wrappers import ValidationError
 from mock import Mock, mock_open, patch
 from agent.monitor.IPAddressMonitor import IPAddressTelemetry, NetworkInterface
 from typing import Dict, Any
-from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
+
+
+def generate_random_ip_address():
+    it_str: List[str] = [str(randint(0, 255)) for _ in range(4)]
+    return ".".join(it_str)
+
 
 class TestIPAddressMonitor(unittest.TestCase):
 
@@ -20,12 +25,13 @@ class TestIPAddressMonitor(unittest.TestCase):
 
     def test_parse_host_ip_json(self):
         # Base test
+        it_ip: str = generate_random_ip_address()
         test_attribute: Dict[str, Any] = {
             "dev": "eth0",
-            "prefsrc": "192.168.0.1"
+            "prefsrc": it_ip
         }
         test_ip_monitor: IPAddressTelemetry = IPAddressTelemetry("file", Mock())
-        expected_result: NetworkInterface = NetworkInterface(iface_name="eth0", ip="192.168.0.1")
+        expected_result: NetworkInterface = NetworkInterface(iface_name="eth0", ip=it_ip)
         self.assertEqual(test_ip_monitor.parse_host_ip_json(test_attribute), expected_result)
 
         # Non-complete attributes tests
@@ -46,14 +52,15 @@ class TestIPAddressMonitor(unittest.TestCase):
         vpn_file = Mock()
         test_ip_monitor: IPAddressTelemetry = IPAddressTelemetry(vpn_file, Mock())
         built_open: str = "builtins.open"
+        it_ip: str = generate_random_ip_address()
         with patch("os.stat") as stat_mock, \
                 patch("os.path.exists") as exists_mock:
             exists_mock.return_value = True
             stat_mock.return_value = Mock(st_size=30)
 
-            with patch(built_open, mock_open(read_data="192.168.0.1")):
+            with patch(built_open, mock_open(read_data=it_ip)):
                 test_ip_monitor.set_vpn_data()
-                self.assertEqual(str(test_ip_monitor.custom_data.vpn.ip), "192.168.0.1")
+                self.assertEqual(str(test_ip_monitor.custom_data.vpn.ip), it_ip)
 
             with patch(built_open, mock_open(read_data="NOTANIP")):
                 with self.assertRaises(ValidationError):
@@ -71,12 +78,14 @@ class TestIPAddressMonitor(unittest.TestCase):
 
     def test_set_swarm_data(self):
         runtime_mock = Mock()
-        runtime_mock.get_api_ip_port.return_value = ('1.1.1.1', 0)
+        r_ip: str = generate_random_ip_address()
+        runtime_mock.get_api_ip_port.return_value = (r_ip, 0)
         test_ip_monitor: IPAddressTelemetry = IPAddressTelemetry("", runtime_mock)
         test_ip_monitor.set_swarm_data()
-        self.assertEqual(str(test_ip_monitor.data.swarm.ip), '1.1.1.1')
+        self.assertEqual(str(test_ip_monitor.data.swarm.ip), r_ip)
 
-        runtime_mock.get_api_ip_port.return_value = ('1.1.1.', 0)
+        it_ip = r_ip.split(".")
+        runtime_mock.get_api_ip_port.return_value = (".".join(it_ip[0:-1]), 0)
         with self.assertRaises(ValidationError):
             test_ip_monitor.set_swarm_data()
 
