@@ -101,7 +101,7 @@ class IPAddressTelemetry(Monitor):
         ip_route: str = ""
         try:
             ip_route = self.runtime_client.client.containers.run(
-                'sixsq/iproute2:0.0.1',
+                'sixsq/iproute2:latest',
                 name="ip_aux_tools",
                 command="-j route",
                 remove=True,
