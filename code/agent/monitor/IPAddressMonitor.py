@@ -151,8 +151,12 @@ class IPAddressTelemetry(Monitor):
 
     def set_swarm_data(self) -> NoReturn:
         """ Discovers the host SWARM IP address """
-        # self.custom_data.swarm.append(NetworkInterface(iface_name="swarm",
-        #                                                ip=self.runtime_client.get_api_ip_port()[0]))
+        it_ip: str = self.runtime_client.get_api_ip_port()[0]
+        self.custom_data.swarm = None
+        if it_ip:
+            self.custom_data.swarm = NetworkInterface(
+                iface_name="swarm",
+                ip=it_ip)
 
     def update_data(self) -> NoReturn:
         self.log.info("Updating IP data")

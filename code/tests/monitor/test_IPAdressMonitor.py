@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import logging
 import unittest
+
+import mock
 from pydantic.error_wrappers import ValidationError
 from mock import Mock, mock_open, patch
-from agent.monitor.IPAddressMonitor import IPAddressTelemetry, NetworkTelemetryStructure, NetworkInterface
+from agent.monitor.IPAddressMonitor import IPAddressTelemetry, NetworkInterface
 from typing import Dict, Any
-import os
-
+from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
 
 class TestIPAddressMonitor(unittest.TestCase):
 
@@ -70,4 +70,20 @@ class TestIPAddressMonitor(unittest.TestCase):
                 self.assertIsNone(test_ip_monitor.custom_data.vpn.ip)
 
     def test_set_swarm_data(self):
-        ...
+        runtime_mock = Mock()
+        runtime_mock.get_api_ip_port.return_value = ('1.1.1.1', 0)
+        test_ip_monitor: IPAddressTelemetry = IPAddressTelemetry("", runtime_mock)
+        test_ip_monitor.set_swarm_data()
+        self.assertEqual(str(test_ip_monitor.data.swarm.ip), '1.1.1.1')
+
+        runtime_mock.get_api_ip_port.return_value = ('1.1.1.', 0)
+        with self.assertRaises(ValidationError):
+            test_ip_monitor.set_swarm_data()
+
+        runtime_mock.get_api_ip_port.return_value = (None, None)
+        test_ip_monitor.set_swarm_data()
+        self.assertIsNone(test_ip_monitor.data.swarm)
+
+        runtime_mock.get_api_ip_port.return_value = None
+        with self.assertRaises(TypeError):
+            test_ip_monitor.set_swarm_data()
