@@ -8,7 +8,6 @@ resource in Nuvla.
 """
 
 import datetime
-import docker
 import logging
 import socket
 import json
@@ -26,7 +25,8 @@ from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
-from agent.monitor.IPAddressMonitor import IPAddressTelemetry
+from agent.monitor.components.network_interface_monitor import NetworkIfaceMonitor
+from agent.monitor.edge_status import EdgeStatus
 
 
 class MonitoredDict(dict):
@@ -210,9 +210,12 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Default to 1 hour
         self.time_between_get_geolocation = 3600
 
+        self.edge_status: EdgeStatus = EdgeStatus()
         # TODO: IP Gathering tests
-        self.network_monitor: IPAddressTelemetry = IPAddressTelemetry(self.vpn_ip_file,
-                                                                      self.container_runtime)
+        self.network_monitor: NetworkIfaceMonitor = \
+            NetworkIfaceMonitor(self.vpn_ip_file,
+                                self.container_runtime,
+                                self.edge_status)
 
     @property
     def status_on_nuvla(self):

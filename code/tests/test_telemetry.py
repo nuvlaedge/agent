@@ -12,8 +12,8 @@ import socket
 import tests.utils.fake as fake
 from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
-from agent.Telemetry import Telemetry, ContainerMonitoring
-from agent.monitor.IPAddressMonitor import IPAddressTelemetry
+from agent.Telemetry import Telemetry
+from agent.monitor.components.network_interface_monitor import NetworkIfaceMonitor
 from tests.monitor.test_IPAdressMonitor import generate_random_ip_address
 
 
@@ -264,8 +264,8 @@ class TelemetryTestCase(unittest.TestCase):
                          'Failed to set operational status to DEGRADED when there are reported errors')
 
     @mock.patch.object(Telemetry, 'get_vpn_ip')
-    @mock.patch.object(IPAddressTelemetry, 'get_data')
-    @mock.patch.object(IPAddressTelemetry, 'update_data')
+    @mock.patch.object(NetworkIfaceMonitor, 'get_data')
+    @mock.patch.object(NetworkIfaceMonitor, 'update_data')
     def test_set_status_ip(self, mock_vpn_ip, get_data, update_data):
         it_ip_1: str = generate_random_ip_address()
         it_ip_2: str = generate_random_ip_address()
