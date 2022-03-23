@@ -1,6 +1,5 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-""" Nuvlabox monitoring parent abstract class
+""" NuvlaBox monitoring parent abstract class.
 
 """
 import logging
@@ -14,7 +13,8 @@ class BaseDataStructure(BaseModel):
 
 class Monitor(ABC):
     """
-    Serves as a base class to facilitate and structure the telemetry gathering along the device
+    Serves as a base class to facilitate and structure the telemetry gathering
+    on the device.
     """
     def __init__(self, name: str, data: BaseDataStructure):
         self.name: str = name
