@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """ NuvlaBox Telemetry
@@ -8,23 +7,24 @@ resource in Nuvla.
 """
 
 import datetime
-import logging
-import socket
+import inspect
 import json
+import logging
 import os
+import paho.mqtt.client as mqtt
 import psutil
+import queue
 import re
 import requests
-import paho.mqtt.client as mqtt
-import queue
+import socket
 import time
-import inspect
 
 from docker.errors import APIError
-from agent.common import NuvlaBoxCommon
 from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
+
+from agent.common import NuvlaBoxCommon
 from agent.monitor.components.network_interface_monitor import NetworkIfaceMonitor
 from agent.monitor.edge_status import EdgeStatus
 

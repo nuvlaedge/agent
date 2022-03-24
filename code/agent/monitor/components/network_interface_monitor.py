@@ -6,19 +6,18 @@ Docker Container, and VPN along with their corresponding interface names.
 It also reports and handles the IP geolocation system.
 
 """
+import json
 import os
 import time
-import json
 from typing import List, NoReturn, Dict, Union
 
 import requests
 from docker import errors as docker_err
 
-
-from agent.monitor.edge_status import EdgeStatus
-from agent.monitor.monitor import Monitor
 from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface
+from agent.monitor.edge_status import EdgeStatus
+from agent.monitor.monitor import Monitor
 
 
 class NetworkIfaceMonitor(Monitor):

@@ -3,14 +3,17 @@
 
 """
 import logging
-from typing import Type
 from abc import ABC, abstractmethod
+from typing import Type
 
 from pydantic import BaseModel
 
 
 class BaseDataStructure(BaseModel):
-    """ Base data structure for providing a common configuration for all the strucures """
+    """
+    Base data structure for providing a common configuration for all the
+    structures.
+    """
 
     class Config:
         """ Configuration class for base telemetry data """
@@ -19,8 +22,8 @@ class BaseDataStructure(BaseModel):
 
 class Monitor(ABC):
     """
-    Serves as a base class to facilitate and structure the telemetry gathering along the
-    device
+    Serves as a base class to facilitate and structure the telemetry gathering
+    along the device.
     """
     def __init__(self, name: str, data_type: Type, enable_monitor: bool):
         self.name: str = name
@@ -54,7 +57,8 @@ class Monitor(ABC):
     @abstractmethod
     def update_data(self):
         """
-        General updater of the data attribute. To be implemented by class extension
+        General updater of the data attribute. To be implemented by class
+        extension.
         """
         ...
 
@@ -62,6 +66,6 @@ class Monitor(ABC):
     def get_data(self):
         """
         To be used as a getter in some special cases for Nuvla reporting.
-        Implemented by the class that requires it
+        Implemented by the class that requires it.
         """
         ...

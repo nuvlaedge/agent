@@ -1,4 +1,3 @@
-#!/usr/local/bin/python3.7
 # -*- coding: utf-8 -*-
 
 """ NuvlaBox Common
@@ -7,19 +6,21 @@ List of common attributes for all classes
 """
 
 import base64
-import os
 import json
-import socket
 import logging
+import os
 import requests
 import signal
+import socket
 import string
 import time
 import yaml
+
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from nuvla.api import Api
 from subprocess import run, PIPE, Popen, TimeoutExpired
+
+from nuvla.api import Api
 
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')

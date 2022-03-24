@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import unittest
-from typing import List, Dict, Any
 from random import SystemRandom
+from typing import List, Dict, Any
 
 import requests
-from mock import Mock, mock_open, patch
 from docker import errors as docker_err
+from mock import Mock, mock_open, patch
 
 from agent.monitor.components import network_interface_monitor as monitor
 from agent.monitor.data.network_data import NetworkInterface
