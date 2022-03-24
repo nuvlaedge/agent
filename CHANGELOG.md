@@ -1,4 +1,12 @@
 # Changelog
+## [2.6.0] - 2022-03-24
+### Added 
+ - Add org.opencontainers labels 
+ - Make logging level configurable
+### Changed
+ - Check if provided UUID is different from old one - avoid overwriting
+ - NuvlaBox log: add components to telemetry
+ - Only take the config files from the last update
 ## [2.5.0] - 2021-12-16
 ### Added 
  - Enable compression when sending data to api-server
