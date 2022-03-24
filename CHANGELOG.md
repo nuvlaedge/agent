@@ -1,11 +1,22 @@
 # Changelog
+
 ## Unreleased
 ### Added
-- New future data structure provided to IP interfaces. Still need to adapt server-side to enable it in Agent.
-- Added host device network interfaces reading. Using an auxiliary Docker container connected to host network.
+- New future data structure provided to IP interfaces. Still need to adapt
+  server-side to enable it in Agent.
+- Added host device network interfaces reading. Using an auxiliary Docker
+  container connected to host network.
 - Added public IP(v4&v6) reading via ping to external server.
 ### Changed
 
+## [2.6.0] - 2022-03-24
+### Added 
+ - Add org.opencontainers labels 
+ - Make logging level configurable
+### Changed
+ - Check if provided UUID is different from old one - avoid overwriting
+ - NuvlaBox log: add components to telemetry
+ - Only take the config files from the last update
 ## [2.5.0] - 2021-12-16
 ### Added 
  - Enable compression when sending data to api-server
