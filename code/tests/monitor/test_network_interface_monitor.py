@@ -216,7 +216,6 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
 
         # No data- return none
         self.assertIsNone(test_ip_monitor.get_data())
-        # test_ip_monitor.data = Mock()
         test_ip_monitor.data.vpn = Mock()
         test_ip_monitor.data.vpn.ip = "VPN_IP"
         self.assertIsNotNone(test_ip_monitor.get_data())
