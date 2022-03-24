@@ -9,14 +9,14 @@ It also reports and handles the IP geolocation system.
 import os
 import time
 import json
-import requests
+from typing import List, NoReturn, Dict, Union
 
-from docker import errors
+import requests
+from docker import errors as docker_err
 
 
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.monitor import Monitor
-from typing import List, NoReturn, Dict
 from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface
 
@@ -26,6 +26,8 @@ class NetworkIfaceMonitor(Monitor):
     Handles the retrieval of IP networking data.
     """
     _REMOTE_IPV4_API: str = "https://api.ipify.org?format=json"
+    _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
+    _IP_COMMAND: str = '-j route'
 
     def __init__(self, vpn_ip_file: str, runtime_client: ContainerRuntimeClient,
                  status: EdgeStatus):
@@ -56,8 +58,8 @@ class NetworkIfaceMonitor(Monitor):
                 self.data.public.ip = \
                     json.loads(it_v4_response.content.decode("utf-8")).get("ip")
 
-        except requests.Timeout as errorTimed:
-            reason = f'Connection to server timed out: {errorTimed}'
+        except requests.Timeout as ex:
+            reason: str = f'Connection to server timed out: {ex}'
             self.logger.error(f'Cannot retrieve public IP. {reason}')
 
         # TODO: Future feature, to include IPv6
@@ -68,7 +70,7 @@ class NetworkIfaceMonitor(Monitor):
         #     self.custom_data.public.ip_v6 =
         #     json.loads(it_v6_response.content.decode("utf-8")).get("ip")
 
-    def parse_host_ip_json(self, iface_data: Dict) -> NetworkInterface:
+    def parse_host_ip_json(self, iface_data: Dict) -> Union[NetworkInterface, None]:
         """
         Receives a dict with the information of a host interface and returns a
         BaseModel data class of NetworkInterface.
@@ -77,57 +79,71 @@ class NetworkIfaceMonitor(Monitor):
         @return: NetworkInterface class
         """
         try:
-            is_default_gw = True if iface_data.get('dst', '') == 'default' else False
+            is_default_gw = iface_data.get('dst', '') == 'default'
             return NetworkInterface(iface_name=iface_data['dev'],
                                     ip=iface_data['prefsrc'],
                                     default_gw=is_default_gw)
+
         except KeyError as err:
             self.logger.warning(f'Interface key not found {err}')
+            return None
+
+    def is_skip_route(self, it_route: Dict) -> bool:
+        """
+        Assess whether the IP route is a loopback or the interface is already
+        registered
+
+        Args:
+            it_route: single IP route report in
+
+        Returns:
+            True if the route is to be skipped
+        """
+        return it_route.get('dst', '127.').startswith('127.') or \
+               it_route.get('dev', '') in self.data.local.keys()
+
+    def gather_host_ip_route(self) -> Union[str, None]:
+        """
+        Gathers a json type string containing the host local network routing if
+        the container run is run successfully
+        Returns:
+            str if succeeds. None otherwise
+        """
+        try:
+            return self.runtime_client.client.containers.run(
+                self._AUXILIARY_DOCKER_IMAGE,
+                name="ip_aux_tools",
+                command=self._IP_COMMAND,
+                remove=True,
+                network="host"
+            ).decode("utf-8")
+
+        except (docker_err.ImageNotFound,
+                docker_err.ContainerError,
+                docker_err.APIError) as ex:
+            self.logger.warning(f'Local interface data auxiliary container '
+                                f'not run: {ex.explanation}')
+            return None
 
     def set_local_data(self) -> NoReturn:
         """
         Runs the auxiliary container that reads the host network interfaces and parses the
         output return
         """
-
-        def is_skip_route(r):
-            return r.get('dst', '127.').startswith('127.') or \
-                    r.get('dev', '') in self.data.local.keys()
-
-        ip_route: str = ""
-        try:
-            ip_route = self.runtime_client.client.containers.run(
-                'sixsq/iproute2:latest',
-                name="ip_aux_tools",
-                command="-j route",
-                remove=True,
-                network="host"
-            ).decode("utf-8")
-
-        except errors.NotFound as imageNotFound:
-            self.logger.warning(
-                f'Auxiliary IP reading image not found: {imageNotFound.explanation}')
-
-        except errors.ContainerError as containerError:
-            self.logger.warning(f'Container run error: {containerError}')
-
-        except errors.APIError as dockerApiError:
-            self.logger.warning(f'Docker API error: {dockerApiError}')
+        ip_route: str = self.gather_host_ip_route()
 
         # Gather default Gateway
         readable_route: List = []
         try:
             readable_route = json.loads(ip_route)
-        except json.decoder.JSONDecodeError as jsonError:
-            self.logger.warning(f'Failed parsing IP info: {jsonError}')
+        except json.decoder.JSONDecodeError as ex:
+            self.logger.warning(f'Failed parsing IP info: {ex}')
 
         if readable_route:
             for route in readable_route:
-
                 # Handle special cases
-                if is_skip_route(route):
+                if self.is_skip_route(route):
                     continue
-
                 # Create new interface data structure
                 it_iface: NetworkInterface = self.parse_host_ip_json(route)
                 if it_iface:
@@ -139,10 +155,11 @@ class NetworkIfaceMonitor(Monitor):
         # Check if file exists and not empty
         if os.path.exists(self.vpn_ip_file) and \
                 os.stat(self.vpn_ip_file).st_size != 0:
-            with open(self.vpn_ip_file, 'r') as file:
+            with open(self.vpn_ip_file, 'r', encoding='UTF-8') as file:
                 it_line = file.read()
-                ip = str(it_line.splitlines()[0])
-            self.data.vpn = NetworkInterface(iface_name="vpn", ip=ip)
+                ip_address: str = str(it_line.splitlines()[0])
+
+            self.data.vpn = NetworkInterface(iface_name="vpn", ip=ip_address)
         else:
             self.logger.warning("Cannot infer the NuvlaBox VPN IP!")
 
@@ -173,16 +190,19 @@ class NetworkIfaceMonitor(Monitor):
         # 2.- Default Local Gateway
         # 3.- Public
         # 4.- Swarm
+
         if self.data.vpn:
             return str(self.data.vpn.ip)
 
         if self.data.local:
-            for k, v in self.data.local.items():
-                if v.default_gw:
-                    return str(v.ip)
+            for _, iface_data in self.data.local.items():
+                if iface_data.default_gw:
+                    return str(iface_data.ip)
 
         if self.data.public.ip:
             return str(self.data.public.ip)
 
         if self.data.swarm:
             return str(self.data.swarm.ip)
+
+        return None

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """ NuvlaBox Edge Networking data structure
@@ -6,7 +5,7 @@
 Gathers all the requirements for status reporting
 """
 from typing import Union, Dict
-from pydantic import BaseModel, IPvAnyAddress, Field
+from pydantic import BaseModel
 from agent.monitor.monitor import BaseDataStructure
 
 
@@ -20,9 +19,9 @@ class NetworkInterface(BaseModel):
         device or not
     """
 
-    iface_name: Union[str, None] = Field(alias='iface-name')
-    ip: Union[IPvAnyAddress, None]
-    default_gw: bool = Field(False, alias='default-gw')
+    iface_name: Union[str, None]
+    ip: Union[str, None]
+    default_gw: bool = False
     # TODO: Future feature, to include IPv6
     # ip_v6: Union[IPvAnyAddress, None]
 

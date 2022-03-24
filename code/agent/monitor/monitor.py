@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """ Nuvlabox monitoring parent abstract class
 
@@ -14,6 +13,7 @@ class BaseDataStructure(BaseModel):
     """ Base data structure for providing a common configuration for all the strucures """
 
     class Config:
+        """ Configuration class for base telemetry data """
         allow_population_by_field_name = True
 
 
@@ -34,16 +34,34 @@ class Monitor(ABC):
 
     @property
     def enabled_monitor(self):
+        """
+        Getter for monitor flag
+
+        Returns: bool
+
+        """
         return self._enabled_monitor
 
     @enabled_monitor.setter
-    def enabled_monitor(self, value: bool):
-        self._enabled_monitor = value
+    def enabled_monitor(self, flag: bool):
+        """
+        Setter for monitor flag
+        Args:
+            flag: bool
+        """
+        self._enabled_monitor = flag
 
     @abstractmethod
     def update_data(self):
+        """
+        General updater of the data attribute. To be implemented by class extension
+        """
         ...
 
     @abstractmethod
     def get_data(self):
+        """
+        To be used as a getter in some special cases for Nuvla reporting.
+        Implemented by the class that requires it
+        """
         ...

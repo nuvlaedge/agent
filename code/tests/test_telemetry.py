@@ -14,7 +14,7 @@ from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
 from agent.Telemetry import Telemetry
 from agent.monitor.components.network_interface_monitor import NetworkIfaceMonitor
-from tests.monitor.test_IPAdressMonitor import generate_random_ip_address
+from tests.monitor.test_network_interface_monitor import generate_random_ip_address
 
 
 class TelemetryTestCase(unittest.TestCase):
@@ -219,7 +219,6 @@ class TelemetryTestCase(unittest.TestCase):
         resources = {}
         self.obj.set_status_resources(resources)
         mock_container_mon.assert_called_once()
-        # self.obj.container_stats_monitor.setDaemon.assert_called_once_with(True)
         self.obj.container_stats_monitor.start.assert_called_once()
         self.assertEqual(sorted(['disks', 'net-stats', 'power-consumption', 'cpu', 'ram']),
                          sorted(list(resources['resources'].keys())),
