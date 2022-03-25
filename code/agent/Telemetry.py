@@ -24,9 +24,12 @@ from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
 
-from agent.common import NuvlaBoxCommon
-from agent.monitor.components.network_interface_monitor import NetworkIfaceMonitor
+import agent
+import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+import agent.monitor.components.network as net_monitor
+# from agent.monitor.components.nuvlaedge_info import NuvlaEdgeInfoMonitor
 from agent.monitor.edge_status import EdgeStatus
+from agent.monitor.components import get_monitor, monitors
 
 
 class MonitoredDict(dict):
@@ -212,10 +215,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.edge_status: EdgeStatus = EdgeStatus()
         # TODO: IP Gathering tests
-        self.network_monitor: NetworkIfaceMonitor = \
-            NetworkIfaceMonitor(self.vpn_ip_file,
-                                self.container_runtime,
-                                self.edge_status)
+        self.monitor_list: list[agent.monitor.Monitor] = []
+        self.network_monitor: net_monitor.NetworkMonitor = \
+            net_monitor.NetworkMonitor('network', self, enable_monitor=True)
+
+        # TODO: Fix proper initialization
+        for x in monitors:
+            self.monitor_list.append(get_monitor(x)(x, self, True))
 
     @property
     def status_on_nuvla(self):
@@ -225,8 +231,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def status_on_nuvla(self, value):
         self._status_on_nuvla = MonitoredDict('Telemetry.status_on_nuvla', value)
         caller = inspect.stack()[1]
-        logging.debug(f'Telemetry.status_on_nuvla setter called by '
-                      f'{caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
+        logging.debug(f'Telemetry.status_on_nuvla setter called by {caller.filename}:'
+                      f'{caller.lineno} {caller.function} {caller.code_context}')
         logging.debug(f'Telemetry.status_on_nuvla updated: {value}')
 
     @property
@@ -443,7 +449,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         :param body: payload for the nuvlabox-status update request
         """
         self.network_monitor.update_data()
-        body["ip"] = self.network_monitor.get_data()
+        body["ip"] = self.network_monitor.populate_nb_report()
 
     def set_status_coe_version(self, body: dict):
         """
@@ -624,21 +630,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         status_for_nuvla = self.status_default.copy()
 
-        status_for_nuvla['id'] = self.nb_status_id
+        # status_for_nuvla['id'] = self.nb_status_id
+        for it_monitor in self.monitor_list:
+            it_monitor.update_data()
+
+        for it_monitor in self.monitor_list:
+            it_monitor.populate_nb_report(status_for_nuvla)
 
         node_info = self.container_runtime.get_node_info()
-        status_for_nuvla.update({
-            'operating-system': self.container_runtime.get_host_os(),
-            "architecture": self.container_runtime.get_host_architecture(node_info),
-            "hostname": self.container_runtime.get_hostname(node_info),
-            "last-boot": datetime.datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "container-plugins": self.container_runtime.get_container_plugins()
-        })
-        if self.installation_home:
-            status_for_nuvla['host-user-home'] = self.installation_home
-        # set the nb engine version if it exists
-        if self.nuvlabox_engine_version:
-            status_for_nuvla['nuvlabox-engine-version'] = self.nuvlabox_engine_version
 
         # get status for Nuvla
         # - RESOURCES attr
@@ -648,7 +647,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.set_status_operational_status(status_for_nuvla, node_info)
 
         # - IP attr
-        self.set_status_ip(status_for_nuvla)
+        # self.set_status_ip(status_for_nuvla)
 
         # - COE VERSIONS attrs
         self.set_status_coe_version(status_for_nuvla)
@@ -697,7 +696,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
             "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
         })
-
+        logging.error(json.dumps(status_for_nuvla, sort_keys=False, indent=4))
         return status_for_nuvla, all_status
 
     def get_docker_server_version(self):

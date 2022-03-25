@@ -7,7 +7,7 @@ import requests
 from docker import errors as docker_err
 from mock import Mock, mock_open, patch
 
-from agent.monitor.components import network_interface_monitor as monitor
+from agent.monitor.components import network as monitor
 from agent.monitor.data.network_data import NetworkInterface
 from agent.monitor.edge_status import EdgeStatus
 
@@ -24,16 +24,16 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
     def test_set_public_data(self):
         status = Mock()
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("file", Mock(), status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("file", Mock(), status)
         self.assertIsNone(test_ip_monitor.data.public.ip)
         test_ip_monitor.set_public_data()
         self.assertIsNotNone(test_ip_monitor.data.public.ip)
 
         # Test exception clause
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("file", Mock(), Mock())
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("file", Mock(), Mock())
         test_ip_monitor._REMOTE_IPV4_API = "empty"
         with self.assertRaises(requests.exceptions.MissingSchema):
             test_ip_monitor.set_public_data()
@@ -42,8 +42,8 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         # Test timeout
         with patch('requests.get') as get:
             get.side_effect = requests.Timeout
-            test_ip_monitor: monitor.NetworkIfaceMonitor = \
-                monitor.NetworkIfaceMonitor("file", Mock(), EdgeStatus())
+            test_ip_monitor: monitor.NetworkMonitor = \
+                monitor.NetworkMonitor("file", Mock(), EdgeStatus())
             test_ip_monitor.set_public_data()
             self.assertIsNone(test_ip_monitor.data.public.ip)
 
@@ -57,8 +57,8 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         }
         status = Mock()
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("file", Mock(), status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("file", Mock(), status)
         expected_result: NetworkInterface = \
             NetworkInterface(iface_name="eth0", ip=it_ip)
         self.assertEqual(test_ip_monitor.parse_host_ip_json(test_attribute),
@@ -76,15 +76,15 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         # Test Raise exception
         it_1 = Mock()
         it_1.client.containers.run.side_effect = docker_err.APIError("Not found")
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", it_1, EdgeStatus())
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", it_1, EdgeStatus())
         self.assertIsNone(test_ip_monitor.gather_host_ip_route())
 
         # Decode test
         runtime_mock = Mock()
         runtime_mock.client.containers.run.return_value = b'{}'
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", runtime_mock, EdgeStatus())
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", runtime_mock, EdgeStatus())
         self.assertIsInstance(test_ip_monitor.gather_host_ip_route(), str)
 
         runtime_mock.client.containers.run.return_value = '{}'
@@ -94,23 +94,23 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
     def test_set_local_data(self):
         status = Mock()
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", Mock(), status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", Mock(), status)
         test_ip_monitor.runtime_client.client.containers.run.return_value = b"{[]}"
         test_ip_monitor.set_local_data()
         self.assertFalse(test_ip_monitor.data.local)
 
         # Test readable route
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", Mock(), EdgeStatus())
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", Mock(), EdgeStatus())
         test_ip_monitor.is_skip_route = Mock(return_value=True)
         test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
         test_ip_monitor.set_local_data()
         self.assertEqual(test_ip_monitor.data.local, {})
 
         with patch('json.loads') as json_dict:
-            test_ip_monitor: monitor.NetworkIfaceMonitor = \
-                monitor.NetworkIfaceMonitor("", Mock(), EdgeStatus())
+            test_ip_monitor: monitor.NetworkMonitor = \
+                monitor.NetworkMonitor("", Mock(), EdgeStatus())
             test_ip_monitor.is_skip_route = Mock(return_value=False)
             test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
             it_address: str = generate_random_ip_address()
@@ -121,8 +121,8 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
             self.assertEqual(test_ip_monitor.data.local['eth0'].ip, it_address)
 
     def test_is_skip_route(self):
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", Mock(), EdgeStatus())
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", Mock(), EdgeStatus())
 
         self.assertTrue(test_ip_monitor.is_skip_route({}))
 
@@ -141,8 +141,8 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         vpn_file = Mock()
         status = Mock()
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor(vpn_file, Mock(), status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor(vpn_file, Mock(), status)
         built_open: str = "builtins.open"
         it_ip: str = generate_random_ip_address()
         with patch("os.stat") as stat_mock, \
@@ -171,8 +171,8 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         status = Mock()
         status.iface_data = None
         runtime_mock.get_api_ip_port.return_value = (r_ip, 0)
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", runtime_mock, status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", runtime_mock, status)
         test_ip_monitor.set_swarm_data()
         self.assertEqual(str(test_ip_monitor.data.swarm.ip), r_ip)
 
@@ -197,8 +197,8 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         # r_ip: str = generate_random_ip_address()
         status = Mock()
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", runtime_mock, status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", runtime_mock, status)
         test_ip_monitor.update_data()
 
         # Check public is called
@@ -211,18 +211,18 @@ class TestNetworkIfaceMonitor(unittest.TestCase):
         runtime_mock = Mock()
         status = Mock()
         status.iface_data = None
-        test_ip_monitor: monitor.NetworkIfaceMonitor = \
-            monitor.NetworkIfaceMonitor("", runtime_mock, status)
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", runtime_mock, status)
 
         # No data- return none
-        self.assertIsNone(test_ip_monitor.get_data())
+        self.assertIsNone(test_ip_monitor.populate_nb_report())
         test_ip_monitor.data.vpn = Mock()
         test_ip_monitor.data.vpn.ip = "VPN_IP"
-        self.assertIsNotNone(test_ip_monitor.get_data())
+        self.assertIsNotNone(test_ip_monitor.populate_nb_report())
 
         test_ip_monitor.data.public.ip = "PUB"
-        self.assertEqual('VPN_IP', test_ip_monitor.get_data())
+        self.assertEqual('VPN_IP', test_ip_monitor.populate_nb_report())
 
         test_ip_monitor.data.public.ip = "PUB"
         test_ip_monitor.data.vpn = None
-        self.assertEqual("PUB", test_ip_monitor.get_data())
+        self.assertEqual("PUB", test_ip_monitor.populate_nb_report())

@@ -5,11 +5,13 @@
 Gathers all the requirements for status reporting
 """
 from typing import Union, Dict
-from pydantic import BaseModel
-from agent.monitor.monitor import BaseDataStructure
+
+from pydantic import Field
+
+from agent.monitor import BaseDataStructure
 
 
-class NetworkInterface(BaseModel):
+class NetworkInterface(BaseDataStructure):
     """
     Pydantic BaseModel definition for Network interfaces. This includes public,
     vpn, and swarm addresses.
@@ -19,9 +21,9 @@ class NetworkInterface(BaseModel):
         device or not
     """
 
-    iface_name: Union[str, None]
+    iface_name: Union[str, None] = Field(alias='iface-name')
     ip: Union[str, None]
-    default_gw: bool = False
+    default_gw: bool = Field(False, alias='default-gw')
     # TODO: Future feature, to include IPv6
     # ip_v6: Union[IPvAnyAddress, None]
 

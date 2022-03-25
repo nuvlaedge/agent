@@ -14,13 +14,14 @@ from typing import List, NoReturn, Dict, Union
 import requests
 from docker import errors as docker_err
 
-from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
+from agent.common import NuvlaBoxCommon
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface
-from agent.monitor.edge_status import EdgeStatus
-from agent.monitor.monitor import Monitor
+from agent.monitor import Monitor
+from ..components import monitor
 
 
-class NetworkIfaceMonitor(Monitor):
+@monitor('network_monitor')
+class NetworkMonitor(Monitor):
     """
     Handles the retrieval of IP networking data.
     """
@@ -28,22 +29,23 @@ class NetworkIfaceMonitor(Monitor):
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND: str = '-j route'
 
-    def __init__(self, vpn_ip_file: str, runtime_client: ContainerRuntimeClient,
-                 status: EdgeStatus):
+    def __init__(self, name: str, telemetry, enable_monitor=True):
 
-        super().__init__(self.__class__.__name__, NetworkingData, enable_monitor=True)
+        super().__init__(name, NetworkingData, enable_monitor=enable_monitor)
 
         # List of network interfaces
         self.updaters: List = [self.set_public_data,
                                self.set_local_data,
                                self.set_swarm_data,
                                self.set_vpn_data]
-        self.vpn_ip_file: str = vpn_ip_file
-        self.runtime_client: ContainerRuntimeClient = runtime_client
+
+        self.vpn_ip_file: str = telemetry.vpn_ip_file
+        self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
+            telemetry.container_runtime
 
         # Initialize the corresponding data on the EdgeStatus class
-        if not status.iface_data:
-            status.iface_data = self.data
+        if not telemetry.edge_status.iface_data:
+            telemetry.edge_status.iface_data = self.data
 
     def set_public_data(self) -> NoReturn:
         """
@@ -175,14 +177,11 @@ class NetworkIfaceMonitor(Monitor):
         self.logger.info("Updating IP data")
         t_time = time.time()
         for updater in self.updaters:
-            try:
-                updater()
-            except Exception as ex:
-                self.logger.warning(f'Address seeking for {updater} interface'
-                                    f' raised error: {ex}')
+            updater()
+
         self.logger.info(f'IP gathering time: {time.time() - t_time}')
 
-    def get_data(self):
+    def populate_nb_report(self, nuvla_report: Dict):
         # TODO: Until server is adapted, we only return a single IP address as
         #       a string following the next priority.
         # 1.- VPN
@@ -191,17 +190,21 @@ class NetworkIfaceMonitor(Monitor):
         # 4.- Swarm
 
         if self.data.vpn:
+            nuvla_report['ip'] = str(self.data.vpn.ip)
             return str(self.data.vpn.ip)
 
         if self.data.local:
             for _, iface_data in self.data.local.items():
                 if iface_data.default_gw:
+                    nuvla_report['ip'] = str(iface_data.ip)
                     return str(iface_data.ip)
 
         if self.data.public.ip:
+            nuvla_report['ip'] = str(self.data.public.ip)
             return str(self.data.public.ip)
 
         if self.data.swarm:
+            nuvla_report['ip'] = str(self.data.swarm.ip)
             return str(self.data.swarm.ip)
 
         return None
