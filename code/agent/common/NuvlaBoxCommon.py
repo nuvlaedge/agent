@@ -1424,7 +1424,7 @@ class NuvlaBoxCommon():
 
         extra_config = os.getenv('VPN_CONFIG_EXTRA')
         if extra_config is not None:
-            extra_config.replace(r'\n', '\n')
+            extra_config = extra_config.replace(r'\n', '\n')
             try:
                 with open(extra_config_file, 'w') as f:
                     f.write(extra_config)

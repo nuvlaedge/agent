@@ -69,10 +69,10 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         # if not previously stored, read the extra config from the env, and save it into a file
         with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
             mock_open.side_effect = [FileNotFoundError, mock.MagicMock()]
-            os.environ.setdefault('VPN_CONFIG_EXTRA', 'extra')
-            self.assertEqual(self.obj.set_vpn_config_extra(), 'extra',
+            os.environ.setdefault('VPN_CONFIG_EXTRA', r'--allow-pull-fqdn\n--client-nat snat network netmask alias')
+            self.assertEqual(self.obj.set_vpn_config_extra(), '--allow-pull-fqdn\n--client-nat snat network netmask alias',
                              'Failed to read extra VPN config from environment variable')
-            self.assertEqual(mock_open.call_count, 2,
+            self.assertEqual(mock_open.call_count, 1,
                              'Failed to save extra VPN config from env into file')
 
     @mock.patch('os.path.exists')
