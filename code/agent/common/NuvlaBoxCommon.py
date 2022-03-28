@@ -1415,22 +1415,32 @@ class NuvlaBoxCommon():
 
     def set_vpn_config_extra(self) -> str:
         """
-        If any extra config was previously used, reuse it, otherwise take it from env
+        If env var VPN_CONFIG_EXTRA is set, update vpn configuration.
+        If not set, use the saved value from the shared volume.
 
         :return: extra config as a string
         """
         extra_config_file = f'{self.vpn_folder}/.extra_config'
 
+        extra_config = os.getenv('VPN_CONFIG_EXTRA')
+        if extra_config is not None:
+            extra_config.replace(r'\n', '\n')
+            try:
+                with open(extra_config_file, 'w') as f:
+                    f.write(extra_config)
+            except OSError:
+                logging.exception('Failed to write VPN extra config file')
+            return extra_config
+
         try:
             with open(extra_config_file) as f:
                 return f.read()
         except FileNotFoundError:
-            extra_config = os.getenv('VPN_CONFIG_EXTRA', '')
-            if extra_config:
-                with open(extra_config_file, 'w') as fw:
-                    fw.write(extra_config)
+            pass
+        except OSError:
+            logging.exception('Failed to read VPN extra config file')
 
-            return extra_config
+        return ''
 
     @staticmethod
     def set_installation_home(host_user_home_file: str) -> str:
