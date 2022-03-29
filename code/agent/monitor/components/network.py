@@ -8,7 +8,6 @@ It also reports and handles the IP geolocation system.
 """
 import json
 import os
-import time
 from typing import List, NoReturn, Dict, Union
 
 import requests
@@ -25,6 +24,7 @@ class NetworkMonitor(Monitor):
     """
     Handles the retrieval of IP networking data.
     """
+    # TODO: Might be better to let this class work as a thread
     _REMOTE_IPV4_API: str = "https://api.ipify.org?format=json"
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND: str = '-j route'
@@ -39,6 +39,9 @@ class NetworkMonitor(Monitor):
                                self.set_swarm_data,
                                self.set_vpn_data]
 
+        self.host_fs: str = telemetry.hostfs
+        self.first_net_stats: Dict = {}
+        self.previous_net_stats_file: str = telemetry.previous_net_stats_file
         self.vpn_ip_file: str = telemetry.vpn_ip_file
         self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
@@ -100,8 +103,8 @@ class NetworkMonitor(Monitor):
         Returns:
             True if the route is to be skipped
         """
-        return it_route.get('dst', '127.').startswith('127.') or \
-               it_route.get('dev', '') in self.data.local.keys()
+        return it_route.get('dst', '127.').startswith('127.') \
+               or it_route.get('dev', '') in self.data.local.keys()
 
     def gather_host_ip_route(self) -> Union[str, None]:
         """
@@ -126,6 +129,115 @@ class NetworkMonitor(Monitor):
                                 f'not run: {ex.explanation}')
             return None
 
+    def read_traffic_data(self) -> List:
+        """ Gets the list of net ifaces and corresponding rxbytes and txbytes
+
+            :returns [{"interface": "iface1", "bytes-transmitted": X,
+            "bytes-received": Y}, {"interface": "iface2", ...}]
+        """
+
+        sysfs_net = f"{self.host_fs}/sys/class/net"
+
+        try:
+            ifaces = os.listdir(sysfs_net)
+        except FileNotFoundError:
+            self.logger.warning("Cannot find network information for this device")
+            return []
+
+        previous_net_stats = {}
+        try:
+            with open(self.previous_net_stats_file, encoding='UTF-8') as pns:
+                previous_net_stats = json.loads(pns.read())
+        except (FileNotFoundError, json.decoder.JSONDecodeError):
+            pass
+
+        net_stats = []
+        for interface in ifaces:
+            stats = f"{sysfs_net}/{interface}/statistics"
+            try:
+                with open(f"{stats}/rx_bytes", encoding='UTF-8') as rx_file:
+                    rx_bytes = int(rx_file.read())
+                with open(f"{stats}/tx_bytes", encoding='UTF-8') as tx_file:
+                    tx_bytes = int(tx_file.read())
+            except (FileNotFoundError, NotADirectoryError):
+                self.logger.warning(
+                    f"Cannot calculate net usage for interface {interface}")
+                continue
+
+            # we compute the net stats since the beginning of the NB lifetime
+            # and our counters reset on every NB restart
+            if interface in self.first_net_stats:
+                if rx_bytes < self.first_net_stats[interface].get('bytes-received', 0) \
+                        or tx_bytes < \
+                        self.first_net_stats[interface].get('bytes-transmitted', 0):
+
+                    # then the system counters were reset
+                    self.logger.warning(f'Host network counters seem to have '
+                                        f'been reset for network interface {interface}')
+
+                    if interface in previous_net_stats:
+                        # in this case, because the numbers no longer correlate,
+                        # we need to add up to the previous reported value
+                        rx_bytes_report = previous_net_stats[interface].get(
+                            'bytes-received', 0) + rx_bytes
+                        tx_bytes_report = previous_net_stats[interface].get(
+                            'bytes-transmitted', 0) + tx_bytes
+                    else:
+                        rx_bytes_report = rx_bytes
+                        tx_bytes_report = tx_bytes
+
+                    self.first_net_stats[interface] = {
+                        "bytes-transmitted": tx_bytes,
+                        "bytes-received": rx_bytes,
+                        "bytes-transmitted-carry": previous_net_stats.get(interface,
+                                                                          {}).get(
+                            'bytes-transmitted', 0),
+                        "bytes-received-carry": previous_net_stats.get(interface, {}).get(
+                            'bytes-received', 0),
+                    }
+                else:
+                    # then counters are still going. In this case we just need to do
+                    #
+                    # current - first + carry
+                    rx_bytes_report = rx_bytes - \
+                                      self.first_net_stats[interface].get(
+                                          'bytes-received', 0) + \
+                                      self.first_net_stats[interface].get(
+                                          'bytes-received-carry', 0)
+                    tx_bytes_report = \
+                        tx_bytes - \
+                        self.first_net_stats[interface].get('bytes-transmitted', 0) + \
+                        self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
+
+            else:
+                rx_bytes_report = previous_net_stats.get(interface, {}).get(
+                    'bytes-received', 0)
+                tx_bytes_report = previous_net_stats.get(interface, {}).get(
+                    'bytes-transmitted', 0)
+
+                self.first_net_stats[interface] = {
+                    "bytes-transmitted": tx_bytes,
+                    "bytes-received": rx_bytes,
+                    "bytes-transmitted-carry": tx_bytes_report,
+                    "bytes-received-carry": rx_bytes_report
+                }
+
+            previous_net_stats[interface] = {
+                "bytes-transmitted": tx_bytes_report,
+                "bytes-received": rx_bytes_report
+            }
+
+            net_stats.append({
+                "interface": interface,
+                "bytes-transmitted": tx_bytes_report,
+                "bytes-received": rx_bytes_report
+            })
+
+        with open(self.previous_net_stats_file, 'w', encoding='UTF-8') as pns:
+            pns.write(json.dumps(previous_net_stats))
+
+        return net_stats
+
     def set_local_data(self) -> NoReturn:
         """
         Runs the auxiliary container that reads the host network interfaces and parses the
@@ -133,8 +245,12 @@ class NetworkMonitor(Monitor):
         """
         ip_route: str = self.gather_host_ip_route()
 
+        if not ip_route:
+            return
+
         # Gather default Gateway
         readable_route: List = []
+
         try:
             readable_route = json.loads(ip_route)
         except json.decoder.JSONDecodeError as ex:
@@ -149,6 +265,14 @@ class NetworkMonitor(Monitor):
                 it_iface: NetworkInterface = self.parse_host_ip_json(route)
                 if it_iface:
                     self.data.local[it_iface.iface_name] = it_iface
+
+        # Update traffic data
+        it_traffic: List = self.read_traffic_data()
+        for iface_traffic in it_traffic:
+            it_name: str = iface_traffic.get("interface")
+            if it_name in self.data.local.keys():
+                self.data.local[it_name].tx_bytes = iface_traffic.get('bytes-transmitted')
+                self.data.local[it_name].rx_bytes = iface_traffic.get('bytes-received')
 
     def set_vpn_data(self) -> NoReturn:
         """ Discovers the NuvlaBox VPN IP  """
@@ -174,12 +298,11 @@ class NetworkMonitor(Monitor):
                 ip=it_ip)
 
     def update_data(self) -> NoReturn:
-        self.logger.info("Updating IP data")
-        t_time = time.time()
+        """
+        Iterates over the different interfaces and gathers the data
+        """
         for updater in self.updaters:
             updater()
-
-        self.logger.info(f'IP gathering time: {time.time() - t_time}')
 
     def populate_nb_report(self, nuvla_report: Dict):
         # TODO: Until server is adapted, we only return a single IP address as
@@ -188,6 +311,11 @@ class NetworkMonitor(Monitor):
         # 2.- Default Local Gateway
         # 3.- Public
         # 4.- Swarm
+        if not nuvla_report.get('resources'):
+            nuvla_report['resources'] = {}
+        nuvla_report['resources']['net-stats'] = \
+            [x.dict(by_alias=True, exclude={'ip', 'default_gw'})
+             for _, x in self.data.local.items()]
 
         if self.data.vpn:
             nuvla_report['ip'] = str(self.data.vpn.ip)

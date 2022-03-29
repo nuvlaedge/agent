@@ -276,15 +276,17 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         else:
             delete_attributes = _delete_attributes
 
-    logging.info('Refresh status: %s' % status)
+    logging.debug('Refresh status: %s' % status)
     if delete_attributes:
-        logging.info(f'Deleting the following attributes from NuvlaBox Status: {", ".join(delete_attributes)}')
+        logging.info(f'Deleting the following attributes from NuvlaBox Status: '
+                     f'{", ".join(delete_attributes)}')
 
     try:
         r = nb_instance.api().edit(nb_status_id,
                                    data=status,
                                    select=delete_attributes)
         nb_telemetry.status_on_nuvla.update(status)
+
     except:
         logging.error("Unable to update NuvlaBox status in Nuvla")
         raise

@@ -59,6 +59,7 @@ class ContainerRuntimeClient(ABC):
     """
     Base abstract class for the Docker and Kubernetes clients
     """
+    CLIENT_NAME: str
 
     @abstractmethod
     def __init__(self, host_rootfs, host_home):
@@ -312,6 +313,14 @@ class ContainerRuntimeClient(ABC):
         """
         pass
 
+    @abstractmethod
+    def get_client_version(self) -> str:
+        """
+        Retrieves the version of the operational orchestrator
+
+        :returns version of the orchestrator in string
+        """
+
 
 class KubernetesClient(ContainerRuntimeClient):
     """
@@ -320,7 +329,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
     def __init__(self, host_rootfs, host_home):
         super().__init__(host_rootfs, host_home)
-
+        self.CLIENT_NAME: str = 'Kubernetes'
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
@@ -663,7 +672,12 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_hostname(self, node_info=None):
         return self.host_node_name
 
+    def get_client_version(self):
+        # IMPORTANT: this is only implemented for this k8s client class
+        return self.get_node_info().status.node_info.kubelet_version
+
     def get_kubelet_version(self):
+        # TODO: Remove after testing
         # IMPORTANT: this is only implemented for this k8s client class
         return self.get_node_info().status.node_info.kubelet_version
 
@@ -718,12 +732,16 @@ class DockerClient(ContainerRuntimeClient):
 
     def __init__(self, host_rootfs, host_home):
         super().__init__(host_rootfs, host_home)
+        self.CLIENT_NAME: str = 'Docker'
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
         self.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.join_token_manager_keyname = 'swarm-token-manager'
         self.join_token_worker_keyname = 'swarm-token-worker'
         self.data_gateway_name = "data-gateway"
+
+    def get_client_version(self) -> str:
+        return self.client.version()['Version']
 
     def get_node_info(self):
         return self.client.info()
@@ -1046,7 +1064,11 @@ class DockerClient(ContainerRuntimeClient):
         out = []
         for i, c_stat in enumerate(docker_stats):
             container = all_containers[i]
-            container_stats = json.loads(next(c_stat))
+            try:
+                container_stats = json.loads(next(c_stat))
+            except StopIteration:
+                logging.exception('Containers finished, return')
+                continue
             collection_errors = []
 
             #
@@ -1627,11 +1649,15 @@ class NuvlaBoxCommon():
         return operational_status
 
     def get_operational_status_notes(self) -> list:
-        """ Retrieves the operational status notes of the NuvlaBox from the .status_notes file """
+        """
+        Retrieves the operational status notes of the NuvlaBox from the .status_notes
+        file
+        """
 
         notes = []
         try:
-            notes = open(f"{self.data_volume}/{self.status_notes_file}").read().splitlines()
+            notes = open(f"{self.data_volume}/{self.status_notes_file}").\
+                read().splitlines()
         except Exception as e:
             logging.warning(f"Error while reading operational status notes: {str(e)}")
 

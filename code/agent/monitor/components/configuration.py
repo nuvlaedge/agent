@@ -13,7 +13,7 @@ from agent.monitor.data.nuvlaedge_data import InstallationParametersData
 from ..components import monitor
 
 
-@monitor('nuvlaedge_info')
+@monitor('configuration_monitor')
 class ConfigurationMonitor(Monitor):
     """ NuvlaEdge information monitor class. """
     def __init__(self, name: str, telemetry,

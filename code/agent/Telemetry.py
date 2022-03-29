@@ -24,13 +24,11 @@ from os import path, stat
 from subprocess import run, PIPE, STDOUT
 from threading import Thread
 
-import agent
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 import agent.monitor.components.network as net_monitor
-# from agent.monitor.components.nuvlaedge_info import NuvlaEdgeInfoMonitor
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, monitors
-
+from agent.monitor import Monitor
 
 class MonitoredDict(dict):
     """
@@ -215,9 +213,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.edge_status: EdgeStatus = EdgeStatus()
         # TODO: IP Gathering tests
-        self.monitor_list: list[agent.monitor.Monitor] = []
-        self.network_monitor: net_monitor.NetworkMonitor = \
-            net_monitor.NetworkMonitor('network', self, enable_monitor=True)
+        self.monitor_list: list[Monitor] = []
 
         # TODO: Fix proper initialization
         for x in monitors:
@@ -337,8 +333,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             expiry_date_raw = output.stdout.strip().split('=')[-1]
             raw_format = '%b %d %H:%M:%S %Y %Z'
-
             return datetime.datetime.strptime(expiry_date_raw, raw_format).strftime(self.nuvla_timestamp_format)
+
         else:
             return None
 
@@ -379,16 +375,16 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         ram.update(ram_sample)
 
         # DOCKER STATS
-        container_stats = None
-        try:
-            container_stats = self.container_stats_queue.get(block=False)
-        except queue.Empty:
-            if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
-                self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-                                                                   self.container_runtime,
-                                                                   self.container_stats_json_file)
-                self.container_stats_monitor.daemon = True
-                self.container_stats_monitor.start()
+        # container_stats = None
+        # try:
+        #     container_stats = self.container_stats_queue.get(block=False)
+        # except queue.Empty:
+        #     if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
+        #         self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
+        #                                                            self.container_runtime,
+        #                                                            self.container_stats_json_file)
+        #         self.container_stats_monitor.daemon = True
+        #         self.container_stats_monitor.start()
 
         # NETWORK
         net_stats = self.get_network_info()
@@ -408,7 +404,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         conditional_resources = [
             ('disks', disks),
-            ('container-stats', container_stats),
+            # ('container-stats', container_stats),
             ('net-stats', net_stats),
             ('power-consumption', power_consumption)
         ]
@@ -435,195 +431,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             operational_status = 'DEGRADED'
 
         if not self.installation_home:
-            operational_status_notes.append("HOST_HOME not defined - SSH key management will not be functional")
+            operational_status_notes.append(
+                "HOST_HOME not defined - SSH key management will not be functional")
 
         body.update({
             "status": operational_status,
             "status-notes": operational_status_notes,
         })
-
-    def set_status_ip(self, body: dict):
-        """
-        Set the IP of the NuvlaBox for the telemetry update
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        self.network_monitor.update_data()
-        body["ip"] = self.network_monitor.populate_nb_report()
-
-    def set_status_coe_version(self, body: dict):
-        """
-        Set the version of Docker and Kubelet when possible and if present
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        docker_server_version = self.get_docker_server_version()
-        if docker_server_version:
-            body['docker-server-version'] = docker_server_version
-
-        try:
-            kubelet_version = self.container_runtime.get_kubelet_version()
-            if kubelet_version:
-                body['kubelet-version'] = kubelet_version
-        except (NameError, AttributeError):
-            # method not implemented - meaning this is a Docker installation. Just ignore it
-            pass
-
-    def get_cluster_manager_attrs(self, managers: list, node_id: str) -> tuple:
-        """
-        If this node is a manager, tries to get the WHOLE list of nodes in the cluster
-
-        :param managers: existing cluster managers
-        :param node_id: this node's ID
-        :return: tuple of (bool, list), to say if this node is a manager, and the whole list of cluster nodes
-        """
-        cluster_nodes = []
-        if node_id not in managers:
-            return False, cluster_nodes
-
-        try:
-            all_cluster_nodes = self.container_runtime.list_nodes()
-        except APIError as e:
-            logging.error(f'Cannot get Docker cluster nodes: {str(e)}')
-        else:
-            for node in all_cluster_nodes:
-                active_node_id = self.container_runtime.is_node_active(node)
-                if not active_node_id:
-                    continue
-                if active_node_id not in cluster_nodes:
-                    try:
-                        cluster_nodes.append(node.id)
-                    except AttributeError:
-                        continue
-
-            return True, cluster_nodes
-        return False, []
-
-    def set_status_cluster(self, body: dict, node: dict):
-        """
-        Gets and sets all the cluster attributes for the nuvlabox-status
-
-        :param body: payload for the nuvlabox-status update request
-        :param node: information about the underlying COE node
-        """
-
-        node_id = self.container_runtime.get_node_id(node)
-        cluster_id = self.container_runtime.get_cluster_id(node, f'cluster_{self.nuvlabox_id}')
-        cluster_managers = self.container_runtime.get_cluster_managers()
-
-        if node_id:
-            body["node-id"] = node_id
-            body["orchestrator"] = NuvlaBoxCommon.ORCHESTRATOR_COE
-            # assume it's a worker to begin with
-            body["cluster-node-role"] = "worker"
-
-        if cluster_id:
-            body["cluster-id"] = cluster_id
-
-        if cluster_managers:
-            body["cluster-managers"] = cluster_managers
-            if node_id:
-                cluster_join_addr = self.container_runtime.get_cluster_join_address(node_id)
-                if cluster_join_addr:
-                    body["cluster-join-address"] = cluster_join_addr
-
-        is_manager, cluster_nodes = self.get_cluster_manager_attrs(cluster_managers, node_id)
-        if is_manager:
-            body["cluster-node-role"] = "manager"
-
-        if len(cluster_nodes) > 0:
-            body['cluster-nodes'] = cluster_nodes
-
-    def set_status_installation_params(self, body: dict):
-        """
-        Sets the NuvlaBox installation parameters attribute in the nuvlabox-status
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        installation_params = self.get_installation_parameters()
-        if installation_params:
-            body['installation-parameters'] = installation_params
-
-    def set_status_coe_cert_expiration_date(self, body: dict):
-        """
-        Sets the COE certificate expiration date in the NuvlaBox Status
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
-            # can only infer this for Docker, cause for K8s, the certificates might be on different folders,
-            # depending on the installation tool (k0s vs k3s vs kubeadm ...)
-            try:
-                swarm_cert_expiration = self.get_swarm_node_cert_expiration_date()
-                if swarm_cert_expiration:
-                    body['swarm-node-cert-expiry-date'] = swarm_cert_expiration
-            except Exception as e:
-                logging.warning(f"Cannot infer Docker Swarm cert expiration date. Reason: {str(e)}")
-
-    def set_status_temperatures(self, body: dict):
-        """
-        Sets the device temperates in the NuvlaBox Status
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        temperatures = self.get_temperature()
-        if temperatures:
-            body['temperatures'] = temperatures
-
-    def set_status_gpio(self, body: dict):
-        """
-        Sets the GPIO pins information in the NuvlaBox Status
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        if self.gpio_utility:
-            # Get GPIO pins status
-            gpio_pins = self.get_gpio_pins()
-            if gpio_pins:
-                body['gpio-pins'] = gpio_pins
-
-    def set_status_inferred_location(self, body: dict):
-        """
-        Sets the inferred location of the NuvlaBox, in the NuvlaBox Status
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        inferred_location = self.get_ip_geolocation()
-        if inferred_location:
-            body['inferred-location'] = inferred_location
-
-    def set_status_vulnerabilities(self, body: dict):
-        """
-        Sets the vulnerabilities of the NuvlaBox, in the NuvlaBox Status
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        # get results from security scans
-        vulnerabilities = self.get_security_vulnerabilities()
-        if vulnerabilities is not None:
-            scores = list(filter((-1).__ne__, map(lambda v: v.get('vulnerability-score', -1), vulnerabilities)))
-            formatted_vulnerabilities = {
-                'summary': {
-                    'total': len(vulnerabilities),
-                    'affected-products': list(set(map(lambda v: v.get('product', 'unknown'), vulnerabilities)))
-                },
-                'items': sorted(vulnerabilities, key=lambda v: v.get('vulnerability-score', 0), reverse=True)[0:100]
-            }
-
-            if len(scores) > 0:
-                formatted_vulnerabilities['summary']['average-score'] = round(sum(scores) / len(scores), 2)
-
-            body['vulnerabilities'] = formatted_vulnerabilities
-
-    def set_status_components(self, body: dict):
-        """
-        Sets the name of the NuvlaBox components currently installed in the edge device
-
-        :param body: payload for the nuvlabox-status update request
-        """
-        components = self.container_runtime.get_all_nuvlabox_components()
-        if components:
-            body['components'] = components
 
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
@@ -632,7 +446,14 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # status_for_nuvla['id'] = self.nb_status_id
         for it_monitor in self.monitor_list:
-            it_monitor.update_data()
+            if it_monitor.is_thread and not it_monitor.is_alive():
+                logging.error(f'Starting monitor {it_monitor.name}')
+                it_monitor.start()
+            else:
+                init_time: float = time.time()
+                it_monitor.update_data()
+                logging.error(f'Monitor {it_monitor.name} process time '
+                              f'{time.time() - init_time}')
 
         for it_monitor in self.monitor_list:
             it_monitor.populate_nb_report(status_for_nuvla)
@@ -641,40 +462,37 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # get status for Nuvla
         # - RESOURCES attr
-        self.set_status_resources(status_for_nuvla)
+        # self.set_status_resources(status_for_nuvla)
 
         # - STATUS attrs
         self.set_status_operational_status(status_for_nuvla, node_info)
 
-        # - IP attr
-        # self.set_status_ip(status_for_nuvla)
-
         # - COE VERSIONS attrs
-        self.set_status_coe_version(status_for_nuvla)
+        # self.set_status_coe_version(status_for_nuvla)
 
         # - CLUSTER attrs
-        self.set_status_cluster(status_for_nuvla, node_info)
+        # self.set_status_cluster(status_for_nuvla, node_info)
 
         # - INSTALLATION PARAMETERS attr
-        self.set_status_installation_params(status_for_nuvla)
+        # self.set_status_installation_params(status_for_nuvla)
 
         # - COE CERT EXPIRATION attr
-        self.set_status_coe_cert_expiration_date(status_for_nuvla)
+        # self.set_status_coe_cert_expiration_date(status_for_nuvla)
 
         # - TEMPERATURES attr
-        self.set_status_temperatures(status_for_nuvla)
+        # self.set_status_temperatures(status_for_nuvla)
 
         # - GPIO PINS attr
-        self.set_status_gpio(status_for_nuvla)
+        # self.set_status_gpio(status_for_nuvla)
 
         # - LOCATION attr
-        self.set_status_inferred_location(status_for_nuvla)
+        # self.set_status_inferred_location(status_for_nuvla)
 
         # - VULNERABILITIES attr
-        self.set_status_vulnerabilities(status_for_nuvla)
+        # self.set_status_vulnerabilities(status_for_nuvla)
 
         # - COMPONENTS attr
-        self.set_status_components(status_for_nuvla)
+        # self.set_status_components(status_for_nuvla)
 
         # - CURRENT TIME attr
         status_for_nuvla['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
@@ -696,80 +514,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
             "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
         })
-        logging.error(json.dumps(status_for_nuvla, sort_keys=False, indent=4))
+        logging.error(json.dumps(status_for_nuvla, indent=4))
         return status_for_nuvla, all_status
-
-    def get_docker_server_version(self):
-        try:
-            return self.container_runtime.client.version()["Version"]
-        except:
-            return None
-
-    def get_temperature(self):
-        """ Attempts to retrieve temperature information, if it exists. The keys will vary depending on the
-        underlying host system.
-
-        :return: JSON with temperatures values for each Thermal Zone founded.
-        Example: [{"thermal-zone": "acpitz", "value": <float in Celsius> for x86_64}]
-        """
-
-        output = []
-
-        thermal_fs_path = f'{self.hostfs}/sys/devices/virtual/thermal'
-
-        if not os.path.exists(thermal_fs_path):
-            return psutil.sensors_temperatures() if hasattr(psutil, 'sensors_temperature') else output
-
-        all_dirs = os.listdir(thermal_fs_path)
-        temp_dirs = list(filter(lambda x: x.startswith('thermal'), all_dirs))
-
-        for subdirs in temp_dirs:
-            thermal_zone_file = f'{thermal_fs_path}/{subdirs}/type'
-            temperature_file = f'{thermal_fs_path}/{subdirs}/temp'
-            if not os.path.exists(thermal_zone_file) or not os.path.exists(temperature_file):
-                logging.warning(f'Thermal zone (at {thermal_zone_file}) and temperature (at {temperature_file})'
-                                f' values do not complement each other')
-                continue
-
-            metric_basename, temperature_value = self.read_temperature_files(thermal_zone_file, temperature_file)
-
-            if not metric_basename or not temperature_value:
-                logging.warning(f'Thermal zone {thermal_zone_file} or temperature {temperature_file} value is missing')
-                continue
-
-            try:
-                output.append({
-                    "thermal-zone": metric_basename,
-                    "value": float(temperature_value) / 1000})
-            except (ValueError, TypeError) as e:
-                logging.warning(f'Cannot convert temperature at {temperature_file}. Reason: {str(e)}')
-
-        return output
-
-    @staticmethod
-    def read_temperature_files(thermal_zone_file_path: str, temperature_file_path: str) -> tuple:
-        """
-        Reads files, extract temperature/thermal values and returns them
-
-        :param thermal_zone_file_path: path to thermal_zone_file
-        :param temperature_file_path: path to temperature_file
-        :return: (metric_basename, temperature_value)
-        """
-        with open(thermal_zone_file_path) as tzf:
-            try:
-                metric_basename = tzf.read().split()[0]
-            except:
-                logging.warning(f'Cannot read thermal zone at {thermal_zone_file_path}')
-                metric_basename = None
-
-        with open(temperature_file_path) as tf:
-            try:
-                temperature_value = tf.read().split()[0]
-            except:
-                logging.warning(f'Cannot read temperature at {temperature_file_path}')
-                temperature_value = None
-
-        return metric_basename, temperature_value
 
     def get_power_consumption(self):
         """ Attempts to retrieve power monitoring information, if it exists. It is highly dependant on the
@@ -847,341 +593,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         return output
 
-    def get_security_vulnerabilities(self):
-        """ Reads vulnerabilities from the security scans, from a file in the shared volume
-
-        :return: contents of the file
-        """
-
-        if os.path.exists(self.vulnerabilities_file):
-            with open(self.vulnerabilities_file) as vf:
-                return json.loads(vf.read())
-        else:
-            return None
-
-    @staticmethod
-    def parse_gpio_pin_cell(indexes, line):
-        """ Parses one cell of the output from gpio readall, which has 2 pins
-
-        :param indexes: the index numbers for the values of BCM, Name, Mode, V and Physical (in this order)
-        :param line:
-
-        :returns a GPIO dict obj with the parsed pin"""
-
-        # the expected list of attributes is
-        expected = [{"position": None, "type": int, "attribute": "BCM"},
-                    {"position": None, "type": str, "attribute": "NAME"},
-                    {"position": None, "type": str, "attribute": "MODE"},
-                    {"position": None, "type": int, "attribute": "VOLTAGE"}]
-
-        needed_indexes_len = 5
-
-        if len(indexes) < needed_indexes_len:
-            logging.error(f"Missing indexes needed to parse GPIO pin: {indexes}. Need {needed_indexes_len}")
-            return None
-
-        gpio_values = line.split('|')
-        gpio_pin = {}
-        try:
-            gpio_pin['pin'] = int(gpio_values[indexes[-1]])
-            # if we can get the physical pin, we can move on. Pin is the only mandatory attr
-
-            for i, exp in enumerate(expected):
-                try:
-                    cast_value = exp["type"](gpio_values[indexes[i]].rstrip().lstrip())
-
-                    if cast_value or cast_value == 0:
-                        gpio_pin[exp["attribute"].lower()] = cast_value
-                    else:
-                        continue
-                except ValueError:
-                    logging.debug(f"No suitable {exp['attribute']} value for pin {gpio_pin['pin']}")
-                    continue
-
-            return gpio_pin
-        except ValueError:
-            logging.warning(f"Unable to get GPIO pin status on {gpio_values}, index {indexes[-1]}")
-            return None
-        except:
-            # if there's any other issue while doing so, it means the provided argument is not valid
-            logging.exception(f"Invalid list of indexes {indexes} for GPIO pin in {line}. Cannot parse this pin")
-            return None
-
-    def get_gpio_pins(self):
-        """ Uses the GPIO utility to scan and get the current status of all GPIO pins in the device.
-        It then parses the output and gives back a list of pins
-
-        :returns list of JSONs, i.e. [{pin: 1, name: GPIO. 1, bcm: 4, mode: IN}, {pin: 7, voltage: 0, mode: ALT1}]"""
-
-        command = ["gpio", "readall"]
-        gpio_out = run(command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
-
-        if gpio_out.returncode != 0 or not gpio_out.stdout:
-            return None
-
-        trimmed_gpio_out = gpio_out.stdout.splitlines()[3:-3]
-
-        formatted_gpio_status = []
-        for gpio_line in trimmed_gpio_out:
-
-            # each line has two columns = 2 pins
-
-            first_pin_indexes = [1, 3, 4, 5, 6]
-            second_pin_indexes = [14, 11, 10, 9, 8]
-            first_pin = self.parse_gpio_pin_cell(first_pin_indexes, gpio_line)
-            if first_pin:
-                formatted_gpio_status.append(first_pin)
-
-            second_pin = self.parse_gpio_pin_cell(second_pin_indexes, gpio_line)
-            if second_pin:
-                formatted_gpio_status.append(second_pin)
-
-        return formatted_gpio_status
-
-    def reuse_previous_geolocation(self, time_now: int) -> dict:
-        """
-        Checks, based on the time elapsed since the last retrieval, if new geolocation must be inferred
-
-        :param time_now: current timestamp, used to calculate the time elapsed since the last location retrieval
-        :return: previous geolocation if there's no need to infer again. None otherwise
-        """
-        try:
-            with open(self.ip_geolocation_file) as ipgeof:
-                previous_geolocation_json = json.loads(ipgeof.read())
-
-            before = previous_geolocation_json["timestamp"]
-
-            if time_now - before <= self.time_between_get_geolocation:
-                # too soon to infer geolocation
-                return previous_geolocation_json.get("coordinates")
-        except FileNotFoundError:
-            logging.debug("Inferring IP-based geolocation for the first time")
-        except (json.decoder.JSONDecodeError, KeyError):
-            logging.exception("Existing IP-based geolocation is malformed. Inferring again...")
-        except:
-            logging.exception("Error while preparing to infer IP-based geolocation. Forcing infer operation...")
-
-    @staticmethod
-    def parse_geolocation(ip_location_service_name: str, ip_location_service_info: dict,
-                          geolocation_response: dict) -> list:
-        """
-        Gets the output from the IP-based geolocation request made to the online service, parses it, and builds
-        the inferred location, as a list, for the NuvlaBox Status
-
-        :param ip_location_service_name: name of the online service used to get the location
-        :param ip_location_service_info: info about the service queried for retrieving the location
-                                        (as in self.ip_geolocation_services.items)
-        :param geolocation_response: response from the IP-based geolocation service, in JSON format
-
-        :return: inferred-location attribute
-        """
-        inferred_location = []
-        if ip_location_service_info['coordinates_key']:
-            coordinates = geolocation_response[ip_location_service_info['coordinates_key']]
-            # note that Nuvla expects [long, lat], and not [lat, long], thus the reversing
-            if isinstance(coordinates, str):
-                inferred_location = coordinates.split(',')[::-1]
-            elif isinstance(coordinates, list):
-                inferred_location = coordinates[::-1]
-            else:
-                logging.warning(f"Cannot parse coordinates {coordinates} "
-                                f"retrieved from geolocation service {ip_location_service_name}")
-                raise TypeError
-        else:
-            longitude = geolocation_response[ip_location_service_info['longitude_key']]
-            latitude = geolocation_response[ip_location_service_info['latitude_key']]
-
-            inferred_location.extend([longitude, latitude])
-            if ip_location_service_info['altitude_key']:
-                inferred_location.append(geolocation_response[ip_location_service_info['altitude_key']])
-
-        return inferred_location
-
-    def get_ip_geolocation(self):
-        """ Based on a preset of geolocation services, this method tries, one by one, to infer the
-        NuvlaBox physical location based on IP
-
-        :returns inferred_location. A list ([longitude, latitude, altitude]). Note that 'altitude' might be missing
-        """
-        now = int(datetime.datetime.timestamp(datetime.datetime.now()))
-
-        previous_coordinates = self.reuse_previous_geolocation(now)
-        if previous_coordinates:
-            return previous_coordinates
-
-        inferred_location = []
-        for service, service_info in self.ip_geolocation_services.items():
-            try:
-                logging.debug("Inferring geolocation with 3rd party service %s" % service)
-                geolocation = requests.get(service_info['url'], allow_redirects=False).json()
-            except:
-                logging.exception(f"Could not infer IP-based geolocation from service {service}")
-                continue
-
-            try:
-                inferred_location.extend(self.parse_geolocation(service, service_info, geolocation))
-                # if we got here, then we already have coordinates, no need for further queries
-                break
-            except KeyError:
-                logging.exception(f"Cannot get coordination from geolocation JSON {geolocation}, "
-                                  f"with service {service}")
-                continue
-            except:
-                logging.exception(f"Error while parsing geolocation from {service}")
-                continue
-
-        if inferred_location:
-            # we have valid coordinates, so let's keep a local record of it
-            content = {"coordinates": inferred_location, "timestamp": now}
-            with open(self.ip_geolocation_file, 'w') as ip_geo:
-                ip_geo.write(json.dumps(content))
-
-        return inferred_location
-
-    def get_network_info(self):
-        """ Gets the list of net ifaces and corresponding rxbytes and txbytes
-
-        :returns [{"interface": "iface1", "bytes-transmitted": X, "bytes-received": Y}, {"interface": "iface2", ...}]
-        """
-
-        sysfs_net = "{}/sys/class/net".format(self.hostfs)
-
-        try:
-            ifaces = os.listdir(sysfs_net)
-        except FileNotFoundError:
-            logging.warning("Cannot find network information for this device")
-            return []
-
-        previous_net_stats = {}
-        try:
-            with open(self.previous_net_stats_file) as pns:
-                previous_net_stats = json.loads(pns.read())
-        except (FileNotFoundError, json.decoder.JSONDecodeError):
-            pass
-
-        net_stats = []
-        for interface in ifaces:
-            stats = "{}/{}/statistics".format(sysfs_net, interface)
-            try:
-                with open("{}/rx_bytes".format(stats)) as rx:
-                    rx_bytes = int(rx.read())
-                with open("{}/tx_bytes".format(stats)) as tx:
-                    tx_bytes = int(tx.read())
-            except (FileNotFoundError, NotADirectoryError):
-                logging.warning("Cannot calculate net usage for interface {}".format(interface))
-                continue
-
-            # we compute the net stats since the beginning of the NB lifetime
-            # and our counters reset on every NB restart
-            if interface in self.first_net_stats:
-                if rx_bytes < self.first_net_stats[interface].get('bytes-received', 0) or \
-                        tx_bytes < self.first_net_stats[interface].get('bytes-transmitted', 0):
-                    # then the system counters were reset
-                    logging.warning(f'Host network counters seem to have been reset for network interface {interface}')
-                    if interface in previous_net_stats:
-                        # in this case, because the numbers no longer correlate, we need to add up to the previous
-                        # reported value
-                        rx_bytes_report = previous_net_stats[interface].get('bytes-received', 0) + rx_bytes
-                        tx_bytes_report = previous_net_stats[interface].get('bytes-transmitted', 0) + tx_bytes
-                    else:
-                        rx_bytes_report = rx_bytes
-                        tx_bytes_report = tx_bytes
-
-                    self.first_net_stats[interface] = {
-                        "bytes-transmitted": tx_bytes,
-                        "bytes-received": rx_bytes,
-                        "bytes-transmitted-carry": previous_net_stats.get(interface, {}).get('bytes-transmitted', 0),
-                        "bytes-received-carry": previous_net_stats.get(interface, {}).get('bytes-received', 0),
-                    }
-                else:
-                    # then counters are still going. In this case we just need to do
-                    #
-                    # current - first + carry
-                    rx_bytes_report = rx_bytes - \
-                                      self.first_net_stats[interface].get('bytes-received', 0) + \
-                                      self.first_net_stats[interface].get('bytes-received-carry', 0)
-                    tx_bytes_report = tx_bytes - \
-                                      self.first_net_stats[interface].get('bytes-transmitted', 0) + \
-                                      self.first_net_stats[interface].get('bytes-transmitted-carry', 0)
-            else:
-                rx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-received', 0)
-                tx_bytes_report = previous_net_stats.get(interface, {}).get('bytes-transmitted', 0)
-
-                self.first_net_stats[interface] = {
-                    "bytes-transmitted": tx_bytes,
-                    "bytes-received": rx_bytes,
-                    "bytes-transmitted-carry": tx_bytes_report,
-                    "bytes-received-carry": rx_bytes_report
-                }
-
-            previous_net_stats[interface] = {
-                "bytes-transmitted": tx_bytes_report,
-                "bytes-received": rx_bytes_report
-            }
-
-            net_stats.append({
-                "interface": interface,
-                "bytes-transmitted": tx_bytes_report,
-                "bytes-received": rx_bytes_report
-            })
-
-        with open(self.previous_net_stats_file, 'w') as pns:
-            pns.write(json.dumps(previous_net_stats))
-
-        return net_stats
-
-    @staticmethod
-    def get_disks_usage():
-        """ Gets disk usage for N partitions """
-
-        output = []
-        output_fallback = [{'device': 'overlay',
-                            'capacity': int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024),
-                            'used': int(psutil.disk_usage('/')[1] / 1024 / 1024 / 1024)
-                            }]
-
-        lsblk_command = ["lsblk", "--json", "-o", "NAME,SIZE,MOUNTPOINT,FSUSED", "-b", "-a"]
-        r = run(lsblk_command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
-
-        if r.returncode != 0 or not r.stdout:
-            return output_fallback
-
-        lsblk = json.loads(r.stdout)
-        for blockdevice, devices in lsblk.items():
-            for parent_dev in devices:
-                flattened = [parent_dev]
-                if parent_dev.get('children'):
-                    flattened += parent_dev['children']
-
-                for dev in flattened:
-                    if dev.get('mountpoint'):
-                        # means it is mounted, so we can get its usage
-                        try:
-                            capacity = round(int(dev['size']) / 1024 / 1024 / 1024)
-
-                            # TODO: delete this condition once the Nuvla server starts accepting float values
-                            if capacity <= 0:
-                                continue
-
-                            fused = dev['fsused'] if dev.get('fsused') else "0"
-                            used = round(int(fused) / 1024 / 1024 / 1024)
-                            output.append({
-                                'device': dev['name'],
-                                'capacity': capacity,
-                                'used': used
-                            })
-                        except (KeyError, TypeError):
-                            logging.exception(f'Unable to get disk usage for mountpoint {dev.get("mountpoint")}')
-                            continue
-
-        if output:
-            return output
-
-        return output_fallback
-
     @staticmethod
     def diff(previous_status, current_status):
-        """ Compares the previous status with the new one and discover the minimal changes """
+        """
+        Compares the previous status with the new one and discover the minimal changes
+        """
 
         items_changed_or_added = {}
         attributes_to_delete = set(previous_status.keys()) - set(current_status.keys())
@@ -1199,7 +615,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         new_status, all_status = self.get_status()
 
-        # write all status into the shared volume for the other components to re-use if necessary
+        # write all status into the shared volume for the other
+        # components to re-use if necessary
         with open(self.nuvlabox_status_file, 'w') as nbsf:
             nbsf.write(json.dumps(all_status))
 

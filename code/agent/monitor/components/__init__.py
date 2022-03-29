@@ -8,6 +8,8 @@ from os.path import dirname, basename, isfile
 from typing import Dict
 
 modules = glob.glob(dirname(__file__) + "/*.py")
+file_logger = logging.getLogger('monitors')
+file_logger.setLevel(logging.INFO)
 
 
 class Monitors:
@@ -38,8 +40,8 @@ class Monitors:
             monitor_name: Monitor name to be registered
             p_monitor: Monitor module to be registered
         """
-        logging.getLogger().setLevel(logging.INFO)
-        logging.info(f'Distribution {monitor_name} registered')
+
+        file_logger.info(f'Distribution {monitor_name} registered')
         cls.monitors[monitor_name] = p_monitor
 
     @classmethod
@@ -58,7 +60,7 @@ class Monitors:
                 _monitor_name = monitor_class.__name__
 
             if _monitor_name in cls.monitors:
-                logging.error(f'Monitor {_monitor_name} is already defined')
+                file_logger.error(f'Monitor {_monitor_name} is already defined')
             else:
                 cls.register_monitor(_monitor_name, monitor_class)
 
@@ -77,4 +79,4 @@ for m in modules:
         try:
             from . import *
         except ModuleNotFoundError:
-            logging.exception(f'Module {__all__[0]} not fount')
+            file_logger.exception(f'Module {__all__[0]} not fount')

@@ -3,18 +3,26 @@ Implementation of the Monitor and BaseDataStructure to be extended by every
 component and data structure
 """
 import logging
+from threading import Thread
 from abc import ABC, abstractmethod
 from typing import Type, Dict
 
 from pydantic import BaseModel
 
 
-class Monitor(ABC):
+class Monitor(ABC, Thread):
     """
     Serves as a base class to facilitate and structure the telemetry gathering
     along the device.
     """
-    def __init__(self, name: str, data_type: Type, enable_monitor: bool):
+    def __init__(self, name: str, data_type: Type, enable_monitor: bool,
+                 thread_period: int = 10):
+        super().__init__()
+        # Define default thread attributes
+        self.daemon = True
+        self.thread_period: int = thread_period
+        self.is_thread: bool = False
+
         self.name: str = name
         self.data: data_type = data_type(telemetry_name=name)
 
@@ -62,6 +70,18 @@ class Monitor(ABC):
         ...
 
 
+def underscore_to_hyphen(field_name: str) -> str:
+    """
+    Alias generator that takes the field name and converts the underscore into hyphen
+    Args:
+        field_name: string that contains the name of the field to be processed
+
+    Returns: the alias name with no underscores
+
+    """
+    return field_name.replace("_", "-")
+
+
 class BaseDataStructure(BaseModel):
     """
     Base data structure for providing a common configuration for all the
@@ -71,3 +91,5 @@ class BaseDataStructure(BaseModel):
     class Config:
         """ Configuration class for base telemetry data """
         allow_population_by_field_name = True
+        alias_generator = underscore_to_hyphen
+        validate_assignment = True
