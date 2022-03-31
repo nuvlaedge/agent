@@ -8,6 +8,7 @@ It also reports and handles the IP geolocation system.
 """
 import json
 import os
+import time
 from typing import List, NoReturn, Dict, Union
 
 import requests
@@ -28,6 +29,7 @@ class NetworkMonitor(Monitor):
     _REMOTE_IPV4_API: str = "https://api.ipify.org?format=json"
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND: str = '-j route'
+    _PUBLIC_IP_UPDATE_RATE: int = 3600
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
@@ -46,6 +48,8 @@ class NetworkMonitor(Monitor):
         self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
+        self.last_public_ip: float = 0.0
+
         # Initialize the corresponding data on the EdgeStatus class
         if not telemetry.edge_status.iface_data:
             telemetry.edge_status.iface_data = self.data
@@ -54,6 +58,8 @@ class NetworkMonitor(Monitor):
         """
         Reads the IP from the GeoLocation systems.
         """
+        if time.time() - self.last_public_ip < self._PUBLIC_IP_UPDATE_RATE:
+            return
         try:
             it_v4_response: requests.Response = requests.get(
                 self._REMOTE_IPV4_API)
@@ -61,6 +67,7 @@ class NetworkMonitor(Monitor):
             if it_v4_response.status_code == 200:
                 self.data.public.ip = \
                     json.loads(it_v4_response.content.decode("utf-8")).get("ip")
+                self.last_public_ip = time.time()
 
         except requests.Timeout as ex:
             reason: str = f'Connection to server timed out: {ex}'
@@ -103,8 +110,11 @@ class NetworkMonitor(Monitor):
         Returns:
             True if the route is to be skipped
         """
-        return it_route.get('dst', '127.').startswith('127.') \
-               or it_route.get('dev', '') in self.data.local.keys()
+        is_loop: bool = it_route.get('dst', '127.').startswith('127.')
+        already_registered: bool = it_route.get('dev', '') in self.data.local.keys()
+        not_complete: bool = 'prefsrc' not in it_route
+
+        return is_loop or already_registered or not_complete
 
     def gather_host_ip_route(self) -> Union[str, None]:
         """
@@ -116,7 +126,6 @@ class NetworkMonitor(Monitor):
         try:
             return self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
-                name="ip_aux_tools",
                 command=self._IP_COMMAND,
                 remove=True,
                 network="host"
@@ -268,6 +277,7 @@ class NetworkMonitor(Monitor):
 
         # Update traffic data
         it_traffic: List = self.read_traffic_data()
+
         for iface_traffic in it_traffic:
             it_name: str = iface_traffic.get("interface")
             if it_name in self.data.local.keys():
@@ -313,9 +323,11 @@ class NetworkMonitor(Monitor):
         # 4.- Swarm
         if not nuvla_report.get('resources'):
             nuvla_report['resources'] = {}
-        nuvla_report['resources']['net-stats'] = \
-            [x.dict(by_alias=True, exclude={'ip', 'default_gw'})
-             for _, x in self.data.local.items()]
+
+        it_traffic: List = [x.dict(by_alias=True, exclude={'ip', 'default_gw'})
+                            for _, x in self.data.local.items()]
+        if it_traffic:
+            nuvla_report['resources']['net-stats'] = it_traffic
 
         if self.data.vpn:
             nuvla_report['ip'] = str(self.data.vpn.ip)

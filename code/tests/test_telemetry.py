@@ -14,7 +14,7 @@ from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
 from agent.Telemetry import Telemetry
 from agent.monitor.components.network import NetworkMonitor
-from tests.monitor.test_network_interface_monitor import generate_random_ip_address
+from tests.monitor.components.test_network import generate_random_ip_address
 
 
 class TelemetryTestCase(unittest.TestCase):

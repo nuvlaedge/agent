@@ -33,7 +33,7 @@ class TemperatureMonitor(Monitor):
             temp_value: Tempearture tu be updated
         """
         if zone_name in self.data.temperatures:
-            self.data.temperatures[zone_name] = temp_value
+            self.data.temperatures[zone_name].value = temp_value
         else:
             self.data.temperatures[zone_name] = TemperatureZone(thermal_zone=zone_name,
                                                                 value=temp_value)
@@ -102,10 +102,12 @@ class TemperatureMonitor(Monitor):
                 self.update_temperature_entry(zone_name, float(temp_value)/1000)
 
             except (ValueError, TypeError) as ex:
-                self.logger.warning(f'Cannot convert temperature at '
+                self.logger.warning(f'Cannot convert temperature {temp_value} at '
                                     f'{temp_path}. Reason: {str(ex)}')
 
     def update_data(self):
+        if not self.data.temperatures:
+            self.data.temperatures = {}
 
         if not os.path.exists(self.thermal_fs_path):
             if hasattr(psutil, 'sensors_temperature'):

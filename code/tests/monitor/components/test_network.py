@@ -18,7 +18,7 @@ def generate_random_ip_address():
     return ".".join(it_str)
 
 
-class TestNetworkIfaceMonitor(unittest.TestCase):
+class TestNetworkMonitor(unittest.TestCase):
 
     # -------------------- Public data tests -------------------- #
     def test_set_public_data(self):

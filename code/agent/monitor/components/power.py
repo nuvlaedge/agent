@@ -1,11 +1,11 @@
 """ Module containing power report monitor """
 import os
 import re
-from typing import Dict, Union, List
+import json
+from typing import Dict, Union
 
 from agent.monitor import Monitor
 from agent.monitor.components import monitor
-from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.data.power_data import PowerData, PowerEntry
 
 
@@ -50,7 +50,7 @@ class PowerMonitor(Monitor):
     def __init__(self, name: str, telemetry, enable_monitor: bool):
         super().__init__(name, PowerData, enable_monitor)
 
-        self.host_fs: str = telemetry.host_fs
+        self.host_fs: str = telemetry.hostfs
 
         if not telemetry.edge_status.power:
             telemetry.edge_status.power = self.data
@@ -75,8 +75,8 @@ class PowerMonitor(Monitor):
             [addr for addr in os.listdir(i2c_fs_path) if
              re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr)]
         i2c_addresses_found.sort()
-        channels = self._NVIDIA_POWER_MODEL[driver]['channels']
-        for nvidia_board, power_info in self._NVIDIA_MODEL[driver]['boards'].items():
+        channels = self._NVIDIA_MODEL[driver]['channels']
+        for _, power_info in self._NVIDIA_MODEL[driver]['boards'].items():
             known_i2c_addresses = power_info['i2c_addresses']
             known_i2c_addresses.sort()
             if i2c_addresses_found != known_i2c_addresses:
@@ -92,9 +92,9 @@ class PowerMonitor(Monitor):
                     if not os.path.exists(rail_name_file):
                         continue
 
-                    with open(rail_name_file) as m:
+                    with open(rail_name_file, encoding='utf-8') as rail_file:
                         try:
-                            metric_basename = m.read().split()[0]
+                            metric_basename = rail_file.read().split()[0]
                         except IndexError:
                             self.logger.warning(f'Cannot read power metric rail name at '
                                                 f'{rail_name_file}')
@@ -125,18 +125,31 @@ class PowerMonitor(Monitor):
 
                     for metric_combo in desired_metrics_files:
                         try:
-                            with open(metric_combo[0]) as mf:
-
-                                return PowerEntry(metric_name=metric_combo[1],
-                                                  energy_consumption=float(mf.read().split()[0]),
-                                                  unit=metric_combo[2])
+                            with open(metric_combo[0], encoding='utf-8') as metric_f:
+                                return PowerEntry(
+                                    metric_name=metric_combo[1],
+                                    energy_consumption=float(metric_f.read().split()[0]),
+                                    unit=metric_combo[2])
                         except (IOError, IndexError):
                             return
 
+    def read_from_tegrastats(self):
+        ...
+
+    def run(self) -> None:
+        ...
+
     def update_data(self):
 
-        self.data.power_entries = \
-            {{d, self.get_power(d)} for d in self._NVIDIA_POWER_MODEL}
+        if not self.data.power_entries:
+            self.data.power_entries = {}
+
+        for drive in self._NVIDIA_MODEL:
+            it_data: PowerEntry = self.get_power(drive)
+            if it_data:
+                self.data.power_entries[it_data.metric] = it_data
+
+        self.logger.error(self.data.power_entries)
 
     def populate_nb_report(self, nuvla_report: Dict):
         ...

@@ -276,7 +276,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         else:
             delete_attributes = _delete_attributes
 
-    logging.debug('Refresh status: %s' % status)
+    # logging.debug('Refresh status: %s' % status)
     if delete_attributes:
         logging.info(f'Deleting the following attributes from NuvlaBox Status: '
                      f'{", ".join(delete_attributes)}')

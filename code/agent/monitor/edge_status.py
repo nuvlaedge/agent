@@ -36,4 +36,5 @@ class EdgeStatus(pydantic.BaseModel):
     # Vulnerabilities data
     vulnerabilities: Union[vulnerabilities_data.VulnerabilitiesData, None]
 
+    # Power data report. (Only for Jetson-Boards)
     power: Union[power_data.PowerData, None]

@@ -94,7 +94,8 @@ class ResourcesMonitor(Monitor):
             # Iterate list of partitions
             for partition in partitions:
                 it_drive = self.clean_disk_report(partition)
-                it_disk_status.append(it_drive)
+                if it_drive:
+                    it_disk_status.append(it_drive)
 
         if it_disk_status:
             return it_disk_status
@@ -111,8 +112,9 @@ class ResourcesMonitor(Monitor):
         """
         partial_disk_data: List[DiskDataStructure] = self.get_disks_usage()
         for disk in partial_disk_data:
-            disk.raw_sample = json.dumps(disk.dict(exclude_none=True))
-            disk.topic = 'disks'
+            if disk:
+                disk.raw_sample = json.dumps(disk.dict(exclude_none=True))
+                disk.topic = 'disks'
 
         return partial_disk_data
 

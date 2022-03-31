@@ -1074,12 +1074,14 @@ class DockerClient(ContainerRuntimeClient):
             #
             # -----------------
             # CPU
-            cpu_percent = self.collect_container_metrics_cpu(container_stats, old_cpu[i][0],
-                                                             old_cpu[i][1], collection_errors)
+            cpu_percent = \
+                self.collect_container_metrics_cpu(container_stats, old_cpu[i][0],
+                                                   old_cpu[i][1], collection_errors)
             #
             # -----------------
             # MEM
-            mem_percent, mem_usage, mem_limit = self.collect_container_metrics_mem(container_stats, collection_errors)
+            mem_percent, mem_usage, mem_limit = \
+                self.collect_container_metrics_mem(container_stats, collection_errors)
             #
             # -----------------
             # NET
@@ -1087,10 +1089,12 @@ class DockerClient(ContainerRuntimeClient):
             #
             # -----------------
             # BLOCK
-            blk_out, blk_in = self.collect_container_metrics_block(container_stats, collection_errors)
+            blk_out, blk_in = \
+                self.collect_container_metrics_block(container_stats, collection_errors)
 
             if collection_errors:
-                logging.error(f"Cannot get {','.join(collection_errors)} stats for container {container.name}")
+                logging.info(f"Cannot get {','.join(collection_errors)} "
+                             f"stats for container {container.name}")
 
             # -----------------
             out.append({
@@ -1098,11 +1102,13 @@ class DockerClient(ContainerRuntimeClient):
                 'name': container.name,
                 'container-status': container.status,
                 'cpu-percent': "%.2f" % round(cpu_percent, 2),
-                'mem-usage-limit': "%sMiB / %sGiB" % (round(mem_usage, 2), round(mem_limit / 1024, 2)),
+                'mem-usage-limit': ("{}MiB / {}GiB".format(round(mem_usage, 2),
+                                                           round(mem_limit / 1024, 2))),
                 'mem-percent': "%.2f" % mem_percent,
                 'net-in-out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
                 'blk-in-out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
-                'restart-count': int(container.attrs["RestartCount"]) if "RestartCount" in container.attrs else 0
+                'restart-count': (int(container.attrs["RestartCount"])
+                                  if "RestartCount" in container.attrs else 0)
             })
 
         return out

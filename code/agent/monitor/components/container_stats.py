@@ -1,4 +1,5 @@
 """ NuvlaEdge container monitor """
+import json
 import os
 import time
 import datetime
@@ -51,7 +52,7 @@ class ContainerStatsMonitor(Monitor):
 
         while True:
             self.refresh_container_info()
-
+            self.update_data()
             time.sleep(self.thread_period)
 
     def get_cluster_manager_attrs(self, managers: list, node_id: str) -> tuple:
@@ -114,6 +115,7 @@ class ContainerStatsMonitor(Monitor):
             if node_id:
                 join_addr = self.client_runtime.get_cluster_join_address(node_id)
                 if join_addr:
+
                     self.data.cluster_data.cluster_join_address = join_addr
 
         is_manager, cluster_nodes = self.get_cluster_manager_attrs(cluster_managers,

@@ -11,24 +11,21 @@ import inspect
 import json
 import logging
 import os
+import threading
+from typing import Dict
+
 import paho.mqtt.client as mqtt
 import psutil
-import queue
-import re
-import requests
 import socket
 import time
 
-from docker.errors import APIError
 from os import path, stat
-from subprocess import run, PIPE, STDOUT
-from threading import Thread
 
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
-import agent.monitor.components.network as net_monitor
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, monitors
 from agent.monitor import Monitor
+
 
 class MonitoredDict(dict):
     """
@@ -65,43 +62,6 @@ class MonitoredDict(dict):
         logging.debug(f'{self.name} updated: {self}')
 
 
-class ContainerMonitoring(Thread):
-    """ A special thread used to asynchronously fetch the stats from all containers in the system
-
-    Attributes:
-        q: queue object where to put the monitoring results (JSON)
-        save_to: an optional string pointing to a file where to persist the JSON output
-        log: a logging object
-    """
-
-    def __init__(self, q: queue.Queue, cr: NuvlaBoxCommon.ContainerRuntimeClient,
-                 save_to: str = None, log: logging = logging):
-        Thread.__init__(self)
-        self.q = q
-        self.save_to = save_to
-        self.container_runtime = cr
-        self.log = log
-
-    def run(self):
-        """
-        Runs, on an infinite loop, through all the containers in the system and retrieves the stats for each one,
-        saving them in a file (if needed), and putting them in a messaging queue for other processes in the system
-        to fetch
-
-        :return:
-        """
-
-        while True:
-            out = self.container_runtime.collect_container_metrics()
-            self.q.put(out)
-
-            if self.save_to:
-                with open(self.save_to, 'w') as f:
-                    f.write(json.dumps(out))
-
-            time.sleep(10)
-
-
 class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaBox and send all
@@ -111,22 +71,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, nuvlabox_status_id, enable_container_monitoring=True):
+    def __init__(self, data_volume, nuvlabox_status_id, enable_container_monitoring=False):
         """ Constructs an Telemetry object, with a status placeholder """
 
         super(Telemetry, self).__init__(shared_data_volume=data_volume)
-        # NuvlaBoxCommon.NuvlaBoxCommon.__init__(self, shared_data_volume=data_volume)
-
+        self.logger: logging.Logger = logging.getLogger('Telemetry')
         self.nb_status_id = nuvlabox_status_id
         self.first_net_stats = {}
-        self.container_stats_queue = queue.Queue()
-        self.enable_container_monitoring = enable_container_monitoring
-        if enable_container_monitoring:
-            self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-                                                               self.container_runtime,
-                                                               self.container_stats_json_file)
-            self.container_stats_monitor.daemon = True
-            self.container_stats_monitor.start()
 
         self.status_default = {
             'resources': None,
@@ -165,58 +116,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.mqtt_telemetry = mqtt.Client()
 
-        self.gpio_utility = False
-        try:
-            r = run(['gpio', '-v'], stdout=PIPE)
-            self.gpio_utility = True
-        except:
-            # no need to catch any exception. This is just a quick check and fail for the GPIO utility
-            pass
-
-        self.ip_geolocation_services = {
-            "ip-api.com": {
-                "url": "http://ip-api.com/json/",
-                "coordinates_key": None,
-                "longitude_key": "lon",
-                "latitude_key": "lat",
-                "altitude_key": None,
-                "ip": "query"
-            },
-            "ipinfo.io": {
-                "url": "https://ipinfo.io/json",
-                "coordinates_key": "loc",
-                "longitude_key": None,
-                "latitude_key": None,
-                "altitude_key": None,
-                "ip": "ip"
-            },
-            "ipapi.co": {
-                "url": "https://ipapi.co/json",
-                "coordinates_key": None,
-                "longitude_key": "longitude",
-                "latitude_key": "latitude",
-                "altitude_key": None
-            },
-            "ipgeolocation.com": {
-                "url": "https://ipgeolocation.com/?json=1",
-                "coordinates_key": "coords",
-                "longitude_key": None,
-                "latitude_key": None,
-                "altitude_key": None
-            }
-        }
-
-        # Minimum interval, in seconds, for inferring IP-based geolocation
-        # (to avoid network jittering and 3rd party service spamming)
-        # Default to 1 hour
-        self.time_between_get_geolocation = 3600
-
         self.edge_status: EdgeStatus = EdgeStatus()
-        # TODO: IP Gathering tests
+
         self.monitor_list: list[Monitor] = []
 
         # TODO: Fix proper initialization
         for x in monitors:
+            logging.error(f'Initializing monitor: {x}')
             self.monitor_list.append(get_monitor(x)(x, self, True))
 
     @property
@@ -308,112 +214,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # self.mqtt_telemetry.disconnect()
 
-    def get_installation_parameters(self):
-        """ Retrieves the configurations and parameteres used during the NuvlaBox Engine installation
-
-        :return: obj - {project-name: str, config-files: list, working-dir: str}
-        """
-
-        filter_label = "nuvlabox.component=True"
-
-        return self.container_runtime.get_installation_parameters(filter_label)
-
-    def get_swarm_node_cert_expiration_date(self):
-        """ If the docker swarm certs can be found, try to infer their expiration date
-
-        :return:
-        """
-
-        if os.path.exists(self.swarm_node_cert):
-            command = ["openssl", "x509", "-enddate", "-noout", "-in", self.swarm_node_cert]
-            output = run(command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
-            # example output: 'notAfter=Mar 12 19:13:00 2021 GMT\n'
-            if output.returncode != 0 or not output.stdout:
-                return None
-
-            expiry_date_raw = output.stdout.strip().split('=')[-1]
-            raw_format = '%b %d %H:%M:%S %Y %Z'
-            return datetime.datetime.strptime(expiry_date_raw, raw_format).strftime(self.nuvla_timestamp_format)
-
-        else:
-            return None
-
-    def set_status_resources(self, body: dict):
-        """
-        Set the information about disk usage in the NuvlaBox status paylod
-
-        Args:
-            body (dict): NuvlaBox Status payload
-        """
-        # DISK
-        disk_usage = self.get_disks_usage()
-        disks = []
-        for dsk in disk_usage:
-            dsk.update({"topic": "disks", "raw-sample": json.dumps(dsk)})
-            disks.append(dsk)
-
-        # CPU
-        cpu_sample = {
-            "capacity": int(psutil.cpu_count()),
-            "load": float(psutil.getloadavg()[2]),
-            "load-1": float(psutil.getloadavg()[0]),
-            "load-5": float(psutil.getloadavg()[1]),
-            "context-switches": int(psutil.cpu_stats().ctx_switches),
-            "interrupts": int(psutil.cpu_stats().interrupts),
-            "software-interrupts": int(psutil.cpu_stats().soft_interrupts),
-            "system-calls": int(psutil.cpu_stats().syscalls)
-        }
-        cpu = {"topic": "cpu", "raw-sample": json.dumps(cpu_sample)}
-        cpu.update(cpu_sample)
-
-        # MEMORY
-        ram_sample = {
-            "capacity": int(round(psutil.virtual_memory()[0] / 1024 / 1024)),
-            "used": int(round(psutil.virtual_memory()[3] / 1024 / 1024))
-        }
-        ram = {"topic": "ram", "raw-sample": json.dumps(ram_sample)}
-        ram.update(ram_sample)
-
-        # DOCKER STATS
-        # container_stats = None
-        # try:
-        #     container_stats = self.container_stats_queue.get(block=False)
-        # except queue.Empty:
-        #     if not self.container_stats_monitor.is_alive() and self.enable_container_monitoring:
-        #         self.container_stats_monitor = ContainerMonitoring(self.container_stats_queue,
-        #                                                            self.container_runtime,
-        #                                                            self.container_stats_json_file)
-        #         self.container_stats_monitor.daemon = True
-        #         self.container_stats_monitor.start()
-
-        # NETWORK
-        net_stats = self.get_network_info()
-
-        # POWER
-        try:
-            power_consumption = self.get_power_consumption()
-        except Exception as e:
-            logging.error(f"Unable to retrieve power consumption metrics: {str(e)}")
-            power_consumption = None
-
-        ###
-        resources = {
-            'cpu': cpu,
-            'ram': ram
-        }
-
-        conditional_resources = [
-            ('disks', disks),
-            # ('container-stats', container_stats),
-            ('net-stats', net_stats),
-            ('power-consumption', power_consumption)
-        ]
-        for cres in conditional_resources:
-            if cres[1]:
-                resources[cres[0]] = cres[1]
-
-        body['resources'] = resources
-
     def set_status_operational_status(self, body: dict, node: dict):
         """
         Gets and sets the operational status and status_notes for the nuvlabox-status
@@ -443,56 +243,35 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Gets several types of information to populate the NuvlaBox status """
 
         status_for_nuvla = self.status_default.copy()
+        monitor_process_time: Dict = {}
 
-        # status_for_nuvla['id'] = self.nb_status_id
         for it_monitor in self.monitor_list:
             if it_monitor.is_thread and not it_monitor.is_alive():
-                logging.error(f'Starting monitor {it_monitor.name}')
-                it_monitor.start()
-            else:
-                init_time: float = time.time()
-                it_monitor.update_data()
-                logging.error(f'Monitor {it_monitor.name} process time '
-                              f'{time.time() - init_time}')
 
+                if it_monitor.ident:
+                    it_monitor.join()
+                    logging.error(
+                        f'Current number of threads: {len(threading.enumerate())}')
+                    # it_monitor = get_monitor(it_monitor.name)(it_monitor.name, self, True)
+                else:
+                    logging.error(f'Starting thread {it_monitor.name} for first time')
+                    it_monitor.start()
+            else:
+                if not it_monitor.is_thread or not it_monitor.is_alive():
+                    init_time: float = time.time()
+
+                    it_monitor.update_data()
+                    monitor_process_time[it_monitor.name] = time.time() - init_time
+
+        self.logger.error(f'Monitors processing time '
+                          f'{json.dumps(monitor_process_time, indent=4)}')
         for it_monitor in self.monitor_list:
             it_monitor.populate_nb_report(status_for_nuvla)
 
         node_info = self.container_runtime.get_node_info()
 
-        # get status for Nuvla
-        # - RESOURCES attr
-        # self.set_status_resources(status_for_nuvla)
-
         # - STATUS attrs
         self.set_status_operational_status(status_for_nuvla, node_info)
-
-        # - COE VERSIONS attrs
-        # self.set_status_coe_version(status_for_nuvla)
-
-        # - CLUSTER attrs
-        # self.set_status_cluster(status_for_nuvla, node_info)
-
-        # - INSTALLATION PARAMETERS attr
-        # self.set_status_installation_params(status_for_nuvla)
-
-        # - COE CERT EXPIRATION attr
-        # self.set_status_coe_cert_expiration_date(status_for_nuvla)
-
-        # - TEMPERATURES attr
-        # self.set_status_temperatures(status_for_nuvla)
-
-        # - GPIO PINS attr
-        # self.set_status_gpio(status_for_nuvla)
-
-        # - LOCATION attr
-        # self.set_status_inferred_location(status_for_nuvla)
-
-        # - VULNERABILITIES attr
-        # self.set_status_vulnerabilities(status_for_nuvla)
-
-        # - COMPONENTS attr
-        # self.set_status_components(status_for_nuvla)
 
         # - CURRENT TIME attr
         status_for_nuvla['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
@@ -514,84 +293,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
             "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
         })
-        logging.error(json.dumps(status_for_nuvla, indent=4))
+        # logging.error(json.dumps(status_for_nuvla, indent=4))
         return status_for_nuvla, all_status
-
-    def get_power_consumption(self):
-        """ Attempts to retrieve power monitoring information, if it exists. It is highly dependant on the
-        underlying host system and the existence of a power monitoring drive/device. Thus this is optional
-        telemetry data.
-
-        :return: list of well-defined metric-consumption-units lists. Example: [["metric", "consumption", "unit"], ... ]
-        """
-
-        output = []
-        # for the NVIDIA Jetson ...
-        for driver in self.nvidia_software_power_consumption_model:
-            i2c_fs_path = f'{self.hostfs}/sys/bus/i2c/drivers/{driver}'
-
-            if not os.path.exists(i2c_fs_path):
-                return []
-
-            i2c_addresses_found = \
-                [addr for addr in os.listdir(i2c_fs_path) if re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr)]
-            i2c_addresses_found.sort()
-            channels = self.nvidia_software_power_consumption_model[driver]['channels']
-            for nvidia_board, power_info in self.nvidia_software_power_consumption_model[driver]['boards'].items():
-                known_i2c_addresses = power_info['i2c_addresses']
-                known_i2c_addresses.sort()
-                if i2c_addresses_found != known_i2c_addresses:
-                    continue
-
-                for metrics_folder_name in power_info['channels_path']:
-                    metrics_folder_path = f'{i2c_fs_path}/{metrics_folder_name}'
-                    if not os.path.exists(metrics_folder_path):
-                        continue
-
-                    for channel in range(0, channels):
-                        rail_name_file = f'{metrics_folder_path}/rail_name_{channel}'
-                        if not os.path.exists(rail_name_file):
-                            continue
-
-                        with open(rail_name_file) as m:
-                            try:
-                                metric_basename = m.read().split()[0]
-                            except:
-                                logging.warning(f'Cannot read power metric rail name at {rail_name_file}')
-                                continue
-
-                        rail_current_file = f'{metrics_folder_path}/in_current{channel}_input'
-                        rail_voltage_file = f'{metrics_folder_path}/in_voltage{channel}_input'
-                        rail_power_file = f'{metrics_folder_path}/in_power{channel}_input'
-                        rail_critical_current_limit_file = f'{metrics_folder_path}/crit_current_limit_{channel}'
-
-                        # (filename, metric name, units)
-                        desired_metrics_files = [
-                            (rail_current_file, f"{metric_basename}_current", "mA"),
-                            (rail_voltage_file, f"{metric_basename}_voltage", "mV"),
-                            (rail_power_file, f"{metric_basename}_power", "mW"),
-                            (rail_critical_current_limit_file, f"{metric_basename}_critical_current_limit", "mA")
-                        ]
-
-                        existing_metrics = os.listdir(metrics_folder_path)
-
-                        if not all(desired_metric[0].split('/')[-1] in
-                                   existing_metrics for desired_metric in desired_metrics_files):
-                            # one or more power metric files we need, are missing from the directory, skip them
-                            continue
-
-                        for metric_combo in desired_metrics_files:
-                            try:
-                                with open(metric_combo[0]) as mf:
-                                    output.append({
-                                        "metric-name": metric_combo[1],
-                                        "energy-consumption": float(mf.read().split()[0]),
-                                        "unit": metric_combo[2]
-                                    })
-                            except:
-                                continue
-
-        return output
 
     @staticmethod
     def diff(previous_status, current_status):
