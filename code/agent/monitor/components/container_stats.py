@@ -1,5 +1,4 @@
 """ NuvlaEdge container monitor """
-import json
 import os
 import time
 import datetime

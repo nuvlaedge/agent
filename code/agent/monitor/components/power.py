@@ -1,7 +1,6 @@
 """ Module containing power report monitor """
 import os
 import re
-import json
 from typing import Dict, Union
 
 from agent.monitor import Monitor
@@ -132,9 +131,6 @@ class PowerMonitor(Monitor):
                                     unit=metric_combo[2])
                         except (IOError, IndexError):
                             return
-
-    def read_from_tegrastats(self):
-        ...
 
     def run(self) -> None:
         ...
