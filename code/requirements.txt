@@ -1,6 +1,7 @@
 -r requirements.base.txt
 docker
 Flask==1.0.0
+itsdangerous==2.0.1
 kubernetes
 nuvla-api>=3.0.4
 paho-mqtt
