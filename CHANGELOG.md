@@ -1,4 +1,8 @@
 # Changelog
+## [2.7.0] - 2022-04-11
+### Added 
+ - New env var for vpn extra config
+### Changed
 ## [2.6.0] - 2022-03-24
 ### Added 
  - Add org.opencontainers labels 
