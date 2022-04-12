@@ -125,17 +125,18 @@ class NetworkMonitor(Monitor):
             str if succeeds. None otherwise
         """
         try:
-            return self.runtime_client.client.containers.run(
+            it_route: bytes = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
                 remove=True,
-                network="host"
-            ).decode("utf-8")
+                network="host")
+
+            return it_route.decode("utf-8")
 
         except (docker_err.ImageNotFound,
                 docker_err.ContainerError,
                 docker_err.APIError) as ex:
-            self.logger.warning(f'Local interface data auxiliary container '
+            self.logger.error(f'Local interface data auxiliary container '
                                 f'not run: {ex.explanation}')
             return None
 
