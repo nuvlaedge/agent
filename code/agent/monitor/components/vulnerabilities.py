@@ -29,9 +29,16 @@ class VulnerabilitiesMonitor(Monitor):
         """
         if os.path.exists(self.vulnerabilities_file):
             with open(self.vulnerabilities_file, encoding='UTF-8') as issues_file:
-                return json.loads(issues_file.read())
-        else:
-            return None
+                file_content: str = issues_file.read()
+                if file_content:
+                    try:
+                        return json.loads(file_content)
+                    except json.decoder.JSONDecodeError as ex:
+                        self.logger.error(f'Vulnerabilities content:[ {file_content} ] '
+                                          f'not properly formatted - {ex}')
+                        return None
+
+        return None
 
     def update_data(self):
         vulnerabilities = self.retrieve_security_vulnerabilities()

@@ -77,14 +77,14 @@ class TestNetworkMonitor(unittest.TestCase):
         it_1 = Mock()
         it_1.client.containers.run.side_effect = docker_err.APIError("Not found")
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", it_1, EdgeStatus())
+            monitor.NetworkMonitor("", it_1, True)
         self.assertIsNone(test_ip_monitor.gather_host_ip_route())
 
         # Decode test
         runtime_mock = Mock()
         runtime_mock.client.containers.run.return_value = b'{}'
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", runtime_mock, EdgeStatus())
+            monitor.NetworkMonitor("", runtime_mock, True)
         self.assertIsInstance(test_ip_monitor.gather_host_ip_route(), str)
 
         runtime_mock.client.containers.run.return_value = '{}'
@@ -102,7 +102,7 @@ class TestNetworkMonitor(unittest.TestCase):
 
         # Test readable route
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", Mock(), EdgeStatus())
+            monitor.NetworkMonitor("", Mock(), True)
         test_ip_monitor.is_skip_route = Mock(return_value=True)
         test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
         test_ip_monitor.set_local_data()
@@ -110,7 +110,7 @@ class TestNetworkMonitor(unittest.TestCase):
 
         with patch('json.loads') as json_dict:
             test_ip_monitor: monitor.NetworkMonitor = \
-                monitor.NetworkMonitor("", Mock(), EdgeStatus())
+                monitor.NetworkMonitor("", Mock(), True)
             test_ip_monitor.is_skip_route = Mock(return_value=False)
             test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
             it_address: str = generate_random_ip_address()
@@ -122,7 +122,7 @@ class TestNetworkMonitor(unittest.TestCase):
 
     def test_is_skip_route(self):
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", Mock(), EdgeStatus())
+            monitor.NetworkMonitor("", Mock(), True)
 
         self.assertTrue(test_ip_monitor.is_skip_route({}))
 
@@ -184,14 +184,14 @@ class TestNetworkMonitor(unittest.TestCase):
         with self.assertRaises(TypeError):
             test_ip_monitor.set_swarm_data()
 
-    @patch('agent.monitor.components.network_interface_monitor.'
-           'NetworkIfaceMonitor.set_public_data')
-    @patch('agent.monitor.components.network_interface_monitor.'
-           'NetworkIfaceMonitor.set_local_data')
-    @patch('agent.monitor.components.network_interface_monitor.'
-           'NetworkIfaceMonitor.set_vpn_data')
-    @patch('agent.monitor.components.network_interface_monitor.'
-           'NetworkIfaceMonitor.set_swarm_data')
+    @patch('agent.monitor.components.network.'
+           'NetworkMonitor.set_public_data')
+    @patch('agent.monitor.components.network.'
+           'NetworkMonitor.set_local_data')
+    @patch('agent.monitor.components.network.'
+           'NetworkMonitor.set_vpn_data')
+    @patch('agent.monitor.components.network.'
+           'NetworkMonitor.set_swarm_data')
     def test_update_data(self, pub, local, vpn, swarm):
         runtime_mock = Mock()
         # r_ip: str = generate_random_ip_address()

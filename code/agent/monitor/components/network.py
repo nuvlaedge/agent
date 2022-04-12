@@ -33,7 +33,8 @@ class NetworkMonitor(Monitor):
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
-        super().__init__(name, NetworkingData, enable_monitor=enable_monitor)
+        super().__init__(self.__class__.__name__, NetworkingData,
+                         enable_monitor=enable_monitor)
 
         # List of network interfaces
         self.updaters: List = [self.set_public_data,

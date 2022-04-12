@@ -70,7 +70,7 @@ class GeoLocationMonitor(Monitor):
             self.logger.debug(f"Inferring geolocation with 3rd party service {service}")
             return requests.get(service, allow_redirects=False).json()
         except requests.RequestException:
-            self.logger.exception(f"Could not infer IP-based geolocation from "
+            self.logger.error(f"Could not infer IP-based geolocation from "
                                   f"service {service}")
             return None
 
@@ -129,9 +129,8 @@ class GeoLocationMonitor(Monitor):
                 try:
                     self.data.coordinates = \
                         self.parse_geolocation(service, info, it_response)
-
                 except TypeError:
-                    self.logger.exception(f'Error parsing coordinates on service '
+                    self.logger.error(f'Error parsing coordinates on service '
                                           f'{service}')
                     continue
 
