@@ -1002,7 +1002,8 @@ class TelemetryTestCase(unittest.TestCase):
             self.assertEqual(self.obj.first_net_stats, expected_first_net_stats,
                              'Unable to set first_net_stats after first run')
 
-        # now that first_net_stats exists, if system counter are still going, get the diff and return values
+        # now that first_net_stats exists, if system counter are still going, get the
+        # diff and return values
         with mock.patch(self.agent_telemetry_open) as mock_open:
             # 4 readers because open tx and rx per interface (2x2)
             mock_open.side_effect = [FileNotFoundError,
@@ -1028,7 +1029,8 @@ class TelemetryTestCase(unittest.TestCase):
                                      mock.mock_open(read_data='1').return_value,
                                      mock.mock_open(read_data='2').return_value,
                                      mock.mock_open(read_data='3').return_value, mock.MagicMock()]
-            # assuming once more previous_stats don't exist, we should get the reading as is
+            # assuming once more previous_stats don't exist, we should get the
+            # reading as is
             self.assertEqual(self.obj.get_network_info(), [
                 {'interface': 'iface1', 'bytes-transmitted': 1, 'bytes-received': 0},
                 {'interface': 'iface2', 'bytes-transmitted': 3, 'bytes-received': 2}

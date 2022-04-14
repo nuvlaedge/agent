@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import json
+import os
+import time
 import unittest
 from random import SystemRandom
 from typing import List, Dict, Any
@@ -6,12 +9,12 @@ from typing import List, Dict, Any
 import pydantic.error_wrappers
 import requests
 from docker import errors as docker_err
-from mock import Mock, mock_open, patch
+from mock import Mock, mock_open, patch, MagicMock
 
+import agent.monitor.components.network
 from agent.monitor.components import network as monitor
-from agent.monitor.data.network_data import NetworkInterface
+from agent.monitor.data.network_data import NetworkInterface, NetworkingData
 from agent.monitor.edge_status import EdgeStatus
-from agent.common.NuvlaBoxCommon import ContainerRuntimeClient
 
 
 def generate_random_ip_address():
@@ -21,9 +24,27 @@ def generate_random_ip_address():
 
 
 class TestNetworkMonitor(unittest.TestCase):
+    built_open: str = "builtins.open"
+
+    def test_constructor(self):
+        it_telemetry = Mock()
+        it_telemetry.edge_status.iface_data = None
+        test_geo: monitor.NetworkMonitor = monitor.NetworkMonitor(
+            'geo_test', it_telemetry, True)
+        self.assertIsInstance(
+            it_telemetry.edge_status.iface_data,
+            NetworkingData)
 
     # -------------------- Public data tests -------------------- #
     def test_set_public_data(self):
+        # Test Public IP update rate
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("file", Mock(), Mock())
+        test_ip_monitor.last_public_ip = time.time()
+        test_ip_monitor.set_public_data()
+        self.assertIsNone(test_ip_monitor.data.public.ip)
+
+        #
         status = Mock()
         status.iface_data = None
         test_ip_monitor: monitor.NetworkMonitor = \
@@ -77,28 +98,42 @@ class TestNetworkMonitor(unittest.TestCase):
     def test_gather_host_route(self):
         # Test Raise exception
         it_1 = Mock()
-        import docker
-        it_1.container_runtime.client = docker.from_env()
-        with patch('docker.client.ContainerCollection.run') as clients:
-            clients.side_effect = docker_err.APIError("Not found")
+        it_1.container_runtime.client.containers.run.side_effect = \
+            docker_err.APIError("Message")
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", it_1, True)
+        self.assertIsNone(test_ip_monitor.gather_host_ip_route())
 
-            test_ip_monitor: monitor.NetworkMonitor = \
-                monitor.NetworkMonitor("", it_1, True)
-            self.assertIsNone(test_ip_monitor.gather_host_ip_route())
-
+        it_1 = Mock()
         # Decode test
-        with patch('docker.client.ContainerCollection.run') as clients:
-            clients.return_value = b'{}'
-            test_ip_monitor: monitor.NetworkMonitor = \
-                monitor.NetworkMonitor("", it_1, True)
-            self.assertIsInstance(test_ip_monitor.gather_host_ip_route(), str)
+        it_1.container_runtime.client.containers.run.return_value = b'{}'
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", it_1, True)
+        self.assertIsInstance(test_ip_monitor.gather_host_ip_route(), str)
 
-        with patch('docker.client.ContainerCollection.run') as clients:
-            clients.return_value = "{}"
-            with self.assertRaises(AttributeError):
-                test_ip_monitor.gather_host_ip_route()
+        it_1.container_runtime.client.containers.run.return_value = "{}"
+        with self.assertRaises(AttributeError):
+            test_ip_monitor.gather_host_ip_route()
 
     def test_set_local_data(self):
+        # Test no available route IP's
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", Mock(), Mock())
+        with patch('agent.monitor.components.network.NetworkMonitor.'
+                   'gather_host_ip_route') as test_gather:
+            test_gather.return_value = None
+            test_ip_monitor.set_local_data()
+            self.assertFalse(test_ip_monitor.data.local)
+
+        # Test Skip routes
+        with patch('agent.monitor.components.network.NetworkMonitor.'
+                   'is_skip_route') as test_skip, \
+                patch('json.loads') as json_dict:
+            json_dict.return_value = ['Test']
+            test_skip.return_value = True
+            test_ip_monitor.set_local_data()
+            self.assertFalse(test_ip_monitor.data.local)
+
         status = Mock()
         status.iface_data = None
         test_ip_monitor: monitor.NetworkMonitor = \
@@ -127,6 +162,22 @@ class TestNetworkMonitor(unittest.TestCase):
             test_ip_monitor.set_local_data()
             self.assertEqual(test_ip_monitor.data.local['eth0'].ip, it_address)
 
+        # Test traffic readings
+        with patch('agent.monitor.components.network.NetworkMonitor.'
+                   'read_traffic_data') as test_traffic, \
+                patch('json.loads') as json_dict:
+            json_dict.return_value = None
+            test_traffic.return_value = [{'a': 'a'}]
+            test_ip_monitor: monitor.NetworkMonitor = \
+                monitor.NetworkMonitor("", Mock(), True)
+            test_ip_monitor.set_local_data()
+            self.assertFalse(test_ip_monitor.data.local)
+
+            test_traffic.return_value = [{'interface': 'a'}]
+            test_ip_monitor.data.local['a'] = NetworkInterface(iface_name='a')
+            with self.assertRaises(pydantic.error_wrappers.ValidationError):
+                test_ip_monitor.set_local_data()
+
     def test_is_skip_route(self):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", Mock(), True)
@@ -150,14 +201,14 @@ class TestNetworkMonitor(unittest.TestCase):
         status.iface_data = None
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor(vpn_file, Mock(), status)
-        built_open: str = "builtins.open"
+
         it_ip: str = generate_random_ip_address()
         with patch("os.stat") as stat_mock, \
                 patch("os.path.exists") as exists_mock:
             exists_mock.return_value = True
             stat_mock.return_value = Mock(st_size=30)
 
-            with patch(built_open, mock_open(read_data=it_ip)):
+            with patch(self.built_open, mock_open(read_data=it_ip)):
                 test_ip_monitor.set_vpn_data()
                 self.assertEqual(str(test_ip_monitor.data.vpn.ip), it_ip)
 
@@ -166,7 +217,7 @@ class TestNetworkMonitor(unittest.TestCase):
             exists_mock.return_value = True
             stat_mock.return_value = Mock(st_size=0)
 
-            with patch(built_open, mock_open(read_data="")):
+            with patch(self.built_open, mock_open(read_data="")):
                 test_ip_monitor.data.vpn = NetworkInterface(iface_name="vpn")
                 test_ip_monitor.set_vpn_data()
                 self.assertIsNone(test_ip_monitor.data.vpn.ip)
@@ -177,28 +228,24 @@ class TestNetworkMonitor(unittest.TestCase):
         r_ip: str = generate_random_ip_address()
         status = Mock()
         status.iface_data = None
-        runtime_mock.get_api_ip_port.return_value = (r_ip, 0)
+        runtime_mock.container_runtime.get_api_ip_port.return_value = (r_ip, 0)
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", runtime_mock, status)
-        # # test_ip_monitor.set_swarm_data()
-        # # self.assertEqual(str(test_ip_monitor.data.swarm.ip), r_ip)
-        # #
-        # # runtime_mock.get_api_ip_port.return_value = (None, None)
-        # # test_ip_monitor.set_swarm_data()
-        # # self.assertIsNone(test_ip_monitor.data.swarm)
-        #
-        # runtime_mock.get_api_ip_port.return_value = None
-        # with self.assertRaises(TypeError):
-        #     test_ip_monitor.set_swarm_data()
+        test_ip_monitor.set_swarm_data()
+        self.assertEqual(str(test_ip_monitor.data.swarm.ip), r_ip)
 
-    @patch('agent.monitor.components.network.'
-           'NetworkMonitor.set_public_data')
-    @patch('agent.monitor.components.network.'
-           'NetworkMonitor.set_local_data')
-    @patch('agent.monitor.components.network.'
-           'NetworkMonitor.set_vpn_data')
-    @patch('agent.monitor.components.network.'
-           'NetworkMonitor.set_swarm_data')
+        runtime_mock.container_runtime.get_api_ip_port.return_value = (None, None)
+        test_ip_monitor.set_swarm_data()
+        self.assertIsNone(test_ip_monitor.data.swarm)
+
+        runtime_mock.container_runtime.get_api_ip_port.return_value = None
+        with self.assertRaises(TypeError):
+            test_ip_monitor.set_swarm_data()
+
+    @patch('agent.monitor.components.network.NetworkMonitor.set_public_data')
+    @patch('agent.monitor.components.network.NetworkMonitor.set_local_data')
+    @patch('agent.monitor.components.network.NetworkMonitor.set_vpn_data')
+    @patch('agent.monitor.components.network.NetworkMonitor.set_swarm_data')
     def test_update_data(self, pub, local, vpn, swarm):
         runtime_mock = Mock()
         # r_ip: str = generate_random_ip_address()
@@ -214,6 +261,204 @@ class TestNetworkMonitor(unittest.TestCase):
         self.assertEqual(vpn.call_count, 1)
         self.assertEqual(swarm.call_count, 1)
 
+    def test_read_traffic_data(self):
+
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", Mock(), True)
+        with patch('json.loads') as mock_json_loads, patch('os.listdir') as mock_ls:
+            mock_ls.side_effect = FileNotFoundError
+            test_ip_monitor.read_traffic_data()
+
+            # if sys path does not exist, get {}
+            self.assertEqual(test_ip_monitor.read_traffic_data(), [],
+                             'Got net info even though /sys path cannot be found')
+
+            mock_ls.reset_mock(side_effect=True)
+
+            # if previous net file cannot be found, or is malformed, don't load it
+            with patch(self.built_open, mock_open()) as mock_tel_open:
+                mock_tel_open.side_effect = [FileNotFoundError, MagicMock()]
+                mock_ls.return_value = []  # no interfaces, get []
+                self.assertEqual(test_ip_monitor.read_traffic_data(), [],
+                                 'Got net info even though no interfaces were found')
+                mock_json_loads.assert_not_called()
+
+            with patch(self.built_open, mock_open()) as mock_tel_open:
+                # if there are interfaces
+                mock_ls.return_value = ['iface1', 'iface2']
+                # try to open but if it fails, get []
+                mock_tel_open.side_effect = [FileNotFoundError, FileNotFoundError,
+                                             NotADirectoryError, MagicMock()]
+                self.assertEqual(
+                    test_ip_monitor.read_traffic_data(),
+                    [],
+                    'Got net info even though interfaces files cannot be read')
+
+            # the first time it runs, there are no previous net stats
+            self.assertEqual(test_ip_monitor.first_net_stats, {},
+                             'First net stats is not empty before first run')
+
+            expected_first_net_stats = {
+                'iface1': {
+                    "bytes-transmitted": 2,
+                    "bytes-received": 1,
+                    "bytes-transmitted-carry": 0,
+                    "bytes-received-carry": 0
+                },
+                'iface2': {
+                    "bytes-transmitted": 4,
+                    "bytes-received": 3,
+                    "bytes-transmitted-carry": 0,
+                    "bytes-received-carry": 0
+                }
+            }
+            with patch(self.built_open, mock_open()) as mock_tel_open:
+                # 4 readers because open tx and rx per interface (2x2)
+                mock_tel_open.side_effect = [FileNotFoundError,
+                                             mock_open(read_data='1').return_value,
+                                             mock_open(read_data='2').return_value,
+                                             mock_open(read_data='3').return_value,
+                                             mock_open(read_data='4').return_value,
+                                             MagicMock()]
+
+                # first time is all 0
+                self.assertEqual(
+                    test_ip_monitor.read_traffic_data(),
+                    [
+                        {
+                            'interface': 'iface1',
+                            'bytes-transmitted': 0,
+                            'bytes-received': 0},
+                        {
+                            'interface': 'iface2',
+                            'bytes-transmitted': 0,
+                            'bytes-received': 0}
+                    ],
+                    'Failed to get net stats')
+
+                self.assertEqual(
+                    test_ip_monitor.first_net_stats,
+                    expected_first_net_stats,
+                    'Unable to set first_net_stats after first run')
+
+            # now that first_net_stats exists, if system counter are still going,
+            # get the diff and return values
+            with patch(self.built_open) as mock_tel_open:
+                # 4 readers because open tx and rx per interface (2x2)
+                mock_tel_open.side_effect = [FileNotFoundError,
+                                             mock_open(read_data='10').return_value,
+                                             mock_open(read_data='10').return_value,
+                                             mock_open(read_data='20').return_value,
+                                             mock_open(read_data='20').return_value,
+                                             MagicMock()]
+
+                # current-first+carry=x -> 20-4+0-16
+                self.assertEqual(test_ip_monitor.read_traffic_data(), [
+                    {'interface': 'iface1', 'bytes-transmitted': 8,
+                     'bytes-received': 9},
+                    {'interface': 'iface2', 'bytes-transmitted': 16,
+                     'bytes-received': 17}
+                ],
+                                 'Failed to get net stats on a 2nd run')
+                # first_net_stats is not changed anymore
+                self.assertEqual(test_ip_monitor.first_net_stats,
+                                 expected_first_net_stats,
+                                 'first_net_stats were changed when they should not have')
+
+            # when system counters are reset, the reads are smaller than the first ones
+            with patch(self.built_open) as mock_tel_open:
+                # 4 readers because open tx and rx per interface (2x2)
+                mock_tel_open.side_effect = [FileNotFoundError,
+                                             mock_open(read_data='0').return_value,
+                                             mock_open(read_data='1').return_value,
+                                             mock_open(read_data='2').return_value,
+                                             mock_open(read_data='3').return_value,
+                                             MagicMock()]
+                # assuming once more previous_stats don't exist, we should get the
+                # reading as is
+                self.assertEqual(test_ip_monitor.read_traffic_data(), [
+                    {'interface': 'iface1', 'bytes-transmitted': 1,
+                     'bytes-received': 0},
+                    {'interface': 'iface2', 'bytes-transmitted': 3,
+                     'bytes-received': 2}
+                ],
+                                 'Failed to get net stats after counter reset')
+                # first_net_stats is NOW changed because of reset
+                new_first_stats = {
+                    'iface1': {
+                        "bytes-transmitted": 1,
+                        "bytes-received": 0,
+                        "bytes-transmitted-carry": 0,
+                        "bytes-received-carry": 0
+                    },
+                    'iface2': {
+                        "bytes-transmitted": 3,
+                        "bytes-received": 2,
+                        "bytes-transmitted-carry": 0,
+                        "bytes-received-carry": 0
+                    }
+                }
+                self.assertEqual(test_ip_monitor.first_net_stats, new_first_stats,
+                                 'first_net_stats did not change after system '
+                                 'counters reset')
+
+            # finally, if previous stats exist, and counters are reset, get their value
+            # + current readings
+            with patch(self.built_open) as mock_tel_open:
+                previous_net_stats = {
+                    'iface1': {
+                        "bytes-transmitted": 1,
+                        "bytes-received": 1
+                    },
+                    'iface2': {
+                        "bytes-transmitted": 2,
+                        "bytes-received": 2
+                    }
+                }
+                mock_json_loads.return_value = previous_net_stats
+                # 4 readers because open tx and rx per interface (2x2)
+                mock_tel_open.side_effect = [
+                    mock_open(read_data=json.dumps(previous_net_stats)).return_value,
+                    mock_open(read_data='0').return_value,
+                    mock_open(read_data='0').return_value,
+                    mock_open(read_data='1').return_value,
+                    mock_open(read_data='1').return_value,
+                    MagicMock()]
+
+                # result is the sum of previous + current
+                self.assertEqual(
+                    test_ip_monitor.read_traffic_data(),
+                    [
+                        {'interface': 'iface1',
+                         'bytes-transmitted': 1,
+                         'bytes-received': 1},
+                        {'interface': 'iface2',
+                         'bytes-transmitted': 3,
+                         'bytes-received': 3}
+                    ],
+                    'Failed to get net stats after counter reset, having previous'
+                    ' net stats')
+
+                # first_net_stats is NOW changed because of reset, considering
+                # previous stats
+                new_first_stats = {
+                    'iface1': {
+                        "bytes-transmitted": 0,
+                        "bytes-received": 0,
+                        "bytes-transmitted-carry": 1,
+                        "bytes-received-carry": 1
+                    },
+                    'iface2': {
+                        "bytes-transmitted": 1,
+                        "bytes-received": 1,
+                        "bytes-transmitted-carry": 2,
+                        "bytes-received-carry": 2
+                    }
+                }
+                self.assertEqual(test_ip_monitor.first_net_stats, new_first_stats,
+                                 'first_net_stats did not change after system counters '
+                                 'reset, having previous stats')
+
     def test_populate_nb_report(self):
         runtime_mock = Mock()
         status = Mock()
@@ -225,17 +470,43 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor.populate_nb_report(test_body)
         self.assertNotIn('ip', test_body)
 
-        test_ip_monitor.data.vpn = Mock()
+        test_ip_monitor.data.vpn = NetworkInterface()
         test_ip_monitor.data.vpn.ip = "VPN_IP"
-        with self.assertRaises(pydantic.error_wrappers.ValidationError):
-            test_ip_monitor.populate_nb_report(test_body)
+        self.assertEqual("VPN_IP", test_ip_monitor.populate_nb_report(test_body))
+        self.assertIn('ip', test_body)
+        self.assertIn('resources', test_body)
+        #
+        test_ip_monitor.data.vpn = NetworkInterface()
+        test_ip_monitor.data.public.ip = "PUB"
+        test_ip_monitor.data.vpn = None
+        self.assertEqual('PUB', test_ip_monitor.populate_nb_report(test_body))
 
-        print(test_ip_monitor.data)
-        # self.assertEqual()
-        #
-        # test_ip_monitor.data.public.ip = "PUB"
-        # self.assertEqual('VPN_IP', test_ip_monitor.populate_nb_report())
-        #
-        # test_ip_monitor.data.public.ip = "PUB"
-        # test_ip_monitor.data.vpn = None
-        # self.assertEqual("PUB", test_ip_monitor.populate_nb_report())
+        # Test local IP report
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", runtime_mock, status)
+        test_body: dict = {}
+        it_rand_ip = generate_random_ip_address()
+
+        test_ip_monitor.data.local = None
+        with self.assertRaises(AttributeError):
+            self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
+
+        test_ip_monitor.data.local = {
+            'test_1': NetworkInterface(iface_name='test_1',
+                                       default_gw=True,
+                                       ip=it_rand_ip)}
+        self.assertEqual(it_rand_ip, test_ip_monitor.populate_nb_report(test_body))
+        self.assertEqual(test_body['ip'], it_rand_ip)
+
+        test_ip_monitor.data.local['test_1'].default_gw = False
+        self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
+
+        # Test Swarm IP report
+        test_ip_monitor: monitor.NetworkMonitor = \
+            monitor.NetworkMonitor("", runtime_mock, status)
+        test_body: dict = {}
+        test_ip_monitor.populate_nb_report(test_body)
+        test_ip_monitor.data.swarm = NetworkInterface()
+        test_ip_monitor.data.swarm.ip = 'SWARM'
+        self.assertEqual('SWARM', test_ip_monitor.populate_nb_report(test_body))
+        self.assertEqual('SWARM', test_body['ip'])

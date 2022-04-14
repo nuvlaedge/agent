@@ -41,6 +41,6 @@ class NetworkingData(BaseDataStructure):
         swarm: SWARM node IP address (If present)
     """
     public: NetworkInterface = NetworkInterface(iface_name="public")
-    local: Dict[str, NetworkInterface] = {}
+    local: Union[Dict[str, NetworkInterface], None] = {}
     vpn: Union[NetworkInterface, None]
     swarm: Union[NetworkInterface, None]

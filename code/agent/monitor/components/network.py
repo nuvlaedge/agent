@@ -283,8 +283,10 @@ class NetworkMonitor(Monitor):
         for iface_traffic in it_traffic:
             it_name: str = iface_traffic.get("interface")
             if it_name in self.data.local.keys():
-                self.data.local[it_name].tx_bytes = iface_traffic.get('bytes-transmitted')
-                self.data.local[it_name].rx_bytes = iface_traffic.get('bytes-received')
+                self.data.local[it_name].tx_bytes = \
+                    iface_traffic.get('bytes-transmitted', '')
+                self.data.local[it_name].rx_bytes = \
+                    iface_traffic.get('bytes-received', '')
 
     def set_vpn_data(self) -> NoReturn:
         """ Discovers the NuvlaBox VPN IP  """
