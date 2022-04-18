@@ -1,4 +1,9 @@
 # Changelog
+## [2.7.2] - 2022-04-18
+### Added
+### Changed
+ - Do not fail if some installation parameters are not found
+ - Removed version pinning for Flask
 ## [2.7.1] - 2022-04-12
 ### Added 
  - requirements.txt: added itsdangerous==2.0.1
