@@ -1094,8 +1094,8 @@ class DockerClient(ContainerRuntimeClient):
 
         config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
         last_update = myself.attrs.get('Created', '')
-        working_dir = myself.labels['com.docker.compose.project.working_dir']
-        project_name = myself.labels['com.docker.compose.project']
+        working_dir = myself.labels.get('com.docker.compose.project.working_dir')
+        project_name = myself.labels.get('com.docker.compose.project')
         environment = []
         for env_var in myself.attrs.get('Config', {}).get('Env', []):
             if env_var.split('=')[0] in self.ignore_env_variables:
