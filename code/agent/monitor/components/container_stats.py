@@ -150,6 +150,7 @@ class ContainerStatsMonitor(Monitor):
 
     def update_data(self):
         version: str = self.client_runtime.get_client_version()
+
         if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
             self.data.docker_server_version = version
         else:

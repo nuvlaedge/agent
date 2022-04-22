@@ -40,6 +40,7 @@ class NuvlaEdgeInfoMonitor(Monitor):
         self.data.installation_home = self.installation_home
 
         node_info = self.runtime_client.get_node_info()
+
         self.data.operating_system = self.runtime_client.get_host_os()
         self.data.architecture = self.runtime_client.get_host_architecture(node_info)
         self.data.hostname = self.runtime_client.get_hostname(node_info)
