@@ -55,6 +55,7 @@ class ResourcesMonitor(Monitor):
             fused = report['fsused'] if report.get('fsused') else 0
             fused = round(int(fused) / 1024 / 1024 / 1024)
             name: str = report.get('name')
+
             if not capacity or not isinstance(fused, int) or not name:
                 return None
 
@@ -93,6 +94,8 @@ class ResourcesMonitor(Monitor):
 
             # Iterate list of partitions
             for partition in partitions:
+                if not partition.get('mountpoint'):
+                    continue
                 it_drive = self.clean_disk_report(partition)
                 if it_drive:
                     it_disk_status.append(it_drive)
