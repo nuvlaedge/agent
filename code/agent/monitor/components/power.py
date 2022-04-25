@@ -125,15 +125,13 @@ class PowerMonitor(Monitor):
                     for metric_combo in desired_metrics_files:
                         try:
                             with open(metric_combo[0], encoding='utf-8') as metric_f:
+
                                 return PowerEntry(
                                     metric_name=metric_combo[1],
                                     energy_consumption=float(metric_f.read().split()[0]),
                                     unit=metric_combo[2])
-                        except (IOError, IndexError):
+                        except (IOError, IndexError, ValueError):
                             return
-
-    def run(self) -> None:
-        ...
 
     def update_data(self):
 
@@ -143,9 +141,7 @@ class PowerMonitor(Monitor):
         for drive in self._NVIDIA_MODEL:
             it_data: PowerEntry = self.get_power(drive)
             if it_data:
-                self.data.power_entries[it_data.metric] = it_data
-
-        self.logger.error(self.data.power_entries)
+                self.data.power_entries[it_data.metric_name] = it_data
 
     def populate_nb_report(self, nuvla_report: Dict):
         ...

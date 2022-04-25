@@ -48,7 +48,7 @@ class TemperatureMonitor(Monitor):
         for name, value in ps_temp.items():
             self.update_temperature_entry(name, value.current)
 
-    def read_temperature_file(self,zone_path, temp_path) -> \
+    def read_temperature_file(self, zone_path, temp_path) -> \
             Tuple[Union[str, None], Union[float, None]]:
         """
         Reads files, extract temperature/thermal values and returns them
@@ -110,12 +110,11 @@ class TemperatureMonitor(Monitor):
             self.data.temperatures = {}
 
         if not os.path.exists(self.thermal_fs_path):
-            if hasattr(psutil, 'sensors_temperature'):
+            if hasattr(psutil, 'sensors_temperatures'):
+
                 self.update_temperatures_with_psutil()
         else:
             self.update_temperatures_with_file()
 
     def populate_nb_report(self, nuvla_report: Dict):
-        # nuvla_report['temperatures'] = \
-        #     [x.dict(by_alias=True) for x in self.data.temperatures.values()]
         ...

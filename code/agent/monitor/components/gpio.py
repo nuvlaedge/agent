@@ -32,10 +32,10 @@ class GpioMonitor(Monitor):
 
         # Instantiate parent class
         super().__init__(name, GpioData, enable_monitor)
+
         # Check GPIO availability
         if self.enabled_monitor:
             self.enabled_monitor = self.gpio_availability()
-
             if not status.gpio_pins:
                 status.gpio_pins = self.data
 
@@ -78,13 +78,8 @@ class GpioMonitor(Monitor):
             for i, exp in enumerate(self._gpio_expected_attr):
                 try:
                     cast_value = exp["type"](gpio_values[indexes[i]].rstrip().lstrip())
-
                     if cast_value or cast_value == 0:
-                        gpio_pin.parse_obj(
-                            {
-                                exp["attribute"].lower(): cast_value
-                            }
-                        )
+                        setattr(gpio_pin, exp["attribute"].lower(), cast_value)
                     else:
                         continue
                 except ValueError:
@@ -93,7 +88,7 @@ class GpioMonitor(Monitor):
                     continue
 
             return gpio_pin
-        except ValueError:
+        except (ValueError, IndexError):
             self.logger.warning(
                 f"Unable to get GPIO pin status on {gpio_values}, index {indexes[-1]}")
             return None
@@ -101,8 +96,8 @@ class GpioMonitor(Monitor):
         except KeyError:
             # if there's any other issue while doing so, it means the provided argument
             # is not valid
-            self.logger.exception(f"Invalid list of indexes {indexes} for GPIO pin "
-                                  f"in {line}. Cannot parse this pin")
+            self.logger.error(f"Invalid list of indexes {indexes} for GPIO pin "
+                              f"in {line}. Cannot parse this pin")
             return None
 
     # TODO: This may return none values in the tuple

@@ -6,7 +6,7 @@ from agent.monitor import BaseDataStructure
 
 class PowerEntry(BaseDataStructure):
     """ Single power report structure """
-    metric: Union[str, None]
+    metric_name: Union[str, None]
     energy_consumption: Union[float, None]
     unit: Union[str, None]
 

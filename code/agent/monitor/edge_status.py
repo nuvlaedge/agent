@@ -9,6 +9,7 @@ import pydantic
 from agent.monitor.data import (network_data, nuvlaedge_data, resources_data,
                                 orchestrator_data, temperature_data, geolocation_data,
                                 vulnerabilities_data, power_data)
+from agent.monitor.data.gpio_data import GpioData
 
 
 class EdgeStatus(pydantic.BaseModel):
@@ -38,3 +39,6 @@ class EdgeStatus(pydantic.BaseModel):
 
     # Power data report. (Only for Jetson-Boards)
     power: Union[power_data.PowerData, None]
+
+    # GPIO Pins
+    gpio_pins: Union[GpioData, None]
