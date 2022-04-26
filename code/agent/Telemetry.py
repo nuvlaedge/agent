@@ -23,7 +23,7 @@ from os import path, stat
 
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 from agent.monitor.edge_status import EdgeStatus
-from agent.monitor.components import get_monitor, monitors
+from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
 
 
@@ -121,7 +121,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.monitor_list: list[Monitor] = []
 
         # TODO: Fix proper initialization
-        for x in monitors:
+        for x in active_monitors:
             logging.error(f'Initializing monitor: {x}')
             self.monitor_list.append(get_monitor(x)(x, self, True))
 
@@ -252,7 +252,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     it_monitor.join()
                     logging.error(
                         f'Current number of threads: {len(threading.enumerate())}')
-                    # it_monitor = get_monitor(it_monitor.name)(it_monitor.name, self, True)
                 else:
                     logging.error(f'Starting thread {it_monitor.name} for first time')
                     it_monitor.start()
@@ -263,8 +262,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     it_monitor.update_data()
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
-        self.logger.error(f'Monitors processing time '
-                          f'{json.dumps(monitor_process_time, indent=4)}')
+        self.logger.info(f'Monitors processing time '
+                         f'{json.dumps(monitor_process_time, indent=4)}')
+
         for it_monitor in self.monitor_list:
             it_monitor.populate_nb_report(status_for_nuvla)
 

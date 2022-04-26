@@ -11,12 +11,15 @@ from agent.monitor.data.geolocation_data import GeoLocationData
 class TestGeoLocationMonitor(unittest.TestCase):
 
     mock_telemetry = Mock()
+    _patch_send_req: str = 'agent.monitor.components.geolocation.GeoLocationMonitor.' \
+                           'send_request'
+    _patch_parse_geo: str = 'agent.monitor.components.geolocation.GeoLocationMonitor.' \
+                            'parse_geolocation'
 
     def test_constructor(self):
         it_telemetry = Mock()
         it_telemetry.edge_status.inferred_location = None
-        test_geo: GeoLocationMonitor = GeoLocationMonitor('geo_test', it_telemetry,
-                                                          True)
+        GeoLocationMonitor('geo_test', it_telemetry, True)
         self.assertIsInstance(it_telemetry.edge_status.inferred_location, GeoLocationData)
 
     def test_send_request(self):
@@ -24,7 +27,7 @@ class TestGeoLocationMonitor(unittest.TestCase):
                                                           True)
 
         self.assertIsNone(test_geo.send_request(''))
-        self.assertIsInstance(test_geo.send_request('http://ip-api.com/json/'), dict)
+        self.assertIsInstance(test_geo.send_request('https://ipinfo.io/json'), dict)
 
     def test_parse_geolocation(self):
         test_geo: GeoLocationMonitor = GeoLocationMonitor('geo_test', self.mock_telemetry,
@@ -63,7 +66,7 @@ class TestGeoLocationMonitor(unittest.TestCase):
                           ip_location_service_name, ip_location_service_info, {})
 
         # without a "coordinates_key"
-        ip_location_service_name = 'ip-api.com'
+        ip_location_service_name = 'ipapi.co'
         ip_location_service_info = test_geo._LOCATION_SERVICES[
             ip_location_service_name]
         geolocation_response = {
@@ -104,17 +107,13 @@ class TestGeoLocationMonitor(unittest.TestCase):
 
         test_geo.is_thread = True
         # Void control
-        with patch('agent.monitor.components.geolocation.GeoLocationMonitor.send_request',
-                   autospec=True) as test_send_req:
+        with patch(self._patch_send_req, autospec=True) as test_send_req:
             test_send_req.return_value = None
             test_geo.update_data()
             self.assertIsNone(test_geo.data.coordinates)
 
-        with patch('agent.monitor.components.geolocation.GeoLocationMonitor.send_request',
-                   autospec=True) as test_send_req,\
-                patch('agent.monitor.components.geolocation.GeoLocationMonitor.'
-                      'parse_geolocation',
-                      autospec=True) as test_parse:
+        with patch(self._patch_send_req, autospec=True) as test_send_req,\
+                patch(self._patch_parse_geo, autospec=True) as test_parse:
             test_send_req.return_value = None
             test_parse.return_value = 'random_text'
             test_geo.update_data()
@@ -129,11 +128,8 @@ class TestGeoLocationMonitor(unittest.TestCase):
 
         test_geo: GeoLocationMonitor = GeoLocationMonitor('geo_test', self.mock_telemetry,
                                                           True)
-        with patch('agent.monitor.components.geolocation.GeoLocationMonitor.send_request',
-                   autospec=True) as test_send_req, \
-                patch('agent.monitor.components.geolocation.GeoLocationMonitor.'
-                      'parse_geolocation',
-                      autospec=True) as test_parse:
+        with patch(self._patch_send_req, autospec=True) as test_send_req, \
+                patch(self._patch_parse_geo, autospec=True) as test_parse:
             test_send_req.return_value = 'random_text'
             test_parse.side_effect = TypeError()
             test_geo.update_data()
@@ -143,11 +139,8 @@ class TestGeoLocationMonitor(unittest.TestCase):
         test_geo: GeoLocationMonitor = GeoLocationMonitor('geo_test', self.mock_telemetry,
                                                           True)
         body: dict = {}
-        with patch('agent.monitor.components.geolocation.GeoLocationMonitor.send_request',
-                   autospec=True) as test_send_req, \
-                patch('agent.monitor.components.geolocation.GeoLocationMonitor.'
-                      'parse_geolocation',
-                      autospec=True) as test_parse:
+        with patch(self._patch_send_req, autospec=True) as test_send_req, \
+                patch(self._patch_parse_geo, autospec=True) as test_parse:
             test_parse.return_value = [-1, -1]
             test_send_req.return_value = 'not_none'
 

@@ -15,14 +15,6 @@ class GeoLocationMonitor(Monitor):
     """ Threaded geolocation monitor """
 
     _LOCATION_SERVICES: Dict[str, Dict] = {
-        "ip-api.com": {
-            "url": "http://ip-api.com/json/",
-            "coordinates_key": None,
-            "longitude_key": "lon",
-            "latitude_key": "lat",
-            "altitude_key": None,
-            "ip": "query"
-        },
         "ipinfo.io": {
             "url": "https://ipinfo.io/json",
             "coordinates_key": "loc",

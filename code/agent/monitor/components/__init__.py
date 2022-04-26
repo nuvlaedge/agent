@@ -18,7 +18,7 @@ class Monitors:
 
         monitors: Currently registered and imported monitors
     """
-    monitors: Dict = {}
+    active_monitors: Dict = {}
 
     @classmethod
     def get_monitor(cls, monitor_name: str):
@@ -30,7 +30,7 @@ class Monitors:
         Returns:
 
         """
-        return cls.monitors.get(monitor_name)
+        return cls.active_monitors.get(monitor_name)
 
     @classmethod
     def register_monitor(cls, monitor_name: str, p_monitor):
@@ -42,7 +42,7 @@ class Monitors:
         """
 
         file_logger.info(f'Distribution {monitor_name} registered')
-        cls.monitors[monitor_name] = p_monitor
+        cls.active_monitors[monitor_name] = p_monitor
 
     @classmethod
     def monitor(cls, monitor_name: str = None):
@@ -59,7 +59,7 @@ class Monitors:
             if not monitor_name:
                 _monitor_name = monitor_class.__name__
 
-            if _monitor_name in cls.monitors:
+            if _monitor_name in cls.active_monitors:
                 file_logger.error(f'Monitor {_monitor_name} is already defined')
             else:
                 cls.register_monitor(_monitor_name, monitor_class)
@@ -71,7 +71,7 @@ class Monitors:
 monitor = Monitors.monitor
 get_monitor = Monitors.get_monitor
 register_monitor = Monitors.register_monitor
-monitors = Monitors.monitors
+active_monitors = Monitors.active_monitors
 
 for m in modules:
     if isfile(m) and not m.endswith('__init__.py'):

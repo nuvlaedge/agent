@@ -25,12 +25,12 @@ def generate_random_ip_address():
 
 class TestNetworkMonitor(unittest.TestCase):
     built_open: str = "builtins.open"
+    _path_json: str = 'json.loads'
 
     def test_constructor(self):
         it_telemetry = Mock()
         it_telemetry.edge_status.iface_data = None
-        test_geo: monitor.NetworkMonitor = monitor.NetworkMonitor(
-            'geo_test', it_telemetry, True)
+        monitor.NetworkMonitor('geo_test', it_telemetry, True)
         self.assertIsInstance(
             it_telemetry.edge_status.iface_data,
             NetworkingData)
@@ -128,7 +128,7 @@ class TestNetworkMonitor(unittest.TestCase):
         # Test Skip routes
         with patch('agent.monitor.components.network.NetworkMonitor.'
                    'is_skip_route') as test_skip, \
-                patch('json.loads') as json_dict:
+                patch(self._path_json) as json_dict:
             json_dict.return_value = ['Test']
             test_skip.return_value = True
             test_ip_monitor.set_local_data()
@@ -150,7 +150,7 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor.set_local_data()
         self.assertEqual(test_ip_monitor.data.local, {})
 
-        with patch('json.loads') as json_dict:
+        with patch(self._path_json) as json_dict:
             test_ip_monitor: monitor.NetworkMonitor = \
                 monitor.NetworkMonitor("", Mock(), True)
             test_ip_monitor.is_skip_route = Mock(return_value=False)
@@ -165,7 +165,7 @@ class TestNetworkMonitor(unittest.TestCase):
         # Test traffic readings
         with patch('agent.monitor.components.network.NetworkMonitor.'
                    'read_traffic_data') as test_traffic, \
-                patch('json.loads') as json_dict:
+                patch(self._path_json) as json_dict:
             json_dict.return_value = None
             test_traffic.return_value = [{'a': 'a'}]
             test_ip_monitor: monitor.NetworkMonitor = \
@@ -183,16 +183,6 @@ class TestNetworkMonitor(unittest.TestCase):
             monitor.NetworkMonitor("", Mock(), True)
 
         self.assertTrue(test_ip_monitor.is_skip_route({}))
-
-        # self.assertFalse(test_ip_monitor.is_skip_route(
-        #     {'dst': generate_random_ip_address()}))
-        #
-        # test_ip_monitor.data.local = {'eth0': ''}
-        # self.assertTrue(test_ip_monitor.is_skip_route({'dev': 'eth0'}))
-        #
-        # self.assertFalse(test_ip_monitor.is_skip_route({
-        #     'dst': generate_random_ip_address(),
-        #     'dev': 'eth1'}))
 
     # -------------------- VPN data tests -------------------- #
     def test_set_vpn_data(self):
@@ -265,7 +255,7 @@ class TestNetworkMonitor(unittest.TestCase):
 
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", Mock(), True)
-        with patch('json.loads') as mock_json_loads, patch('os.listdir') as mock_ls:
+        with patch(self._path_json) as mock_json_loads, patch('os.listdir') as mock_ls:
             mock_ls.side_effect = FileNotFoundError
             test_ip_monitor.read_traffic_data()
 
