@@ -5,6 +5,7 @@ import logging
 import mock
 import unittest
 import socket
+
 import tests.utils.fake as fake
 from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
@@ -15,7 +16,8 @@ class TelemetryTestCase(unittest.TestCase):
 
     agent_telemetry_open = 'agent.Telemetry.open'
 
-    def setUp(self):
+    @mock.patch('agent.Telemetry.Telemetry.initialize_monitors')
+    def setUp(self, mock_monitor_initializer):
         fake_nuvlabox_common = fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon)
         setattr(fake_nuvlabox_common, 'container_runtime', mock.MagicMock())
         setattr(fake_nuvlabox_common, 'container_stats_json_file', 'fake-stats-file')
@@ -26,6 +28,7 @@ class TelemetryTestCase(unittest.TestCase):
         self.nuvlabox_status_id = "nuvlabox-status/fake-id"
 
         self.obj = Telemetry(self.shared_volume, self.nuvlabox_status_id)
+
         # monkeypatching
         self.obj.mqtt_broker_host = 'fake-data-gateway'
         self.obj.mqtt_broker_port = 1
@@ -87,9 +90,6 @@ class TelemetryTestCase(unittest.TestCase):
         self.assertEqual(self.obj.status_default, self.obj.status,
                          'Failed to initialized status structures')
         self.assertIsInstance(self.obj.mqtt_telemetry, mqtt.Client)
-        # gpio should be false
-        self.assertFalse(self.obj.gpio_utility,
-                         'Set GPIO utility to True even though there is no GPIO')
 
     @mock.patch('os.system')
     def test_send_mqtt(self, mock_system):
@@ -132,24 +132,9 @@ class TelemetryTestCase(unittest.TestCase):
         self.assertEqual(mock_system.call_count, 5,
                          'Should have sent data to MQTT broker 5 times (1 per given metric)')
 
-    @mock.patch.object(Telemetry, 'send_mqtt')
-    @mock.patch.object(Telemetry, 'set_status_inferred_location')
-    @mock.patch.object(Telemetry, 'set_status_vulnerabilities')
-    @mock.patch.object(Telemetry, 'set_status_gpio')
-    @mock.patch.object(Telemetry, 'set_status_temperatures')
-    @mock.patch.object(Telemetry, 'set_status_coe_cert_expiration_date')
-    @mock.patch.object(Telemetry, 'set_status_installation_params')
-    @mock.patch.object(Telemetry, 'set_status_cluster')
-    @mock.patch.object(Telemetry, 'set_status_coe_version')
-    @mock.patch.object(Telemetry, 'set_status_ip')
     @mock.patch.object(Telemetry, 'set_status_operational_status')
-    @mock.patch.object(Telemetry, 'set_status_resources')
-    def test_get_status(self, mock_set_status_resources,
-                        mock_set_status_operational_status, mock_set_status_ip,
-                        mock_set_status_coe_version, mock_set_status_cluster,
-                        mock_set_status_installation_params, mock_set_status_coe_cert_expiration_date,
-                        mock_set_status_temperatures, mock_set_status_gpio,
-                        mock_set_status_vulnerabilities, mock_set_status_inferred_location, mock_send_mqtt):
+    @mock.patch.object(Telemetry, 'send_mqtt')
+    def test_get_status(self, mock_send_mqtt, mock_set_status_operational_status):
         self.obj.container_runtime.get_node_info.return_value = fake.MockDockerNode()
         self.obj.container_runtime.get_host_os.return_value = 'os'
         self.obj.container_runtime.get_host_architecture.return_value = 'arch'
@@ -157,28 +142,20 @@ class TelemetryTestCase(unittest.TestCase):
         self.obj.container_runtime.get_container_plugins.return_value = ['plugin']
 
         # these functions are already tested elsewhere
-        mock_set_status_resources.return_value = mock_set_status_operational_status.return_value = \
-            mock_set_status_ip.return_value = mock_set_status_coe_version.return_value = \
-            mock_set_status_cluster.return_value = mock_set_status_installation_params.return_value = \
-            mock_set_status_coe_cert_expiration_date.return_value = mock_set_status_temperatures.return_value = \
-            mock_set_status_gpio.return_value = mock_set_status_vulnerabilities.return_value = \
-            mock_send_mqtt.return_value = mock_set_status_inferred_location.return_value = None
+        mock_set_status_operational_status.return_value = \
+            mock_send_mqtt.return_value = None
 
-        mock_set_status_resources.side_effect = self.obj.status_default.update({
-            'resources': {},
-        })
-        # forget about the above mocks, and focus on the attrs that are actually set during this method
-
+        self.obj.status_default['resources'] = {
+            'cpu': {
+                'raw-sample': None},
+            'ram': {
+                'raw-sample': None},
+            'disks': []
+        }
         status_for_nuvla, all_status = self.obj.get_status()
 
         # all "Gets" were called
         mock_send_mqtt.assert_called_once_with(status_for_nuvla, None, None, [])
-
-        # the following fields are set within this method:
-        new_fields = ['operating-system', 'architecture', 'hostname', 'last-boot', 'container-plugins',
-                      'host-user-home', 'nuvlabox-engine-version']
-        self.assertTrue(all(status_for_nuvla[k] is not None for k in new_fields),
-                        'Failed to set status attributes during get_status')
 
         # all_status contains additional fields
         additional_fields = ["cpu-usage", "cpu-load", "disk-usage", "memory-usage", "cpus", "memory", "disk"]

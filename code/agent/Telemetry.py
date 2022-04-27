@@ -71,7 +71,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, nuvlabox_status_id, enable_container_monitoring=False):
+    def __init__(self, data_volume, nuvlabox_status_id):
         """ Constructs an Telemetry object, with a status placeholder """
 
         super(Telemetry, self).__init__(shared_data_volume=data_volume)
@@ -119,11 +119,17 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.edge_status: EdgeStatus = EdgeStatus()
 
         self.monitor_list: list[Monitor] = []
+        self.initialize_monitors()
 
-        # TODO: Fix proper initialization
+    def initialize_monitors(self):
+        """
+        Auxiliary function to extract some control from the class initialization
+        It gathers the available monitors and initializes them saving the reference into
+        the monitor_list attribute of Telemtry
+        """
         for x in active_monitors:
-            logging.error(f'Initializing monitor: {x}')
             self.monitor_list.append(get_monitor(x)(x, self, True))
+        self.logger.info(f'Monitors initializer: {[x.name for x in self.monitor_list]}')
 
     @property
     def status_on_nuvla(self):
@@ -269,7 +275,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             it_monitor.populate_nb_report(status_for_nuvla)
 
         node_info = self.container_runtime.get_node_info()
-
         # - STATUS attrs
         self.set_status_operational_status(status_for_nuvla, node_info)
 

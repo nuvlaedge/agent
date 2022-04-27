@@ -11,7 +11,6 @@ import requests
 from docker import errors as docker_err
 from mock import Mock, mock_open, patch, MagicMock
 
-import agent.monitor.components.network
 from agent.monitor.components import network as monitor
 from agent.monitor.data.network_data import NetworkInterface, NetworkingData
 from agent.monitor.edge_status import EdgeStatus

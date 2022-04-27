@@ -6,7 +6,6 @@
 It takes care of activating a new NuvlaBox
 """
 
-import json
 import logging
 import requests
 
