@@ -136,7 +136,7 @@ class TestTemperatureMonitor(unittest.TestCase):
         with patch('agent.monitor.components.temperature.psutil', autospec=True) as \
                 mock_sens:
             mock_exists.return_value = False
-            mock_sens.sensors_temperatures = 'trhisisanattribute'
+            mock_sens.__setattr__('sensors_temperatures', 'thisisavalue')
             test_monitor.update_data()
             mock_psutil.assert_called_once()
 
