@@ -125,19 +125,18 @@ class TestTemperatureMonitor(unittest.TestCase):
         # Test data initialization
         test_monitor: TemperatureMonitor = self.get_base_monitor()
 
-        mock_exists.return_value = None
         mock_psutil.return_value = None
         mock_update_file.return_value = None
 
         self.assertIsNone(test_monitor.data.temperatures)
-        test_monitor.update_data()
-        self.assertFalse(test_monitor.data.temperatures)
+
 
         # Test data update
         with patch('agent.monitor.components.temperature.psutil') as mock_sens:
             mock_exists.return_value = False
             mock_sens.__setattr__('sensors_temperatures', 'thisisavalue')
             test_monitor.update_data()
+            self.assertFalse(test_monitor.data.temperatures)
             mock_psutil.assert_called_once()
 
         mock_exists.return_value = True
