@@ -16,13 +16,14 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
     agent_nuvlabox_common_open = 'agent.common.NuvlaBoxCommon.open'
 
     @mock.patch('os.path.isdir')
+    @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_vpn_config_extra')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_nuvlabox_id')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_runtime_client_details')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.save_nuvla_configuration')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_nuvla_endpoint')
     @mock.patch('agent.common.NuvlaBoxCommon.NuvlaBoxCommon.set_installation_home')
     def setUp(self, mock_set_install_home, mock_set_nuvla_endpoint, mock_save_nuvla_conf,
-              mock_set_runtime, mock_set_nuvlabox_id, mock_os_isdir) -> None:
+              mock_set_runtime, mock_set_nuvlabox_id, mock_set_vpn_config_extra, mock_os_isdir) -> None:
         self.ssh_pub_key = 'fakeSSHPubKey'
         os.environ['NUVLABOX_IMMUTABLE_SSH_PUB_KEY'] = self.ssh_pub_key
         os.environ['NUVLABOX_ENGINE_VERSION'] = '2.3.1'
@@ -32,6 +33,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         mock_save_nuvla_conf.return_value = True
         mock_set_runtime.return_value = NuvlaBoxCommon.DockerClient('/rootfs', self.installation_home)
         mock_os_isdir.return_value = True
+        mock_set_vpn_config_extra.return_value = ''
         mock_set_nuvlabox_id.return_value = 'nuvlabox/fake-id'
         self.obj = NuvlaBoxCommon.NuvlaBoxCommon()
         logging.disable(logging.CRITICAL)
@@ -57,6 +59,21 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         # VPN iface name should be vpn by default
         self.assertEqual(self.obj.vpn_interface_name, 'vpn',
                          'VPN interface name was not set correctly')
+
+    def test_set_vpn_config_extra(self):
+        # if previously stored, read the extra config from the file
+        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='foo')):
+            self.assertEqual(self.obj.set_vpn_config_extra(), 'foo',
+                             'Failed to read VPN extra config from persisted file')
+
+        # if not previously stored, read the extra config from the env, and save it into a file
+        with mock.patch(self.agent_nuvlabox_common_open) as mock_open:
+            mock_open.side_effect = [FileNotFoundError, mock.MagicMock()]
+            os.environ.setdefault('VPN_CONFIG_EXTRA', r'--allow-pull-fqdn\n--client-nat snat network netmask alias')
+            self.assertEqual(self.obj.set_vpn_config_extra(), '--allow-pull-fqdn\n--client-nat snat network netmask alias',
+                             'Failed to read extra VPN config from environment variable')
+            self.assertEqual(mock_open.call_count, 1,
+                             'Failed to save extra VPN config from env into file')
 
     @mock.patch('os.path.exists')
     def test_set_installation_home(self, mock_exists):
@@ -342,7 +359,8 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
                 'nuvlabox_vpn_key': 'key',
                 'vpn_shared_key': 's_key',
                 'vpn_common_name_prefix': 'prefix',
-                'vpn_endpoints_mapped': 'endpoints'
+                'vpn_endpoints_mapped': 'endpoints',
+                'vpn_extra_config': 'some\nextra\nconf'
             }
             self.assertIsNone(self.obj.write_vpn_conf(vpn_values),
                               'Failed to write VPN conf')

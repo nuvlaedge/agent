@@ -1124,8 +1124,8 @@ class DockerClient(ContainerRuntimeClient):
 
         config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
         last_update = myself.attrs.get('Created', '')
-        working_dir = myself.labels['com.docker.compose.project.working_dir']
-        project_name = myself.labels['com.docker.compose.project']
+        working_dir = myself.labels.get('com.docker.compose.project.working_dir')
+        project_name = myself.labels.get('com.docker.compose.project')
         environment = []
         for env_var in myself.attrs.get('Config', {}).get('Env', []):
             if env_var.split('=')[0] in self.ignore_env_variables:
@@ -1398,6 +1398,7 @@ class NuvlaBoxCommon():
         self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
         self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
         self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
+        self.vpn_config_extra = self.set_vpn_config_extra()
         self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
         self.mqtt_broker_port = 1883
         self.mqtt_broker_keep_alive = 90
@@ -1441,6 +1442,35 @@ class NuvlaBoxCommon():
             }
         }
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
+
+    def set_vpn_config_extra(self) -> str:
+        """
+        If env var VPN_CONFIG_EXTRA is set, update vpn configuration.
+        If not set, use the saved value from the shared volume.
+
+        :return: extra config as a string
+        """
+        extra_config_file = f'{self.vpn_folder}/.extra_config'
+
+        extra_config = os.getenv('VPN_CONFIG_EXTRA')
+        if extra_config is not None:
+            extra_config = extra_config.replace(r'\n', '\n')
+            try:
+                with open(extra_config_file, 'w') as f:
+                    f.write(extra_config)
+            except OSError:
+                logging.exception('Failed to write VPN extra config file')
+            return extra_config
+
+        try:
+            with open(extra_config_file) as f:
+                return f.read()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logging.exception('Failed to read VPN extra config file')
+
+        return ''
 
     @staticmethod
     def set_installation_home(host_user_home_file: str) -> str:
@@ -1726,6 +1756,8 @@ ping-restart 120
 compress lz4
 
 ${vpn_endpoints_mapped}
+
+${vpn_extra_config}
 """)
 
         with open(self.vpn_client_conf_file, 'w') as vpnf:
@@ -1797,7 +1829,8 @@ ${vpn_endpoints_mapped}
             'vpn_common_name_prefix': vpn_conf_fields['vpn-common-name-prefix'],
             'vpn_endpoints_mapped': vpn_conf_fields['vpn-endpoints-mapped'],
             'vpn_interface_name': self.vpn_interface_name,
-            'nuvlabox_vpn_key': vpn_key
+            'nuvlabox_vpn_key': vpn_key,
+            'vpn_extra_config': self.vpn_config_extra
         }
 
         self.write_vpn_conf(vpn_values)
