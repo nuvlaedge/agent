@@ -12,6 +12,7 @@ GIT_BRANCH=$(echo ${GITHUB_REF} | awk -F'/' '{print $(NF)}' | sed -e 's/[^a-z0-9
 # taken from GITHUB_HEAD_REF
 if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
     GIT_BRANCH=${GITHUB_HEAD_REF}
+fi
     
 # non-tagged builds are not releases, so they always go on nuvladev
 DOCKER_ORG=${DOCKER_ORG:-nuvladev}
