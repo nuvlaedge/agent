@@ -25,7 +25,8 @@ jobs:
           python-version: '3.7'
 
       - name: GH Action tests
-        run: echo "${GITHUB_BASE_REF} ${GITHUB_HEAD_REF} ${GITHUB_REF} ${GITHUB_REF_NAME}"
+        run: echo "${GITHUB_EVENT_NAME}${GITHUB_HEAD_REF}"
+        
 #       - name: Run unit tests
 #         run: |
 #           pip install -r code/requirements.tests.txt
