@@ -24,37 +24,39 @@ jobs:
         with:
           python-version: '3.7'
 
-      - name: Run unit tests
-        run: |
-          pip install -r code/requirements.tests.txt
-          pytest code/tests --junitxml=test-report.xml -v
+      - name: GH Action tests
+        run: echo "${GITHUB_BASE_REF} ${GITHUB_HEAD_REF} ${GITHUB_REF} ${GITHUB_REF_NAME}"
+#       - name: Run unit tests
+#         run: |
+#           pip install -r code/requirements.tests.txt
+#           pytest code/tests --junitxml=test-report.xml -v
 
-      - name: Multi-arch docker image build prerequired
-        run: sudo docker run --privileged linuxkit/binfmt:v0.8
+#       - name: Multi-arch docker image build prerequired
+#         run: sudo docker run --privileged linuxkit/binfmt:v0.8
 
-      - name: Build and deploy on architecture
-        env:
-          DOCKER_USERNAME: ${{ secrets.SIXSQ_DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.SIXSQ_DOCKER_PASSWORD }}
-        run: ./container-release.sh
+#       - name: Build and deploy on architecture
+#         env:
+#           DOCKER_USERNAME: ${{ secrets.SIXSQ_DOCKER_USERNAME }}
+#           DOCKER_PASSWORD: ${{ secrets.SIXSQ_DOCKER_PASSWORD }}
+#         run: ./container-release.sh
 
-      - name: Get component dependencies
-        run: ./get-dependencies-tree.sh
+#       - name: Get component dependencies
+#         run: ./get-dependencies-tree.sh
 
-      - name: Keep list of dependencies as an artifact
-        uses: actions/upload-artifact@v2
-        if: ${{ success() }}
-        with:
-          name: dependencies
-          path: |
-            dependencies-tree.png
-            dependencies-licenses.txt
+#       - name: Keep list of dependencies as an artifact
+#         uses: actions/upload-artifact@v2
+#         if: ${{ success() }}
+#         with:
+#           name: dependencies
+#           path: |
+#             dependencies-tree.png
+#             dependencies-licenses.txt
 
-      - name: Publish Unit Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v1
-        if: always()
-        with:
-          files: test-report.xml
+#       - name: Publish Unit Test Results
+#         uses: EnricoMi/publish-unit-test-result-action@v1
+#         if: always()
+#         with:
+#           files: test-report.xml
 
   notify:
     if: always()
