@@ -100,7 +100,6 @@ class GpioMonitor(Monitor):
                               f"in {line}. Cannot parse this pin")
             return None
 
-    # TODO: This may return none values in the tuple
     def parse_pin_line(self, pin_line: str) -> \
             Tuple[Union[GpioPin, None], Union[GpioPin, None]]:
         """

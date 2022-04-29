@@ -282,10 +282,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         status_for_nuvla['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(status_for_nuvla,
-                       status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
-                       status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
-                       status_for_nuvla.get('resources', {}).get('disks', []))
+        self.send_mqtt(
+            status_for_nuvla,
+            status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
+            status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
+            status_for_nuvla.get('resources', {}).get('disks', []))
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()

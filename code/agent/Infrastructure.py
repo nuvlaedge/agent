@@ -34,7 +34,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         """
         super(Infrastructure, self).__init__(shared_data_volume=data_volume)
         Thread.__init__(self, daemon=True)
-        self.telemetry_instance = Telemetry(data_volume, None, enable_container_monitoring=False)
+        self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"

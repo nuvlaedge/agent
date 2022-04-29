@@ -130,7 +130,6 @@ class TestTemperatureMonitor(unittest.TestCase):
 
         self.assertIsNone(test_monitor.data.temperatures)
 
-
         # Test data update
         with patch('agent.monitor.components.temperature.psutil') as mock_sens:
             mock_exists.return_value = False

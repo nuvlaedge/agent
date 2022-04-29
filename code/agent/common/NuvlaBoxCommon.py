@@ -677,7 +677,6 @@ class KubernetesClient(ContainerRuntimeClient):
         return self.get_node_info().status.node_info.kubelet_version
 
     def get_kubelet_version(self):
-        # TODO: Remove after testing
         # IMPORTANT: this is only implemented for this k8s client class
         return self.get_node_info().status.node_info.kubelet_version
 
