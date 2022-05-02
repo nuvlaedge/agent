@@ -45,7 +45,8 @@ class MonitoredDict(dict):
         cc = caller.code_context
         code_context = cc[0] if cc and len(cc) >= 1 else ''
         logging.debug(
-            f'{self.name}.{cls_fn_name} called by {caller.filename}:{caller.lineno} {caller.function} {code_context}')
+            f'{self.name}.{cls_fn_name} called by {caller.filename}:{caller.lineno} '
+            f'{caller.function} {code_context}')
 
     def __setitem__(self, key, value):
         dict.__setitem__(self, key, value)
@@ -152,7 +153,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self._status = MonitoredDict('Telemetry.status', value)
         caller = inspect.stack()[1]
         logging.debug(f'Telemetry.status setter called by '
-                      f'{caller.filename}:{caller.lineno} {caller.function} {caller.code_context}')
+                      f'{caller.filename}:{caller.lineno} {caller.function} '
+                      f'{caller.code_context}')
         logging.debug(f'Telemetry.status updated: {value}')
 
     def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
@@ -166,16 +168,19 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """
 
         try:
-            self.mqtt_telemetry.connect(self.mqtt_broker_host, self.mqtt_broker_port, self.mqtt_broker_keep_alive)
+            self.mqtt_telemetry.connect(self.mqtt_broker_host, self.mqtt_broker_port,
+                                        self.mqtt_broker_keep_alive)
         except ConnectionRefusedError:
             logging.warning("Connection to NuvlaBox MQTT broker refused")
             self.mqtt_telemetry.disconnect()
             return
         except socket.timeout:
-            logging.warning(f'Timed out while trying to send telemetry to Data Gateway at {self.mqtt_broker_host}')
+            logging.warning(f'Timed out while trying to send telemetry to Data Gateway at'
+                            f' {self.mqtt_broker_host}')
             return
         except socket.gaierror:
-            logging.warning("The NuvlaBox MQTT broker is not reachable...trying again later")
+            logging.warning("The NuvlaBox MQTT broker is not reachable...trying again"
+                            " later")
             self.mqtt_telemetry.disconnect()
             return
 
@@ -186,7 +191,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         if cpu:
             # e1 = self.mqtt_telemetry.publish("cpu/capacity", payload=str(cpu[0]))
             # e2 = self.mqtt_telemetry.publish("cpu/load", payload=str(cpu[1]))
-            # ISSUE: for some reason, the connection is lost after publishing with paho-mqtt
+            # ISSUE: for some reason, the connection is lost after publishing with
+            # paho-mqtt
 
             # using os.system for now
 
@@ -206,9 +212,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             for dsk in disks:
                 # self.mqtt_telemetry.publish("disks", payload=json.dumps(dsk))
                 # same issue as above
-                os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                     "disks",
-                                                                     json.dumps(dsk)))
+                os.system("mosquitto_pub -h {} -t {} -m '{}'".format(
+                    self.mqtt_broker_host,
+                    "disks",
+                    json.dumps(dsk)))
 
         if energy:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
@@ -279,7 +286,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.set_status_operational_status(status_for_nuvla, node_info)
 
         # - CURRENT TIME attr
-        status_for_nuvla['current-time'] = datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
+        status_for_nuvla['current-time'] = \
+            datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
 
         # Publish the telemetry into the Data Gateway
         self.send_mqtt(

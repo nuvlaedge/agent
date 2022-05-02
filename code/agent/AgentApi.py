@@ -145,7 +145,7 @@ def post(payload):
         logging.info("Saving peripheral %s locally" % payload['id'])
         local_peripheral_save(peripheral_filepath, payload)
     except Exception as e:
-        logging.exception("Unable to save peripheral. Reverting request...")
+        logging.error("Unable to save peripheral. Reverting request...")
         modify(peripheral_identifier, peripheral_nuvla_id=payload['id'], action='DELETE')
         return {"error": "Unable to fulfill request: %s" % e}, 500
 
@@ -170,23 +170,25 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
 
     peripheral_filepath = "{}/{}".format(NB.peripherals_dir, peripheral_identifier)
 
-    per_nuvla_id = peripheral_nuvla_id if peripheral_nuvla_id else local_peripheral_get_identifier(peripheral_filepath)
+    per_nuvla_id = peripheral_nuvla_id if peripheral_nuvla_id else \
+        local_peripheral_get_identifier(peripheral_filepath)
+
     if not per_nuvla_id:
         logging.warning("{} not found and Nuvla resource ID not provided".format(peripheral_filepath))
         return {"error": "Peripheral not found"}, 404
 
     try:
         if action == 'DELETE':
-            out_peripheral = delete_peripheral(peripheral_nuvla_id, peripheral_filepath)
-            logging.info("Deleted {} from Nuvla".format(peripheral_nuvla_id))
+            out_peripheral = delete_peripheral(per_nuvla_id, peripheral_filepath)
+            logging.info("Deleted {} from Nuvla".format(per_nuvla_id))
         else:
-            out_peripheral = edit_peripheral(peripheral_nuvla_id, payload, peripheral_filepath)
-            logging.info("Changed {} in Nuvla, with payload: {}".format(peripheral_nuvla_id, payload))
+            out_peripheral = edit_peripheral(per_nuvla_id, payload, peripheral_filepath)
+            logging.info("Changed {} in Nuvla, with payload: {}".format(per_nuvla_id, payload))
 
         return out_peripheral.data, out_peripheral.data.get('status', 200)
     except nuvla.api.api.NuvlaError as e:
         if e.response.status_code == 404:
-            logging.warning(f"Peripheral {peripheral_nuvla_id} not found in Nuvla: {e.response.json()}")
+            logging.warning(f"Peripheral {per_nuvla_id} not found in Nuvla: {e.response.json()}")
 
             if action == 'DELETE':
                 try:
@@ -196,7 +198,8 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
                 logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
                 return {"message": "Deleted %s" % peripheral_identifier}, 200
 
-        # Maybe something went wrong and we should try later, so keep the local peripheral copy alive
+        # Maybe something went wrong and we should try later, so keep the local
+        # peripheral copy alive
         logging.warning("Cannot {} {} in Nuvla: {}".format(action, peripheral_nuvla_id, e.response.json()))
         return e.response.json(), e.response.status_code
     except Exception as e:
