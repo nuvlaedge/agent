@@ -9,6 +9,8 @@ import base64
 import json
 import logging
 import os
+from typing import List
+
 import requests
 import signal
 import socket
@@ -1050,8 +1052,14 @@ class DockerClient(ContainerRuntimeClient):
 
         # get first samples (needed for cpu monitoring)
         old_cpu = []
+
         for c_stat in docker_stats:
-            container_stats = json.loads(next(c_stat))
+            try:
+                container_stats = json.loads(next(c_stat))
+            except docker.errors.NotFound:
+                logging.warning(f'Docker container id {c_stat} not found')
+                old_cpu.append(None)
+                continue
 
             try:
                 old_cpu.append((float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
@@ -1062,11 +1070,18 @@ class DockerClient(ContainerRuntimeClient):
         # now the actual monitoring
         out = []
         for i, c_stat in enumerate(docker_stats):
+            if not old_cpu:
+                logging.warning(f'Container {all_containers[i]} '
+                                f'info not available, skipping this iteration')
+                continue
             container = all_containers[i]
             try:
                 container_stats = json.loads(next(c_stat))
             except StopIteration:
                 logging.exception('Containers finished, return')
+                continue
+            except docker.errors.NotFound:
+                logging.warning(f'Docker container id {c_stat} not found')
                 continue
             collection_errors = []
 

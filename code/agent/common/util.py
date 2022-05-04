@@ -19,20 +19,24 @@ def execute_cmd(command: List[str], method_flag: bool = True) \
     try:
         if method_flag:
             return run(command, stdout=PIPE, stderr=STDOUT, encoding='UTF-8')
-        else:
-            p = Popen(command, stdout=PIPE, stderr=PIPE)
-            stdout, stderr = p.communicate()
-            return {'stdout': stdout, 'stderr': stderr, 'returncode': p.returncode}
 
-    except OSError as osErr:
-        logging.error(f"Trying to execute non existent file: {osErr}")
+        with Popen(command, stdout=PIPE, stderr=PIPE) as shell_pipe:
+            stdout, stderr = shell_pipe.communicate()
 
-    except ValueError as valErr:
-        logging.error(f"Invalid arguments executed: {valErr}")
+            return {'stdout': stdout,
+                    'stderr': stderr,
+                    'returncode': shell_pipe.returncode}
 
-    except TimeoutExpired as timErr:
-        logging.error(f"Timeout {timErr} expired waiting for command: {command}")
+    except OSError as ex:
+        logging.error(f"Trying to execute non existent file: {ex}")
 
-    except SubprocessError as generalErr:
-        logging.error(f"Exception not identified: {generalErr}")
+    except ValueError as ex:
+        logging.error(f"Invalid arguments executed: {ex}")
+
+    except TimeoutExpired as ex:
+        logging.error(f"Timeout {ex} expired waiting for command: {command}")
+
+    except SubprocessError as ex:
+        logging.error(f"Exception not identified: {ex}")
+
     return None

@@ -252,24 +252,29 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "status-notes": operational_status_notes,
         })
 
-    def get_status(self):
-        """ Gets several types of information to populate the NuvlaBox status """
-
-        status_for_nuvla = self.status_default.copy()
+    def update_monitors(self, status_dict):
+        """
+        Watchdog function for monitor class updating
+        Args:
+            status_dict: dictionary containing the report for Nuvla to be updated by
+            each monitor
+        """
         monitor_process_time: Dict = {}
 
         for it_monitor in self.monitor_list:
-            if it_monitor.is_thread and not it_monitor.is_alive():
+            logging.debug(f' --- Monitor: {it_monitor.name} -- '
+                          f'TH: {it_monitor.is_thread}-{it_monitor.is_alive()}-'
+                          f'{it_monitor.ident}')
 
+            if it_monitor.is_thread and not it_monitor.is_alive():
                 if it_monitor.ident:
                     it_monitor.join()
-                    logging.error(
-                        f'Current number of threads: {len(threading.enumerate())}')
                 else:
-                    logging.error(f'Starting thread {it_monitor.name} for first time')
+                    logging.error(f'Starting monitor {it_monitor.name} '
+                                  f'thread for first time')
                     it_monitor.start()
             else:
-                if not it_monitor.is_thread or not it_monitor.is_alive():
+                if not it_monitor.is_alive():
                     init_time: float = time.time()
 
                     it_monitor.update_data()
@@ -279,7 +284,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                          f'{json.dumps(monitor_process_time, indent=4)}')
 
         for it_monitor in self.monitor_list:
-            it_monitor.populate_nb_report(status_for_nuvla)
+            it_monitor.populate_nb_report(status_dict)
+
+    def get_status(self):
+        """ Gets several types of information to populate the NuvlaBox status """
+
+        status_for_nuvla = self.status_default.copy()
+
+        # Update monitor objects
+        self.update_monitors(status_for_nuvla)
 
         node_info = self.container_runtime.get_node_info()
         # - STATUS attrs
