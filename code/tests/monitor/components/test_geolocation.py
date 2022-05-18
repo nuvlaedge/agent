@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import time
 
-from mock import Mock, patch, mock_open
+from mock import Mock, patch
 import unittest
 
 from agent.monitor.components.geolocation import GeoLocationMonitor

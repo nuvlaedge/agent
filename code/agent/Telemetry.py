@@ -11,14 +11,12 @@ import inspect
 import json
 import logging
 import os
-import threading
-from typing import Dict
+from typing import Dict, NoReturn
 
 import paho.mqtt.client as mqtt
 import psutil
 import socket
 import time
-
 from os import path, stat
 
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
@@ -119,18 +117,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.edge_status: EdgeStatus = EdgeStatus()
 
-        self.monitor_list: list[Monitor] = []
+        self.monitor_list: Dict[str, Monitor] = {}
         self.initialize_monitors()
 
-    def initialize_monitors(self):
+    def initialize_monitors(self) -> NoReturn:
         """
         Auxiliary function to extract some control from the class initialization
         It gathers the available monitors and initializes them saving the reference into
         the monitor_list attribute of Telemtry
         """
         for x in active_monitors:
-            self.monitor_list.append(get_monitor(x)(x, self, True))
-        self.logger.info(f'Monitors initializer: {[x.name for x in self.monitor_list]}')
+            self.monitor_list[x] = (get_monitor(x)(x, self, True))
+        self.logger.info(f'Monitors initializer: {[x for x in self.monitor_list.keys()]}')
 
     @property
     def status_on_nuvla(self):
@@ -261,14 +259,18 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """
         monitor_process_time: Dict = {}
 
-        for it_monitor in self.monitor_list:
-            logging.debug(f' --- Monitor: {it_monitor.name} -- '
-                          f'TH: {it_monitor.is_thread}-{it_monitor.is_alive()}-'
-                          f'{it_monitor.ident}')
+        for monitor_name, it_monitor in self.monitor_list.items():
+            self.logger.warning(f' --- Monitor: {it_monitor.name} -- '
+                                f'Threaded: {it_monitor.is_thread} -- '
+                                f'{it_monitor.is_alive()}-')
 
             if it_monitor.is_thread and not it_monitor.is_alive():
                 if it_monitor.ident:
                     it_monitor.join()
+                    self.logger.warning(f'Monitor {monitor_name} offline. '
+                                        f'Re-initializing...')
+                    self.monitor_list[monitor_name] = \
+                        get_monitor(monitor_name)(monitor_name, self, True)
                 else:
                     logging.error(f'Starting monitor {it_monitor.name} '
                                   f'thread for first time')
@@ -280,10 +282,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     it_monitor.update_data()
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
-        self.logger.info(f'Monitors processing time '
-                         f'{json.dumps(monitor_process_time, indent=4)}')
+        self.logger.warning(f'Monitors processing time '
+                            f'{json.dumps(monitor_process_time, indent=4)}')
 
-        for it_monitor in self.monitor_list:
+        for it_monitor in self.monitor_list.values():
             it_monitor.populate_nb_report(status_dict)
 
     def get_status(self):
@@ -320,7 +322,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
             "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
         })
-        # logging.error(json.dumps(status_for_nuvla, indent=4))
+
         return status_for_nuvla, all_status
 
     @staticmethod

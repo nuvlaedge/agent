@@ -317,7 +317,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         return api_endpoint, container_api_port
 
-    def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict, old_payload: dict):
+    def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict,
+                                   old_payload: dict):
         """
         For workers, sets the "remove" attr to instruct the partial decommission
 

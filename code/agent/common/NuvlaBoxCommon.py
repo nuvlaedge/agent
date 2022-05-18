@@ -1078,7 +1078,7 @@ class DockerClient(ContainerRuntimeClient):
             try:
                 container_stats = json.loads(next(c_stat))
             except StopIteration:
-                logging.exception('Containers finished, return')
+                logging.warning(f'Container {c_stat} stats iteration finished, return')
                 continue
             except docker.errors.NotFound:
                 logging.warning(f'Docker container id {c_stat} not found')
