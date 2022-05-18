@@ -11,7 +11,7 @@ import inspect
 import json
 import logging
 import os
-from typing import Dict, NoReturn
+from typing import Dict, NoReturn, List
 
 import paho.mqtt.client as mqtt
 import psutil
@@ -70,7 +70,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         data_volume: path to shared NuvlaBox data
     """
 
-    def __init__(self, data_volume, nuvlabox_status_id):
+    def __init__(self, data_volume, nuvlabox_status_id, excluded_monitors: str = ''):
         """ Constructs an Telemetry object, with a status placeholder """
 
         super(Telemetry, self).__init__(shared_data_volume=data_volume)
@@ -117,6 +117,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         self.edge_status: EdgeStatus = EdgeStatus()
 
+        self.excluded_monitors: List[str] = excluded_monitors.replace("'", "").split(',')
+        self.logger.error(f'Excluded monitors received in Telemetry'
+                          f' {self.excluded_monitors}')
         self.monitor_list: Dict[str, Monitor] = {}
         self.initialize_monitors()
 
@@ -127,7 +130,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         the monitor_list attribute of Telemtry
         """
         for x in active_monitors:
+            if x.split('_')[0] in self.excluded_monitors:
+                continue
             self.monitor_list[x] = (get_monitor(x)(x, self, True))
+        self.logger.error(f'Available Monitors: {active_monitors.keys()}')
         self.logger.info(f'Monitors initializer: {[x for x in self.monitor_list.keys()]}')
 
     @property

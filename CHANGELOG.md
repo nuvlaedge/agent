@@ -5,7 +5,7 @@
 - Added new Pydantic BaseModel to validate data from Nuvla.
 - Added a modular monitor structure in which every monitor can be included or excluded. 
   (Some are compulsory)
-- Added data structure foor each monitor to allow data validation 
+- Added data structure for each monitor to allow data validation 
 - New future data structure provided to IP interfaces. Still need to adapt
   server-side to enable it in Agent.
 - Added host device network interfaces reading. Using an auxiliary Docker
@@ -14,7 +14,8 @@
 ### Changed
 - Telemetry class now is a watchdog of monitors. It keeps them running and starts them 
   over if needed
-- Whole telemtry class has been refactored
+- Whole telemetry class has been refactored
+- Logging formatting modified and unified
 
 ## [2.7.2] - 2022-04-18
 ### Added

@@ -25,6 +25,8 @@ import os
 import requests
 import time
 from flask import Flask, request, jsonify
+from flask import logging as flask_logging
+
 from threading import Event
 from agent.common import NuvlaBoxCommon
 from agent.Activate import Activate
@@ -35,18 +37,31 @@ from agent.Job import Job
 __copyright__ = "Copyright (C) 2019 SixSq"
 __email__ = "support@sixsq.com"
 
+root_logger: logging.Logger = logging.getLogger('agent')
+log_format: str = '[%(asctime)s - %(name)s/%(funcName)s - %(levelname)s]: %(message)s'
+formatter: logging.Formatter = logging.Formatter(log_format)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="NuvlaBox Agent")
     parser.add_argument('--debug', dest='debug', default=False, action='store_true',
                         help='use for increasing the verbosity level')
 
     if parser.parse_args().debug:
-        logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+        logging.basicConfig(
+            stream=sys.stdout,
+            level=logging.DEBUG,
+            format=log_format)
     else:
         try:
-            logging.basicConfig(stream=sys.stdout, level=logging.getLevelName(os.getenv('NUVLABOX_LOG_LEVEL')))
+            logging.basicConfig(
+                stream=sys.stdout,
+                level=logging.getLevelName(os.getenv('NUVLABOX_LOG_LEVEL')),
+                format=log_format)
         except ValueError:
-            logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+            logging.basicConfig(
+                stream=sys.stdout,
+                level=logging.INFO,
+                format=log_format)
 
 # finish imports with logging
 import agent.AgentApi as AgentApi
@@ -73,10 +88,12 @@ def manage_pull_jobs(job_list, job_image_name):
             job.launch()
         except Exception as ex:
             # catch all
-            logging.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
+            root_logger.error(f'Cannot process job {job_id}. Reason: {str(ex)}')
 
 
-def preflight_check(activation_class_object: Activate, infra_class_object: Infrastructure, nb_updated_date: str):
+def preflight_check(activation_class_object: Activate,
+                    infra_class_object: Infrastructure,
+                    nb_updated_date: str):
     """
     Checks if the NuvlaBox resource has been updated in Nuvla
     :param activation_class_object: instance of Activate
@@ -91,15 +108,18 @@ def preflight_check(activation_class_object: Activate, infra_class_object: Infra
     global nuvlabox_info_updated_date
 
     if nuvlabox_resource.get('state', '').startswith('DECOMMISSION'):
-        logging.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. Exiting...')
+        root_logger.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. Exiting...')
         can_continue = False
 
     if nb_updated_date != nuvlabox_resource['updated'] and can_continue:
         refresh_interval = nuvlabox_resource['refresh-interval']
-        logging.warning('NuvlaBox resource updated. Refresh interval value: {}s'.format(refresh_interval))
+        root_logger.warning(f'NuvlaBox resource updated. Refresh interval value: '
+                            f'{refresh_interval}s')
         nuvlabox_info_updated_date = nuvlabox_resource['updated']
-        old_nuvlabox_resource = activation_class_object.create_nb_document_file(nuvlabox_resource)
-        activation_class_object.vpn_commission_if_needed(nuvlabox_resource, old_nuvlabox_resource)
+        old_nuvlabox_resource = \
+            activation_class_object.create_nb_document_file(nuvlabox_resource)
+        activation_class_object.vpn_commission_if_needed(nuvlabox_resource,
+                                                         old_nuvlabox_resource)
 
     # if there's a mention to the VPN server, then watch the VPN credential
     if nuvlabox_resource.get("vpn-server-id"):
@@ -114,13 +134,13 @@ def set_status():
     log = str(request.args.get('log'))
 
     if not value:
-        logging.warning("Received status request with no value. Nothing to do")
+        root_logger.warning("Received status request with no value. Nothing to do")
     else:
-        logging.info("Setting NuvlaBox status to {}".format(value))
+        root_logger.info("Setting NuvlaBox status to {}".format(value))
         if log:
             print(app.config["telemetry"], dir(app.config["telemetry"]))
 
-    logging.warning('to be implemented')
+    root_logger.warning('to be implemented')
     return "to be implemented"
 
 
@@ -148,7 +168,7 @@ def trigger_commission():
 
     payload = json.loads(request.data)
 
-    logging.info('Commission triggered via the NB Agent API')
+    root_logger.info('Commission triggered via the NB Agent API')
 
     commissioning_response = app.config["infra"].do_commission(payload)
     return jsonify(commissioning_response)
@@ -163,7 +183,7 @@ def set_vulnerabilities():
 
     payload = json.loads(request.data)
 
-    logging.info('Saving vulnerabilities received via the API: %s ' % payload)
+    root_logger.info('Saving vulnerabilities received via the API: %s ' % payload)
 
     AgentApi.save_vulnerabilities(payload)
 
@@ -177,7 +197,7 @@ def set_vpn_ip():
 
     payload = request.data
 
-    logging.info('Received request to set VPN IP to %s ' % payload)
+    root_logger.info('Received request to set VPN IP to %s ' % payload)
 
     AgentApi.save_vpn_ip(payload)
     return jsonify(True), 201
@@ -207,7 +227,7 @@ def manage_peripheral(identifier):
     :param identifier: local id of the peripheral to be managed
     """
 
-    logging.info('  ####   Received %s request for peripheral management' % request.method)
+    root_logger.info('  ####   Received %s request for peripheral management' % request.method)
 
     payload = {}
     if request.data:
@@ -217,7 +237,7 @@ def manage_peripheral(identifier):
             return jsonify({"error": "Payload {} malformed. It must be a JSON payload".format(payload)}), 400
 
     if identifier:
-        logging.info('  ####   %s peripheral %s' % (request.method, identifier))
+        root_logger.info('  ####   %s peripheral %s' % (request.method, identifier))
         if request.method in ["DELETE", "PUT"]:
             # DELETE accepts resource ID for simplicity and backward compatibility
             resource_id = request.args.get('id')
@@ -226,20 +246,20 @@ def manage_peripheral(identifier):
         elif request.method == "GET":
             message, return_code = AgentApi.get(identifier)
         else:
-            logging.info('  ####   Method %s not implemented yet!!' % request.method)
+            root_logger.info('  ####   Method %s not implemented yet!!' % request.method)
             message = "Not implemented"
             return_code = 501
     else:
         # POST or FIND peripheral
         if request.method == "POST":
-            logging.info('  ####   Creating new peripheral with payload %s' % payload)
+            root_logger.info('  ####   Creating new peripheral with payload %s' % payload)
             message, return_code = AgentApi.post(payload)
         else:
             # GET
             parameter = request.args.get('parameter')
             value = request.args.get('value')
             identifier_pattern = request.args.get('identifier_pattern')
-            logging.info('  ####   Find peripherals with {}={}'.format(parameter, value))
+            root_logger.info('  ####   Find peripherals with {}={}'.format(parameter, value))
             message, return_code = AgentApi.find(parameter, value, identifier_pattern)
 
     return jsonify(message), return_code
@@ -255,13 +275,13 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     :return: (Nuvla.api response, current heartbeat timestamp)
     """
 
-    logging.debug(f'send_heartbeat({nb_instance}, {nb_telemetry}, {nb_status_id}, {previous_status_time})')
+    root_logger.debug(f'send_heartbeat({nb_instance}, {nb_telemetry}, {nb_status_id}, {previous_status_time})')
 
     status, _delete_attributes = nb_telemetry.diff(nb_telemetry.status_on_nuvla, nb_telemetry.status)
     status_current_time = nb_telemetry.status.get('current-time', '')
     delete_attributes = []
 
-    logging.debug(f'send_heartbeat: status_current_time = {status_current_time}  _delete_attributes = {_delete_attributes}  status = {status}')
+    root_logger.debug(f'send_heartbeat: status_current_time = {status_current_time}  _delete_attributes = {_delete_attributes}  status = {status}')
 
     if not status_current_time:
         status = {'status-notes': ['NuvlaBox Telemetry is starting']}
@@ -276,9 +296,9 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         else:
             delete_attributes = _delete_attributes
 
-    # logging.debug('Refresh status: %s' % status)
+    # root_logger.debug('Refresh status: %s' % status)
     if delete_attributes:
-        logging.info(f'Deleting the following attributes from NuvlaBox Status: '
+        root_logger.info(f'Deleting the following attributes from NuvlaBox Status: '
                      f'{", ".join(delete_attributes)}')
 
     try:
@@ -288,7 +308,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
         nb_telemetry.status_on_nuvla.update(status)
 
     except:
-        logging.error("Unable to update NuvlaBox status in Nuvla")
+        root_logger.error("Unable to update NuvlaBox status in Nuvla")
         raise
 
     return r.data, status_current_time
@@ -308,7 +328,7 @@ def wait_for_api_ready():
         except:
             time.sleep(1)
 
-    logging.info('NuvlaBox Agent has been initialized.')
+    root_logger.info('NuvlaBox Agent has been initialized.')
     return
 
 
@@ -318,8 +338,8 @@ if __name__ == "__main__":
     e = Event()
     # Try to activate the NuvlaBox
     activation = Activate(data_volume)
-    logging.info(f'Nuvla endpoint: {activation.nuvla_endpoint}')
-    logging.info(f'Nuvla connection insecure: {str(activation.nuvla_endpoint_insecure)}')
+    root_logger.info(f'Nuvla endpoint: {activation.nuvla_endpoint}')
+    root_logger.info(f'Nuvla connection insecure: {str(activation.nuvla_endpoint_insecure)}')
     while True:
         can_activate, user_info = activation.activation_is_possible()
         if can_activate or user_info:
@@ -335,12 +355,13 @@ if __name__ == "__main__":
     nuvlabox_status_id = nuvlabox_resource["nuvlabox-status"]
     activation.vpn_commission_if_needed(nuvlabox_resource, old_nuvlabox_resource)
 
-    telemetry = Telemetry(data_volume, nuvlabox_status_id)
+    telemetry = Telemetry(data_volume, nuvlabox_status_id,
+                          os.environ.get('EXCLUDED_MONITORS', ''))
     infra = Infrastructure(data_volume)
     NB = NuvlaBoxCommon.NuvlaBoxCommon()
 
     if not infra.installation_home:
-        logging.error('Host user HOME directory not defined. This might impact future SSH management actions')
+        root_logger.error('Host user HOME directory not defined. This might impact future SSH management actions')
     else:
         with open(infra.host_user_home_file, 'w') as userhome:
             userhome.write(infra.installation_home)
@@ -365,10 +386,10 @@ if __name__ == "__main__":
 
     # start telemetry
     with NuvlaBoxCommon.timeout(10):
-        logging.info('Waiting for API to be ready...')
+        root_logger.info('Waiting for API to be ready...')
         wait_for_api_ready()
 
-    logging.info("Starting telemetry...")
+    root_logger.info("Starting telemetry...")
     while True:
         start_cycle = time.time()
 
@@ -376,7 +397,7 @@ if __name__ == "__main__":
             break
 
         if telemetry_thread and telemetry_thread.is_alive():
-            logging.warning('Telemetry thread not completed in time')
+            root_logger.warning('Telemetry thread not completed in time')
 
         response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
 
@@ -392,7 +413,7 @@ if __name__ == "__main__":
             telemetry_thread.start()
 
         if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
-            logging.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
+            root_logger.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
             threading.Thread(target=manage_pull_jobs,
                                 args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
                                 daemon=True).start()
@@ -403,6 +424,7 @@ if __name__ == "__main__":
 
         cycle_duration = time.time() - start_cycle
         next_cycle_in = refresh_interval - cycle_duration - 1
-        logging.debug(f'End of cycle. Cycle duration: {cycle_duration} sec. Next cycle in {next_cycle_in} sec.')
+        root_logger.debug(f'End of cycle. Cycle duration: {cycle_duration} sec. Next '
+                          f'cycle in {next_cycle_in} sec.')
 
         e.wait(timeout=next_cycle_in)
