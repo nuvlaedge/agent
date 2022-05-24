@@ -1361,7 +1361,7 @@ class DockerClient(ContainerRuntimeClient):
 
 
 # --------------------
-class NuvlaBoxCommon():
+class NuvlaBoxCommon:
     """ Common set of methods and variables for the NuvlaBox agent
     """
 

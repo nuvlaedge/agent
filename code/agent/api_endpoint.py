@@ -133,6 +133,7 @@ def manage_peripheral(identifier):
             resource_id = request.args.get('id')
 
             message, return_code = agent_api.modify(identifier,
+                                                    peripheral_nuvla_id=resource_id,
                                                     action=request.method,
                                                     payload=payload)
 
