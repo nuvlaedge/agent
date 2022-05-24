@@ -212,9 +212,12 @@ class AgentApiTestCase(unittest.TestCase):
 
         # - if there's any other generic error, then we should get a 500
         mock_edit_peripheral.side_effect = requests.ConnectionError
-        self.assertEqual(AgentApi.modify(self.peripheral_identifier,
-                                         peripheral_nuvla_id=self.peripheral_content['id'])[-1], 500,
-                         'There was a generic connection error, but we did not receive the expected 500')
+        self.assertEqual(AgentApi.modify(
+            self.peripheral_identifier,
+            peripheral_nuvla_id=self.peripheral_content['id'])[-1],
+                         500,
+                         'There was a generic connection error, but we did not receive '
+                         'the expected 500')
 
         # - if all goes well, we should get the the peripheral content, and a 200
         mock_edit_peripheral.reset_mock(side_effect=True)

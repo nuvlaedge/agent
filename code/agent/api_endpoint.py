@@ -131,8 +131,8 @@ def manage_peripheral(identifier):
         if request.method in ["DELETE", "PUT"]:
             # DELETE accepts resource ID for simplicity and backward compatibility
             resource_id = request.args.get('id')
+
             message, return_code = agent_api.modify(identifier,
-                                                    peripheral_nuvla_id=resource_id,
                                                     action=request.method,
                                                     payload=payload)
 
@@ -147,7 +147,7 @@ def manage_peripheral(identifier):
     else:
         # POST or FIND peripheral
         if request.method == "POST":
-            endpoint_logger.info('####  Creating new peripheral with payload {payload}')
+            endpoint_logger.info(f'####  Creating new peripheral with payload {payload}')
             message, return_code = agent_api.post(payload)
         else:
             # GET
