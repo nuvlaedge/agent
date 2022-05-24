@@ -13,7 +13,7 @@ import json
 import requests
 import time
 from agent.common import NuvlaBoxCommon
-from agent.Telemetry import Telemetry
+from agent.telemetry import Telemetry
 from datetime import datetime
 from os import path, stat, remove
 from threading import Thread
@@ -27,14 +27,17 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
     """
 
-    def __init__(self, data_volume, refresh_period=15):
+    def __init__(self, data_volume, telemetry: Telemetry = None, refresh_period=15):
         """ Constructs an Infrastructure object, with a status placeholder
 
         :param data_volume: shared volume
         """
         super(Infrastructure, self).__init__(shared_data_volume=data_volume)
         Thread.__init__(self, daemon=True)
-        self.telemetry_instance = Telemetry(data_volume, None)
+        if telemetry:
+            self.telemetry_instance = telemetry
+        else:
+            self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = 'compute-api'
         self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"

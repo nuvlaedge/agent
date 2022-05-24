@@ -14,12 +14,12 @@ from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
 
 with mock.patch.object(agent.common.NuvlaBoxCommon, 'NuvlaBoxCommon') as mock_nb_common:
     mock_nb_common.return_value = Fake.imitate(NuvlaBoxCommon)
-    from agent import AgentApi
+    from agent import agent_api as AgentApi
 
 
 class AgentApiTestCase(unittest.TestCase):
 
-    agent_api_open = 'agent.AgentApi.open'
+    agent_api_open = 'agent.agent_api.open'
 
     def setUp(self):
         self.peripheral_filepath = 'mock/peripheral/path'
@@ -38,7 +38,7 @@ class AgentApiTestCase(unittest.TestCase):
     def tearDown(self):
         logging.disable(logging.NOTSET)
 
-    @mock.patch('agent.AgentApi.os')
+    @mock.patch('agent.agent_api.os')
     def test_local_peripheral_exists(self, mock_os):
         # if file path exists, then we should get True
         mock_os.path.exists.return_value = True
@@ -48,7 +48,7 @@ class AgentApiTestCase(unittest.TestCase):
         mock_os.path.exists.return_value = False
         self.assertFalse(AgentApi.local_peripheral_exists(self.peripheral_filepath))
 
-    @mock.patch('agent.AgentApi.NB.write_json_to_file')
+    @mock.patch('agent.agent_api.NB.write_json_to_file')
     def test_local_peripheral_save(self, mock_write_to_file):
         mock_write_to_file.return_value = None
         # when trying to save a peripheral, the write fn should be called, with no errors
@@ -56,8 +56,8 @@ class AgentApiTestCase(unittest.TestCase):
         AgentApi.local_peripheral_save(self.peripheral_filepath, self.peripheral_content)
         mock_write_to_file.assert_called_once_with(self.peripheral_filepath, self.peripheral_content)
 
-    @mock.patch('agent.AgentApi.NB.read_json_file')
-    @mock.patch('agent.AgentApi.NB.write_json_to_file')
+    @mock.patch('agent.agent_api.NB.read_json_file')
+    @mock.patch('agent.agent_api.NB.write_json_to_file')
     def test_local_peripheral_update(self, mock_write_to_file, mock_read_file):
         new_peripheral = {**self.peripheral_content, **{'new-var': 'value'}}
         # if unable to read file, then exception is thrown and 'write' never happens
@@ -74,7 +74,7 @@ class AgentApiTestCase(unittest.TestCase):
         AgentApi.local_peripheral_update(self.peripheral_filepath, new_peripheral)
         mock_write_to_file.assert_called_once_with(self.peripheral_filepath, new_peripheral)
 
-    @mock.patch('agent.AgentApi.NB.read_json_file')
+    @mock.patch('agent.agent_api.NB.read_json_file')
     def test_local_peripheral_get_identifier(self, mock_read_file):
         # if there's no peripheral file, we get None
         mock_read_file.side_effect = FileNotFoundError
@@ -88,7 +88,7 @@ class AgentApiTestCase(unittest.TestCase):
                          self.peripheral_content['id'],
                          'Failed to give back right peripheral ID')
 
-    @mock.patch('agent.AgentApi.NB.get_nuvlabox_version')
+    @mock.patch('agent.agent_api.NB.get_nuvlabox_version')
     def test_sanitize_peripheral_payload(self, mock_get_version):
         # if payload is broken, an exception should be thrown
         self.assertRaises(TypeError, AgentApi.sanitize_peripheral_payload, self.malformed_payload)
@@ -103,12 +103,12 @@ class AgentApiTestCase(unittest.TestCase):
                       'Peripheral payload was not completed with NuvlaBox resource parent ID')
         self.assertEqual(self.valid_payload.get('identifier'), self.peripheral_identifier)
 
-    @mock.patch('agent.AgentApi.local_peripheral_save')
-    @mock.patch('agent.AgentApi.modify')
+    @mock.patch('agent.agent_api.local_peripheral_save')
+    @mock.patch('agent.agent_api.modify')
     @mock.patch('requests.Response')
-    @mock.patch('agent.AgentApi.NB.api')
-    @mock.patch('agent.AgentApi.local_peripheral_exists')
-    @mock.patch('agent.AgentApi.sanitize_peripheral_payload')
+    @mock.patch('agent.agent_api.NB.api')
+    @mock.patch('agent.agent_api.local_peripheral_exists')
+    @mock.patch('agent.agent_api.sanitize_peripheral_payload')
     def test_post(self, mock_sanitize_payload, mock_local_peripheral_check, mock_api,
                   mock_requests_resp, mock_modify, mock_save_peripheral):
         mock_sanitize_payload.return_value = None
@@ -185,10 +185,10 @@ class AgentApiTestCase(unittest.TestCase):
         mock_save_peripheral.assert_called_once()
 
     @mock.patch('os.remove')
-    @mock.patch('agent.AgentApi.delete_peripheral')
-    @mock.patch('agent.AgentApi.edit_peripheral')
-    @mock.patch('agent.AgentApi.local_peripheral_exists')
-    @mock.patch('agent.AgentApi.local_peripheral_get_identifier')
+    @mock.patch('agent.agent_api.delete_peripheral')
+    @mock.patch('agent.agent_api.edit_peripheral')
+    @mock.patch('agent.agent_api.local_peripheral_exists')
+    @mock.patch('agent.agent_api.local_peripheral_get_identifier')
     def test_modify(self, mock_get_identifier, mock_peripheral_exists,
                     mock_edit_peripheral, mock_del_peripheral, mock_rm):
         # the accepted actions are DELETE or PUT, otherwise we expect a 405
@@ -265,9 +265,9 @@ class AgentApiTestCase(unittest.TestCase):
         self.assertIn('status', delete_output[0],
                       'Got unexpected response after deleting peripheral')
 
-    @mock.patch('agent.AgentApi.local_peripheral_update')
-    @mock.patch('agent.AgentApi.local_peripheral_exists')
-    @mock.patch('agent.AgentApi.NB.api')
+    @mock.patch('agent.agent_api.local_peripheral_update')
+    @mock.patch('agent.agent_api.local_peripheral_exists')
+    @mock.patch('agent.agent_api.NB.api')
     def test_edit_peripheral(self, mock_api, mock_peripheral_exists, mock_peripheral_update):
         # if the peripheral file file does not exist, then we simply return the Nuvla response and don't edit the file
         mock_peripheral_exists.return_value = False
@@ -287,8 +287,8 @@ class AgentApiTestCase(unittest.TestCase):
         mock_peripheral_update.assert_called_once_with(self.peripheral_filepath, self.peripheral_content)
 
     @mock.patch('os.remove')
-    @mock.patch('agent.AgentApi.local_peripheral_exists')
-    @mock.patch('agent.AgentApi.NB.api')
+    @mock.patch('agent.agent_api.local_peripheral_exists')
+    @mock.patch('agent.agent_api.NB.api')
     def test_delete_peripheral(self, mock_api, mock_peripheral_exists, mock_rm):
         # if the peripheral file file does not exist, then we simply return the Nuvla response and don't delete the file
         mock_peripheral_exists.return_value = False
@@ -338,7 +338,7 @@ class AgentApiTestCase(unittest.TestCase):
                              (expected_output, 200),
                              'Failed to return matching peripherals')
 
-    @mock.patch('agent.AgentApi.local_peripheral_exists')
+    @mock.patch('agent.agent_api.local_peripheral_exists')
     def test_get(self, mock_peripheral_exists):
         # if peripherals does not exist locally, then return 404
         mock_peripheral_exists.return_value = False

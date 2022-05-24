@@ -5,7 +5,7 @@ import logging
 import mock
 import unittest
 from tests.utils.fake import Fake
-from agent.Job import Job
+from agent.job import Job
 from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
 
 
@@ -16,7 +16,7 @@ class JobTestCase(unittest.TestCase):
         self.shared_volume = "mock/path"
         self.job_id = "job/fake-id"
         self.job_engine_lite_image = 'job-lite'
-        with mock.patch('agent.Job.Job.check_job_is_running') as mock_job_is_running:
+        with mock.patch('agent.job.Job.check_job_is_running') as mock_job_is_running:
             mock_job_is_running.return_value = False
             self.obj = Job(self.shared_volume, self.job_id, self.job_engine_lite_image)
         # monkeypatches
@@ -54,14 +54,14 @@ class JobTestCase(unittest.TestCase):
     def test_launch(self):
         self.obj.container_runtime.launch_job.return_value = None
         # without API keys, we can't launch and return none
-        with mock.patch('agent.Job.open') as mock_open:
+        with mock.patch('agent.job.open') as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertIsNone(self.obj.launch(),
                               'Tried to launch job even though API keys could not be found')
 
         self.obj.container_runtime.launch_job.assert_not_called()
         # otherwise, launch the job
-        with mock.patch('agent.Job.open', mock.mock_open(read_data='{"api-key": "", "secret-key": ""}')):
+        with mock.patch('agent.job.open', mock.mock_open(read_data='{"api-key": "", "secret-key": ""}')):
             self.assertIsNone(self.obj.launch(),
                               'Failed to launch job')
 

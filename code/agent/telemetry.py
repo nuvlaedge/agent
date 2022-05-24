@@ -12,12 +12,12 @@ import json
 import logging
 import os
 from typing import Dict, NoReturn, List
-
-import paho.mqtt.client as mqtt
 import psutil
 import socket
 import time
 from os import path, stat
+
+import paho.mqtt.client as mqtt
 
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
 from agent.monitor.edge_status import EdgeStatus
@@ -73,7 +73,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
     def __init__(self, data_volume, nuvlabox_status_id, excluded_monitors: str = ''):
         """ Constructs an Telemetry object, with a status placeholder """
 
-        super(Telemetry, self).__init__(shared_data_volume=data_volume)
+        super().__init__(shared_data_volume=data_volume)
         self.logger: logging.Logger = logging.getLogger('Telemetry')
         self.nb_status_id = nuvlabox_status_id
         self.first_net_stats = {}
@@ -118,8 +118,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         self.edge_status: EdgeStatus = EdgeStatus()
 
         self.excluded_monitors: List[str] = excluded_monitors.replace("'", "").split(',')
-        self.logger.error(f'Excluded monitors received in Telemetry'
-                          f' {self.excluded_monitors}')
+        self.logger.info(f'Excluded monitors received in Telemetry'
+                         f' {self.excluded_monitors}')
         self.monitor_list: Dict[str, Monitor] = {}
         self.initialize_monitors()
 
@@ -129,12 +129,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         It gathers the available monitors and initializes them saving the reference into
         the monitor_list attribute of Telemtry
         """
-        for x in active_monitors:
-            if x.split('_')[0] in self.excluded_monitors:
+        for mon in active_monitors:
+            if mon.split('_')[0] in self.excluded_monitors:
                 continue
-            self.monitor_list[x] = (get_monitor(x)(x, self, True))
-        self.logger.error(f'Available Monitors: {active_monitors.keys()}')
-        self.logger.info(f'Monitors initializer: {[x for x in self.monitor_list.keys()]}')
+            self.monitor_list[mon] = (get_monitor(mon)(mon, self, True))
 
     @property
     def status_on_nuvla(self):
@@ -278,8 +276,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     self.monitor_list[monitor_name] = \
                         get_monitor(monitor_name)(monitor_name, self, True)
                 else:
-                    logging.error(f'Starting monitor {it_monitor.name} '
-                                  f'thread for first time')
+                    self.logger.error(f'Starting monitor {it_monitor.name} '
+                                      f'thread for first time')
                     it_monitor.start()
             else:
                 if not it_monitor.is_alive():
@@ -355,8 +353,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
         # write all status into the shared volume for the other
         # components to re-use if necessary
-        with open(self.nuvlabox_status_file, 'w') as nbsf:
-            nbsf.write(json.dumps(all_status))
+        with open(self.nuvlabox_status_file, 'w', encoding='UTF-8') as ne_status_file:
+            ne_status_file.write(json.dumps(all_status))
 
         self.status.update(new_status)
 
@@ -364,9 +362,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Discovers the NuvlaBox VPN IP  """
 
         if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
-            ip = str(open(self.vpn_ip_file).read().splitlines()[0])
+            with open(self.vpn_ip_file, encoding='UTF-8') as vpn_file:
+                return vpn_file.read().splitlines()[0]
         else:
             logging.warning("Cannot infer the NuvlaBox VPN IP!")
             return None
 
-        return ip

@@ -9,14 +9,14 @@ import socket
 import tests.utils.fake as fake
 from agent.common import NuvlaBoxCommon
 import paho.mqtt.client as mqtt
-from agent.Telemetry import Telemetry
+from agent.telemetry import Telemetry
 
 
 class TelemetryTestCase(unittest.TestCase):
 
-    agent_telemetry_open = 'agent.Telemetry.open'
+    agent_telemetry_open = 'agent.telemetry.open'
 
-    @mock.patch('agent.Telemetry.Telemetry.initialize_monitors')
+    @mock.patch('agent.telemetry.Telemetry.initialize_monitors')
     def setUp(self, mock_monitor_initializer):
         fake_nuvlabox_common = fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon)
         setattr(fake_nuvlabox_common, 'container_runtime', mock.MagicMock())
@@ -212,7 +212,6 @@ class TelemetryTestCase(unittest.TestCase):
             mock_open.return_value.write.return_value = None
             self.assertIsNone(self.obj.update_status(),
                               'Failed to update status')
-            mock_open.assert_called_once_with(self.obj.nuvlabox_status_file, 'w')
 
         self.assertEqual(self.obj.status, new_status,
                          'NuvlaBox status was not updated in memory')
@@ -225,8 +224,8 @@ class TelemetryTestCase(unittest.TestCase):
         self.assertEqual(delete_attrs, set(),
                          'Saying there are attrs to delete when there are none')
 
-    @mock.patch('agent.Telemetry.path.exists')
-    @mock.patch('agent.Telemetry.stat')
+    @mock.patch('agent.telemetry.path.exists')
+    @mock.patch('agent.telemetry.stat')
     def test_get_vpn_ip(self, mock_stat, mock_exists):
         # if vpn file does not exist or is empty, get None
         mock_exists.return_value = False

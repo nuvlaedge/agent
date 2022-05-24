@@ -25,14 +25,14 @@ import os
 import requests
 import time
 from flask import Flask, request, jsonify
-from flask import logging as flask_logging
+
 
 from threading import Event
 from agent.common import NuvlaBoxCommon
-from agent.Activate import Activate
-from agent.Telemetry import Telemetry
-from agent.Infrastructure import Infrastructure
-from agent.Job import Job
+from agent.activate import Activate
+from agent.telemetry import Telemetry
+from agent.infrastructure import Infrastructure
+from agent.job import Job
 
 __copyright__ = "Copyright (C) 2019 SixSq"
 __email__ = "support@sixsq.com"
@@ -64,7 +64,7 @@ if __name__ == "__main__":
                 format=log_format)
 
 # finish imports with logging
-import agent.AgentApi as AgentApi
+import agent.agent_api as AgentApi
 
 app = Flask(__name__)
 data_volume = "/srv/nuvlabox/shared"
@@ -108,7 +108,8 @@ def preflight_check(activation_class_object: Activate,
     global nuvlabox_info_updated_date
 
     if nuvlabox_resource.get('state', '').startswith('DECOMMISSION'):
-        root_logger.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. Exiting...')
+        root_logger.warning(f'This NuvlaBox is {nuvlabox_resource["state"]} in Nuvla. '
+                            f'Exiting...')
         can_continue = False
 
     if nb_updated_date != nuvlabox_resource['updated'] and can_continue:
@@ -275,13 +276,16 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     :return: (Nuvla.api response, current heartbeat timestamp)
     """
 
-    root_logger.debug(f'send_heartbeat({nb_instance}, {nb_telemetry}, {nb_status_id}, {previous_status_time})')
+    root_logger.debug(f'send_heartbeat({nb_instance}, {nb_telemetry}, {nb_status_id},'
+                      f' {previous_status_time})')
 
-    status, _delete_attributes = nb_telemetry.diff(nb_telemetry.status_on_nuvla, nb_telemetry.status)
+    status, _delete_attributes = nb_telemetry.diff(nb_telemetry.status_on_nuvla,
+                                                   nb_telemetry.status)
     status_current_time = nb_telemetry.status.get('current-time', '')
     delete_attributes = []
 
-    root_logger.debug(f'send_heartbeat: status_current_time = {status_current_time}  _delete_attributes = {_delete_attributes}  status = {status}')
+    root_logger.debug(f'send_heartbeat: status_current_time = {status_current_time}  '
+                      f'_delete_attributes = {_delete_attributes}  status = {status}')
 
     if not status_current_time:
         status = {'status-notes': ['NuvlaBox Telemetry is starting']}
@@ -299,7 +303,7 @@ def send_heartbeat(nb_instance, nb_telemetry, nb_status_id: str, previous_status
     # root_logger.debug('Refresh status: %s' % status)
     if delete_attributes:
         root_logger.info(f'Deleting the following attributes from NuvlaBox Status: '
-                     f'{", ".join(delete_attributes)}')
+                         f'{", ".join(delete_attributes)}')
 
     try:
         r = nb_instance.api().edit(nb_status_id,
@@ -361,7 +365,8 @@ if __name__ == "__main__":
     NB = NuvlaBoxCommon.NuvlaBoxCommon()
 
     if not infra.installation_home:
-        root_logger.error('Host user HOME directory not defined. This might impact future SSH management actions')
+        root_logger.error('Host user HOME directory not defined. This might impact future'
+                          ' SSH management actions')
     else:
         with open(infra.host_user_home_file, 'w') as userhome:
             userhome.write(infra.installation_home)
@@ -373,7 +378,8 @@ if __name__ == "__main__":
     app.config["telemetry"] = telemetry
     app.config["infra"] = infra
 
-    api_thread = threading.Thread(target=app.run, kwargs={"host": "0.0.0.0", "port": "80"})
+    api_thread = threading.Thread(target=app.run,
+                                  kwargs={"host": "0.0.0.0", "port": "80"})
     api_thread.daemon = True
     api_thread.start()
 
@@ -399,11 +405,13 @@ if __name__ == "__main__":
         if telemetry_thread and telemetry_thread.is_alive():
             root_logger.warning('Telemetry thread not completed in time')
 
-        response, past_status_time = send_heartbeat(NB, telemetry, nuvlabox_status_id, past_status_time)
+        response, past_status_time = send_heartbeat(NB, telemetry,
+                                                    nuvlabox_status_id, past_status_time)
 
         if not nb_checker or not nb_checker.is_alive():
             nb_checker = threading.Thread(target=preflight_check,
-                                          args=(activation, infra, nuvlabox_info_updated_date,),
+                                          args=(activation, infra,
+                                                nuvlabox_info_updated_date,),
                                           daemon=True)
             nb_checker.start()
 
@@ -412,11 +420,17 @@ if __name__ == "__main__":
                                                 daemon=True)
             telemetry_thread.start()
 
-        if isinstance(response.get('jobs'), list) and infra.container_runtime.job_engine_lite_image and response.get('jobs'):
-            root_logger.info(f'Processing the following jobs in pull-mode: {response["jobs"]}')
+        if isinstance(response.get('jobs'), list) and \
+                infra.container_runtime.job_engine_lite_image and \
+                response.get('jobs'):
+
+            root_logger.info(f'Processing the following jobs in pull-mode: '
+                             f'{response["jobs"]}')
+
             threading.Thread(target=manage_pull_jobs,
-                                args=(response['jobs'], infra.container_runtime.job_engine_lite_image,),
-                                daemon=True).start()
+                             args=(response['jobs'],
+                                   infra.container_runtime.job_engine_lite_image,),
+                             daemon=True).start()
 
         if not infra.is_alive():
             infra = Infrastructure(data_volume)
