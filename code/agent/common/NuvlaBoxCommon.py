@@ -9,7 +9,6 @@ import base64
 import json
 import logging
 import os
-from typing import List
 
 import requests
 import signal

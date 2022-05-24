@@ -264,9 +264,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         monitor_process_time: Dict = {}
 
         for monitor_name, it_monitor in self.monitor_list.items():
-            self.logger.warning(f' --- Monitor: {it_monitor.name} -- '
+            self.logger.debug(f' --- Monitor: {it_monitor.name} -- '
                                 f'Threaded: {it_monitor.is_thread} -- '
-                                f'{it_monitor.is_alive()}-')
+                                f'Alive: {it_monitor.is_alive()}-')
 
             if it_monitor.is_thread and not it_monitor.is_alive():
                 if it_monitor.ident:
@@ -276,7 +276,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     self.monitor_list[monitor_name] = \
                         get_monitor(monitor_name)(monitor_name, self, True)
                 else:
-                    self.logger.error(f'Starting monitor {it_monitor.name} '
+                    self.logger.info(f'Starting monitor {it_monitor.name} '
                                       f'thread for first time')
                     it_monitor.start()
             else:
@@ -286,8 +286,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     it_monitor.update_data()
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
-        self.logger.warning(f'Monitors processing time '
-                            f'{json.dumps(monitor_process_time, indent=4)}')
+        self.logger.debug(f'Monitors processing time '
+                          f'{json.dumps(monitor_process_time, indent=4)}')
 
         for it_monitor in self.monitor_list.values():
             it_monitor.populate_nb_report(status_dict)

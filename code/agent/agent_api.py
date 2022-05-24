@@ -170,8 +170,9 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
 
     peripheral_filepath = "{}/{}".format(NB.peripherals_dir, peripheral_identifier)
 
-    per_nuvla_id = peripheral_nuvla_id if peripheral_nuvla_id else \
-        local_peripheral_get_identifier(peripheral_filepath)
+    # per_nuvla_id = peripheral_nuvla_id if peripheral_nuvla_id else \
+    #     local_peripheral_get_identifier(peripheral_filepath)
+    per_nuvla_id = local_peripheral_get_identifier(peripheral_filepath)
 
     if not per_nuvla_id:
         logging.warning("{} not found and Nuvla resource ID not provided".format(peripheral_filepath))
