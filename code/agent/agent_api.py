@@ -198,9 +198,10 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
                 logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
                 return {"message": "Deleted %s" % peripheral_identifier}, 200
 
-        # Maybe something went wrong and we should try later, so keep the local
+        # Maybe something went wrong, and we should try later, so keep the local
         # peripheral copy alive
-        logging.warning("Cannot {} {} in Nuvla: {}".format(action, peripheral_nuvla_id, e.response.json()))
+        logging.warning("Cannot {} {} in Nuvla: {}".format(action, peripheral_nuvla_id,
+                                                           e.response.json()))
         return e.response.json(), e.response.status_code
     except Exception as e:
         logging.exception("While running {} on {} from Nuvla".format(action, peripheral_nuvla_id))

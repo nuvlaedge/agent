@@ -7,6 +7,7 @@ from argparse import ArgumentParser
 import os
 import sys
 import logging
+from logging import config as log_config_mod
 import time
 from typing import Union, Dict
 from threading import Event, Thread
@@ -55,7 +56,7 @@ def configure_root_logger(logger: logging.Logger, debug: bool):
         if env_level:
             logger.setLevel(logging.getLevelName(env_level))
         else:
-            logger.setLevel(logging.ERROR)
+            logger.setLevel(logging.INFO)
 
     # Setting flask server verbosity to warnings
     log = logging.getLogger('werkzeug')
@@ -188,7 +189,7 @@ def main():
 
 if __name__ == '__main__':
     # Global logging configuration
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format=log_format)
+    log_config_mod.fileConfig('agent/config/agent_logger_config.conf')
 
     agent_parser: ArgumentParser = parse_arguments()
 

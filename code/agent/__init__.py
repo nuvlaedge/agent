@@ -141,9 +141,6 @@ class Agent:
         # Calculate differences NE-Nuvla status
         status, _del_attr = self.telemetry.diff(self.telemetry.status_on_nuvla,
                                                 self.telemetry.status)
-        # self.logger.error(f'\nStatus on nuvla {self.telemetry.status_on_nuvla}')
-        # self.logger.error(f'\nStatus on edge '
-        #                   f'{json.dumps(self.telemetry.status, indent=4)}')
         status_current_time = self.telemetry.status.get('current-time', '')
         del_attr: List = []
 

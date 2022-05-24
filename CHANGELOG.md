@@ -16,6 +16,7 @@
   over if needed
 - Whole telemetry class has been refactored
 - Logging formatting modified and unified
+- Logging main configuration parsed from config file
 
 ## [2.7.2] - 2022-04-18
 ### Added
