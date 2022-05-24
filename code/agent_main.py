@@ -1,3 +1,4 @@
+#!/usr/local/bin/python3.7
 """
 Main entrypoint script for the agent component in the NuvlaEdge engine
 Controls all the functionalities of the Agent
