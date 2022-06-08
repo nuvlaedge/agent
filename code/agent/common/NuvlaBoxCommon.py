@@ -8,14 +8,14 @@ List of common attributes for all classes
 import json
 import logging
 import os
-
+import socket
 import requests
 import signal
 import string
 import time
 
 from contextlib import contextmanager
-from subprocess import PIPE, Popen
+from subprocess import PIPE, Popen, run
 from nuvla.api import Api
 
 from agent.orchestrator import ContainerRuntimeClient

@@ -12,17 +12,17 @@ import requests
 import unittest
 import tests.utils.fake as fake
 import yaml
-import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+from agent.orchestrator.docker import DockerClient
 
 
 class ContainerRuntimeDockerTestCase(unittest.TestCase):
 
-    agent_nuvlabox_common_open = 'agent.common.NuvlaBoxCommon.open'
+    agent_nuvlabox_common_open = 'agent.orchestrator.docker.open'
 
     def setUp(self) -> None:
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
-        self.obj = NuvlaBoxCommon.DockerClient(self.hostfs, self.host_home)
+        self.obj = DockerClient(self.hostfs, self.host_home)
         self.local_docker_client = docker.from_env()
         self.fake_swarm_tokens = {
             'JoinTokens': {
@@ -100,8 +100,8 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_docker.side_effect = docker.errors.APIError("", response=requests.Response())
         self.assertRaises(docker.errors.APIError, self.obj.list_nodes)
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.list_nodes')
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    @mock.patch('agent.orchestrator.docker.DockerClient.list_nodes')
+    @mock.patch('agent.orchestrator.docker.DockerClient.get_node_info')
     def test_get_cluster_info(self, mock_get_node_info, mock_list_nodes):
         # if Swarm is not enabled, we should get an empty dict
         mock_get_node_info.return_value = {'Swarm': {}}
@@ -142,7 +142,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 1,
                          'Expecting 1 worker in cluster info, but got something else')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    @mock.patch('agent.orchestrator.docker.DockerClient.get_node_info')
     def test_get_api_ip_port(self, mock_get_nodes_info):
         # if Swarm info has an address, we should just get that back with port 5000
         node_addr = '1.2.3.4'
@@ -205,9 +205,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(self.obj.job_engine_lite_image, 'fake-image',
                          'Set the wrong job-lite Docker image')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.cast_dict_to_list')
+    @mock.patch('agent.orchestrator.docker.DockerClient.cast_dict_to_list')
     @mock.patch('docker.api.swarm.SwarmApiMixin.inspect_node')
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    @mock.patch('agent.orchestrator.docker.DockerClient.get_node_info')
     def test_get_node_labels(self, mock_get_node_info, mock_inspect_node, mock_cast_dict_to_list):
         # errors while inspecting node should cause it to return empty list
         mock_inspect_node.side_effect = KeyError
@@ -369,7 +369,8 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     def test_collect_container_metrics_mem(self):
         mem_stat = {
             "memory_stats": {
-                "usage": 1024*1024,
+                "stats":
+                    {"total_active_anon": 1024*1024},
                 "limit": 2*1024*1024
             }
         }
@@ -446,10 +447,10 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(err, [],
                          'There should be no errors reported when blk stats are not given by Docker')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_block')
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_net')
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_mem')
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.collect_container_metrics_cpu')
+    @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_block')
+    @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_net')
+    @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_mem')
+    @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_cpu')
     @mock.patch('docker.api.container.ContainerApiMixin.stats')
     @mock.patch('docker.models.containers.ContainerCollection.list')
     def test_collect_container_metrics(self, mock_containers_list, mock_container_stats, mock_get_cpu,
@@ -601,7 +602,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                          node_info['Swarm']['Cluster']['ID'],
                          'Returned Cluster ID does not match the real one')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    @mock.patch('agent.orchestrator.docker.DockerClient.get_node_info')
     def test_get_cluster_managers(self, mock_get_node):
         node_info = {
             'Swarm': {
@@ -635,7 +636,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_hostname(node_info), node_info['Name'],
                          'Hostname does not match the real one')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.get_node_info')
+    @mock.patch('agent.orchestrator.docker.DockerClient.get_node_info')
     def test_get_cluster_join_address(self, mock_get_node):
         node_id = 'fake-node-id'
         node_info = {
@@ -692,7 +693,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_container_plugins(), [],
                          'Returned container plugins when none are active')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.infer_if_additional_coe_exists')
+    @mock.patch('agent.orchestrator.docker.DockerClient.infer_if_additional_coe_exists')
     def test_define_nuvla_infra_service(self, mock_infer_extra_coe):
         mock_infer_extra_coe.return_value = {}
         # if the api_endpoint is not set, the infra is not set either
@@ -782,14 +783,8 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         ]
         mock_yaml.return_value = kubeconfig
 
-        # and now, with the kubeconfig complete and parsable, we should get all the expected k8s keys
-        is_keys = ["kubernetes-client-ca", "kubernetes-client-cert", "kubernetes-client-key", "kubernetes-endpoint"]
-        with mock.patch(self.agent_nuvlabox_common_open, mock.mock_open(read_data='{"notyaml": True}')):
-            self.assertTrue(set(is_keys).issubset(list(self.obj.is_k3s_running('1.1.1.1').keys())),
-                            'Received k3s details even though the k3s config cannot be parsed')
-
-    @mock.patch('agent.common.NuvlaBoxCommon.run')
-    @mock.patch('agent.common.NuvlaBoxCommon.DockerClient.is_k3s_running')
+    @mock.patch('agent.orchestrator.docker.run')
+    @mock.patch('agent.orchestrator.docker.DockerClient.is_k3s_running')
     def test_infer_if_additional_coe_exists(self, mock_k3s, mock_run):
         # if we timeout GREPing for a k8s process, we get {}
         mock_run.side_effect = subprocess.TimeoutExpired('', 0)

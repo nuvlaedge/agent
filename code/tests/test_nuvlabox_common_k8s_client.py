@@ -19,6 +19,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             if 'agent.common.NuvlaBoxCommon' in sys.modules:
                 del sys.modules['agent.common.NuvlaBoxCommon']
             import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+            from agent.orchestrator.kubernettes import KubernetesClient
 
         self.NuvlaBoxCommon = NuvlaBoxCommon
         self.hostfs = '/fake-rootfs'
@@ -31,7 +32,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                     mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
                     mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
                     mock_k8s_config.return_value = True
-                    self.obj = NuvlaBoxCommon.KubernetesClient(self.hostfs, self.host_home)
+                    self.obj = KubernetesClient(self.hostfs, self.host_home)
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -61,7 +62,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertIsNone(self.obj.get_node_info(),
                           'Without a MY_HOST_NODE_NAME, node_info should be None, but got something else instead')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.get_node_info')
     def test_get_host_os(self, mock_get_node_info):
         # if get_node_info returns something valid, we get a valid string out of it
         node = fake.mock_kubernetes_node()
@@ -88,9 +89,9 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                               'List nodes should returns its items, a list, but got something else instead')
         self.obj.client.list_node.assert_called_once()
 
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.list_nodes')
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_cluster_id')
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.list_nodes')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.get_cluster_id')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.get_node_info')
     def test_get_cluster_info(self, mock_get_node_info, mock_cluster_id, mock_list_nodes):
         me = fake.mock_kubernetes_node(uid='myself-fake-id')
         mock_cluster_id.return_value = 'fake-id'
@@ -173,7 +174,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertEqual(self.obj.cast_dict_to_list(ref), exp_out,
                          'Unable to convert dict to list')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.get_node_info')
     def test_get_node_labels(self, mock_get_node_info):
         node = fake.mock_kubernetes_node()
         node.metadata.labels = {} # no labels are set by default
@@ -275,7 +276,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.obj.client.create_namespaced_pod.assert_called_once()
 
     @mock.patch('kubernetes.client.CustomObjectsApi.list_cluster_custom_object')
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.get_node_info')
     def test_collect_container_metrics(self, mock_get_node_info, mock_pod_metrics):
         pod_list = mock.MagicMock()
         pod_list.items = [fake.mock_kubernetes_pod("pod-1"), fake.mock_kubernetes_pod("pod-2")]
@@ -360,7 +361,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          cluster_name,
                          'Returned Cluster name does not match the real one')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.list_nodes')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.list_nodes')
     def test_get_cluster_managers(self, mock_list_nodes):
         mock_list_nodes.return_value = [fake.mock_kubernetes_node(), fake.mock_kubernetes_node()]
         # if there are no managers, then return an empty list
@@ -395,7 +396,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_hostname(node_info=node), self.obj.host_node_name,
                          'Failed to get hostname when the node is given as an arg')
 
-    @mock.patch('agent.common.NuvlaBoxCommon.KubernetesClient.get_node_info')
+    @mock.patch('agent.orchestrator.kubernettes.KubernetesClient.get_node_info')
     def test_get_kubelet_version(self, mock_get_node_info):
         node = fake.mock_kubernetes_node()
         mock_get_node_info.return_value = node
