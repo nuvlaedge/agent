@@ -1,5 +1,5 @@
 """
-Orchestration base class. To be extended and implemented by docker or kubernettes
+Orchestration base class. To be extended and implemented by docker or kubernetes
 """
 import os
 from abc import ABC, abstractmethod

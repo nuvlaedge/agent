@@ -240,7 +240,8 @@ class NuvlaBoxCommon:
 
     def set_runtime_client_details(self) -> ContainerRuntimeClient:
         """
-        Sets the right container runtime client based on the underlying orchestrator, and sets the Data Gateway name
+        Sets the right container runtime client based on the underlying orchestrator, and
+        sets the Data Gateway name
         :return: instance of a ContainerRuntimeClient
         """
         if ORCHESTRATOR == 'kubernetes':
@@ -249,7 +250,8 @@ class NuvlaBoxCommon:
             if os.path.exists(self.docker_socket_file):
                 return DockerClient(self.hostfs, self.installation_home)
             else:
-                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file {self.docker_socket_file} is not present')
+                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file '
+                                f'{self.docker_socket_file} is not present')
 
     def set_nuvlabox_id(self) -> str:
         """
@@ -518,18 +520,18 @@ ${vpn_extra_config}
         if not vpn_key or not vpn_csr:
             return False
 
-        # try:
-        vpn_conf_fields: requests.Response = \
-            requests.post(
-                "http://localhost/api/commission",
-                json={"vpn-csr": vpn_csr})
+        try:
+            vpn_conf_fields: requests.Response = \
+                requests.post(
+                    "http://localhost/api/commission",
+                    json={"vpn-csr": vpn_csr})
 
-        vpn_conf_fields = vpn_conf_fields.json()
+            vpn_conf_fields = vpn_conf_fields.json()
 
-        # except Exception as e:
-        #
-        #     self.logger.error(f'Unable to setup VPN connection: {str(e)}')
-        #     return False
+        except Exception as e:
+
+            self.logger.error(f'Unable to setup VPN connection: {str(e)}')
+            return False
 
         if not vpn_conf_fields:
             self.logger.error(f'Invalid response from VPN commissioning... '
