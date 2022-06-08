@@ -9,6 +9,7 @@ from threading import Event, Thread
 from typing import Union, NoReturn, List, Dict
 
 from nuvla.api.models import CimiResource
+from copy import copy
 
 from agent.infrastructure import Infrastructure
 from agent.job import Job
@@ -23,34 +24,34 @@ class Agent:
     """
     # Default shared volume location
     _DATA_VOLUME: str = "/srv/nuvlabox/shared"
-    # Class logger
-    logger: logging.Logger = logging.getLogger(__name__)
-
-    # Main NuvlaEdge data
-    nuvlaedge_status_id: str = ''
-    past_status_time: str = ''
-    nuvlaedge_updated_date: str = ''
 
     # Event timeout controller
     agent_event: Event = Event()
 
-    # Telemetry updater class
-    telemetry: Union[Telemetry, None] = None
-    telemetry_thread: Union[Thread, None] = None
-
-    # Class responsible for activating an controlling previous nuvla installations
-    activate: Union[Activate, None] = None
-
     # pylint: disable=too-many-instance-attributes
     def __init__(self, agent_flag: bool):
+        # Class logger
+        self.logger: logging.Logger = logging.getLogger(__name__)
+        self.logger.debug('Creating agent main class')
 
+        # Main NuvlaEdge data
+        self.nuvlaedge_status_id: str = ''
+        self.past_status_time: str = ''
+        self.nuvlaedge_updated_date: str = ''
         self.agent_flag: bool = agent_flag
 
         # Class containing  mainly hardcoded paths, ports and addresses related tu nuvla
         self.nuvlaedge_common: NuvlaBoxCommon = NuvlaBoxCommon()
 
+        # Class responsible for activating an controlling previous nuvla installations
+        self.activate: Activate = Activate(self._DATA_VOLUME)
+
         # Intermediary class which provides and interface to communicate with nuvla
-        self.infrastructure: Infrastructure = Infrastructure(self._DATA_VOLUME)
+        self.infrastructure: Union[Infrastructure, None] = None
+
+        # Telemetry updater class
+        self.telemetry: Union[Telemetry, None] = None
+        self.telemetry_thread: Union[Thread, None] = None
 
     def activate_nuvlaedge(self) -> NoReturn:
         """
@@ -60,7 +61,6 @@ class Agent:
 
         """
 
-        self.activate = Activate(self._DATA_VOLUME)
         self.logger.info(f'Nuvla endpoint: {self.activate.nuvla_endpoint}')
         self.logger.info(
             f'Nuvla connection insecure: {str(self.activate.nuvla_endpoint_insecure)}')
@@ -81,7 +81,7 @@ class Agent:
             self.activate.update_nuvlabox_resource()
         self.nuvlaedge_status_id = nuvlaedge_resource["nuvlabox-status"]
         self.activate.vpn_commission_if_needed(nuvlaedge_resource, old_nuvlaedge_resource)
-        self.logger.debug(f'NuvlaEdge status id {self.nuvlaedge_status_id}')
+        self.logger.info(f'NuvlaEdge status id {self.nuvlaedge_status_id}')
 
     def initialize_infrastructure(self) -> NoReturn:
         """
@@ -178,7 +178,7 @@ class Agent:
             self.logger.error("Unable to update NuvlaBox status in Nuvla")
             raise
 
-        self.past_status_time = status_current_time
+        self.past_status_time = copy(status_current_time)
 
         return resource.data
 

@@ -55,10 +55,10 @@ def trigger_commission():
     """
 
     payload = json.loads(request.data)
-
     endpoint_logger.info('Commission triggered via the NB Agent API')
 
-    commissioning_response = app.config["infra"].do_commission(payload)
+    commissioning_response = app.config["infrastructure"].do_commission(payload)
+
     return jsonify(commissioning_response)
 
 

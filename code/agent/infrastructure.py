@@ -34,6 +34,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         """
         super(Infrastructure, self).__init__(shared_data_volume=data_volume)
         Thread.__init__(self, daemon=True)
+
+        self.infra_logger: logging.Logger = logging.getLogger(__name__)
+
         if telemetry:
             self.telemetry_instance = telemetry
         else:
@@ -73,7 +76,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             open(worker_token_file).readlines()[0].replace('\n', '')
             open(manager_token_file).readlines()[0].replace('\n', '')
         except (FileNotFoundError, IndexError):
-            logging.info("Docker Swarm tokens not registered yet...registering")
+            self.infra_logger.info("Docker Swarm tokens not registered yet...registering")
             self.write_file(manager_token_file, current_manager_token)
             self.write_file(worker_token_file, current_worker_token)
             return True
@@ -92,7 +95,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             client_cert = open(cert_file).read()
             client_key = open(key_file).read()
         except (FileNotFoundError, IndexError):
-            logging.warning("Container orchestration API TLS keys have not been set yet!")
+            self.infra_logger.warning("Container orchestration API TLS keys have not been set yet!")
             return None
 
         return client_ca, client_cert, client_key
@@ -103,15 +106,17 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :param payload: commissioning payload
         :return
         """
+
         if not payload:
-            logging.debug("Tried commissioning with empty payload. Nothing to do.")
+            self.infra_logger.debug("Tried commissioning with empty payload. Nothing "
+                                    "to do")
             return
 
-        logging.info("Commissioning the NuvlaBox...{}".format(payload))
+        self.infra_logger.info("Commissioning the NuvlaBox...{}".format(payload))
         try:
             self.api()._cimi_post(self.nuvlabox_id+"/commission", json=payload)
         except Exception as e:
-            logging.error("Could not commission with payload {}: {}".format(payload, e))
+            self.infra_logger.error("Could not commission with payload {}: {}".format(payload, e))
             return False
 
         if "vpn-csr" in payload:
@@ -124,20 +129,20 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             attempts = 0
             credential_id = None
             while attempts <= 20:
-                logging.info("Getting VPN credential from Nuvla...")
+                self.infra_logger.info("Getting VPN credential from Nuvla...")
                 try:
                     credential_id = self.api().search("credential", filter=searcher_filter, last=1).resources[0].id
                     break
                 except IndexError:
-                    logging.exception("Cannot find VPN credential in Nuvla after commissioning")
+                    self.infra_logger.exception("Cannot find VPN credential in Nuvla after commissioning")
                     time.sleep(2)
                 except Exception as e:
-                    logging.info("something %s" % e)
+                    self.infra_logger.info("something %s" % e)
 
                 attempts += 1
 
             if not credential_id:
-                logging.warning("Failing to provide necessary values for NuvlaBox VPN client")
+                self.infra_logger.warning("Failing to provide necessary values for NuvlaBox VPN client")
                 return None
 
             vpn_credential = self.api()._cimi_get(credential_id)
@@ -190,7 +195,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
                     return diff_conf
         except FileNotFoundError:
-            logging.info("Auto-commissioning the NuvlaBox for the first time...")
+            self.infra_logger.info("Auto-commissioning the NuvlaBox for the first time...")
             return current_conf
 
     def get_nuvlabox_capabilities(self, commissioning_dict: dict):
@@ -406,7 +411,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         commission_payload.update(infra_service)
 
         # atm, it isn't clear whether these will make sense for k8s
-        # if they do, then this block should be moved to an abstractmethod of the ContainerRuntime
+        # if they do, then this block should be moved to an abstractmethod of the
+        # ContainerRuntime
         if len(cluster_join_tokens) > 1:
             self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
             commission_payload.update({
@@ -433,7 +439,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                                                 compare_with_nb_resource=True)
 
         # if this node is a worker, them we must force remove some assets
-        self.needs_partial_decommission(minimum_commission_payload, commission_payload, old_commission_payload)
+        self.needs_partial_decommission(minimum_commission_payload, commission_payload,
+                                        old_commission_payload)
 
         if self.do_commission(minimum_commission_payload):
             self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
@@ -464,7 +471,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             local_vpn_credential = json.loads(vpn_local.read())
 
         if online_vpn_credential['updated'] != local_vpn_credential['updated']:
-            logging.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
+            self.infra_logger.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
                             .format(online_vpn_credential['updated']))
             # Recommission
             self.commission_vpn()
@@ -485,17 +492,17 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             vpn_client_running = self.container_runtime.is_vpn_client_running()
         except docker.errors.NotFound as e:
             vpn_client_running = False
-            logging.info("VPN client is not running")
+            self.infra_logger.info("VPN client is not running")
 
         if vpn_client_running and self.telemetry_instance.get_vpn_ip():
             # just save a copy of the VPN credential locally
             self.write_file(self.vpn_credential, online_vpn_credential, is_json=True)
-            logging.info("VPN client is now running. Saving VPN credential locally at {}"
+            self.infra_logger.info("VPN client is now running. Saving VPN credential locally at {}"
                          .format(self.vpn_credential))
         else:
             # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
             # maybe something went wrong, just recommission
-            logging.warning("The local VPN client is either not running or missing its configuration. Forcing VPN recommissioning...")
+            self.infra_logger.warning("The local VPN client is either not running or missing its configuration. Forcing VPN recommissioning...")
             self.commission_vpn()
 
     def watch_vpn_credential(self, vpn_is_id=None):
@@ -508,20 +515,23 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             return None
 
         search_filter = self.build_vpn_credential_search_filter(vpn_is_id)
-        logging.info("Watching VPN credential in Nuvla...")
+        self.infra_logger.debug("Watching VPN credential in Nuvla...")
         try:
             credential_id = self.api().search("credential", filter=search_filter, last=1).resources[0].id
-            logging.info("Found VPN credential ID %s" % credential_id)
+            self.infra_logger.debug("Found VPN credential ID %s" % credential_id)
         except IndexError:
             credential_id = None
 
         if not credential_id:
-            # If cannot find a VPN credential in Nuvla, then it is either in the process of being created
-            # or it has been removed from Nuvla
-            logging.info("VPN server is set but cannot find VPN credential in Nuvla. Commissioning VPN...")
+            # If you cannot find a VPN credential in Nuvla, then it is either in the
+            # process of being created or it has been removed from Nuvla
+            self.infra_logger.info("VPN server is set but cannot find VPN credential in "
+                                   "Nuvla. Commissioning VPN...")
 
-            if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0:
-                logging.warning("NOTE: VPN credential exists locally, so it was removed from Nuvla")
+            if path.exists(self.vpn_credential) and \
+                    stat(self.vpn_credential).st_size != 0:
+                self.infra_logger.warning("NOTE: VPN credential exists locally, so it "
+                                          "was removed from Nuvla")
 
             self.commission_vpn()
         else:
@@ -534,7 +544,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             else:
                 # - IF we don't have it locally, but there's one in Nuvla, then:
                 #     - IF the vpn-client is already running, then all is good, just save the VPN credential locally
-                logging.warning("VPN credential exists in Nuvla, but not locally")
+                self.infra_logger.warning("VPN credential exists in Nuvla, but not locally")
                 self.fix_vpn_credential_mismatch(vpn_credential_nuvla)
 
     def set_immutable_ssh_key(self):
@@ -546,11 +556,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         """
 
         if path.exists(self.ssh_flag):
-            logging.debug("Immutable SSH key has already been processed at installation time")
+            self.infra_logger.debug("Immutable SSH key has already been processed at "
+                                    "installation time")
             with open(self.ssh_flag) as sshf:
                 original_ssh_key = sshf.read()
                 if self.ssh_pub_key != original_ssh_key:
-                    logging.warning(f'Received new SSH key but the original {original_ssh_key} is immutable. Ignoring')
+                    self.infra_logger.warning(f'Received new SSH key but the original '
+                                              f'{original_ssh_key} is immutable.Ignoring')
             return
 
         event = {
@@ -568,7 +580,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if self.ssh_pub_key and self.installation_home:
             ssh_folder = f"{self.hostfs}{self.installation_home}/.ssh"
             if not path.exists(ssh_folder):
-                event['content']['state'] = f"Cannot set immutable SSH key because {ssh_folder} does not exist"
+                event['content']['state'] = f"Cannot set immutable SSH key because " \
+                                            f"{ssh_folder} does not exist"
 
                 self.push_event(event)
                 return
@@ -579,14 +592,15 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             event_owners = [nb_owner, self.nuvlabox_id] if nb_owner else [self.nuvlabox_id]
             event['acl'] = {'owners': event_owners}
 
-            logging.info(f'Setting immutable SSH key {self.ssh_pub_key} for {self.installation_home}')
+            self.infra_logger.info(f'Setting immutable SSH key {self.ssh_pub_key} for '
+                                   f'{self.installation_home}')
             try:
                 with NuvlaBoxCommon.timeout(10):
                     if not self.container_runtime.install_ssh_key(self.ssh_pub_key, ssh_folder):
                         return
             except Exception as e:
                 msg = f'An error occurred while setting immutable SSH key: {str(e)}'
-                logging.error(msg)
+                self.infra_logger.error(msg)
                 event['content']['state'] = msg
                 self.push_event(event)
 
@@ -594,11 +608,12 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
     def run(self):
         """
-        Threads the commissioning cycles, so that they don't interfere with the main telemetry cycle
+        Threads the commissioning cycles, so that they don't interfere with the main
+        telemetry cycle
         """
         while True:
             try:
                 self.try_commission()
             except Exception as e:
-                logging.exception('Error while trying to commission NuvlaBox')
+                self.infra_logger.exception('Error while trying to commission NuvlaBox')
             time.sleep(self.refresh_period)

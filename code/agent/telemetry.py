@@ -348,8 +348,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
     def update_status(self):
         """ Runs a cycle of the categorization, to update the NuvlaBox status """
-
         new_status, all_status = self.get_status()
+        self.logger.debug(f'Updating nuvla status on time '
+                          f'{new_status.get("current-time")}')
 
         # write all status into the shared volume for the other
         # components to re-use if necessary

@@ -74,7 +74,10 @@ def configure_endpoint_api(agent: Agent) -> Thread:
     endpoint.app.config['telemetry'] = agent.telemetry
     endpoint.app.config['infrastructure'] = agent.infrastructure
     it_thread: Thread = Thread(target=endpoint.app.run,
-                               kwargs={"host": "0.0.0.0", "port": "80"},
+                               kwargs={"host": "0.0.0.0",
+                                       "port": "80",
+                                       "debug": True,
+                                       'use_reloader': False},
                                daemon=True)
     it_thread.start()
 
@@ -121,8 +124,8 @@ def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
 
     if nb_updated_date != nuvlabox_resource['updated'] and exit_flag:
         refresh_interval = nuvlabox_resource['refresh-interval']
-        root_logger.warning(f'NuvlaBox resource updated. Refresh interval value: '
-                            f'{refresh_interval}')
+        root_logger.info(f'NuvlaBox resource updated. Refresh interval value: '
+                         f'{refresh_interval}')
 
         nb_updated_date = nuvlabox_resource['updated']
         old_nuvlabox_resource = activator.create_nb_document_file(nuvlabox_resource)
@@ -143,17 +146,17 @@ def main():
     Returns: None
 
     """
-    agent_exit_flag: bool = True
-    main_agent: Agent = Agent(agent_exit_flag)
-
-    main_agent.initialize_agent()
 
     main_event: Event = Event()
+    agent_exit_flag: bool = True
+
+    main_agent: Agent = Agent(agent_exit_flag)
+    main_agent.initialize_agent()
+
     watchdog_thread: Union[Thread, None] = None
     nuvlabox_info_updated_date: str = ''
 
     # Setup Endpoint API
-
     api_thread: Thread = configure_endpoint_api(main_agent)
 
     while agent_exit_flag:
@@ -161,8 +164,10 @@ def main():
         start_cycle: float = time.time()
         # ----------------------- Main Agent functionality ------------------------------
 
-        if not watchdog_thread or not watchdog_thread.is_alive():
+        if not api_thread or not api_thread.is_alive():
+            api_thread = configure_endpoint_api(main_agent)
 
+        if not watchdog_thread or not watchdog_thread.is_alive():
             watchdog_thread = Thread(target=preflight_check,
                                      args=(main_agent.activate,
                                            agent_exit_flag,
@@ -171,9 +176,6 @@ def main():
                                            ,),
                                      daemon=True)
             watchdog_thread.start()
-
-        if not api_thread or not api_thread.is_alive():
-            api_thread = configure_endpoint_api(main_agent)
 
         main_agent.run_single_cycle()
 
