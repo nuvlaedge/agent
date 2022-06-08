@@ -20,7 +20,7 @@ from nuvla.api import Api
 
 from agent.orchestrator import ContainerRuntimeClient
 from agent.orchestrator.docker import DockerClient
-from agent.orchestrator.kubernettes import KubernetesClient
+from agent.orchestrator.kubernetes import KubernetesClient
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
 if KUBERNETES_SERVICE_HOST:

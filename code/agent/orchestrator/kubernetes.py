@@ -2,7 +2,6 @@ import logging
 import os
 
 from kubernetes import client, config
-from nuvla.api import Api
 
 from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
 
