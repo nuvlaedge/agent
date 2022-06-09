@@ -12,14 +12,14 @@ import json
 import logging
 import os
 from typing import Dict, NoReturn, List
-import psutil
+from os import path, stat
 import socket
 import time
-from os import path, stat
 
+import psutil
 import paho.mqtt.client as mqtt
 
-import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+from agent.common import NuvlaBoxCommon
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
@@ -140,6 +140,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
     @status_on_nuvla.setter
     def status_on_nuvla(self, value):
+        """ Agent status setter """
         self._status_on_nuvla = MonitoredDict('Telemetry.status_on_nuvla', value)
         caller = inspect.stack()[1]
         logging.debug(f'Telemetry.status_on_nuvla setter called by {caller.filename}:'
@@ -148,6 +149,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
     @property
     def status(self):
+        """ Current agent status getter """
         return self._status
 
     @status.setter
@@ -186,9 +188,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             self.mqtt_telemetry.disconnect()
             return
 
-        os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                             "nuvlabox-status",
-                                                             json.dumps(nuvlabox_status)))
+        os.system(f"mosquitto_pub -h {self.mqtt_broker_host} -t nuvlabox-status "
+                  f"-m '{json.dumps(nuvlabox_status)}'")
 
         if cpu:
             # e1 = self.mqtt_telemetry.publish("cpu/capacity", payload=str(cpu[0]))
@@ -198,34 +199,29 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
             # using os.system for now
 
-            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                 "cpu",
-                                                                 json.dumps(cpu)))
+            os.system(f"mosquitto_pub -h {self.mqtt_broker_host} -t cpu "
+                      f"-m '{json.dumps(ram)}'")
 
         if ram:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
             # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
             # same issue as above
-            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                 "ram",
-                                                                 json.dumps(ram)))
+            os.system(f"mosquitto_pub -h {self.mqtt_broker_host} -t ram "
+                      f"-m '{json.dumps(ram)}'")
 
         if disks:
             for dsk in disks:
                 # self.mqtt_telemetry.publish("disks", payload=json.dumps(dsk))
                 # same issue as above
-                os.system("mosquitto_pub -h {} -t {} -m '{}'".format(
-                    self.mqtt_broker_host,
-                    "disks",
-                    json.dumps(dsk)))
+                os.system(f"mosquitto_pub -h {self.mqtt_broker_host} -t disks "
+                          f"-m '{json.dumps(dsk)}'")
 
         if energy:
             # self.mqtt_telemetry.publish("ram/capacity", payload=str(ram[0]))
             # self.mqtt_telemetry.publish("ram/used", payload=str(ram[1]))
             # same issue as above
-            os.system("mosquitto_pub -h {} -t {} -m '{}'".format(self.mqtt_broker_host,
-                                                                 "energy",
-                                                                 json.dumps(energy)))
+            os.system(f"mosquitto_pub -h {self.mqtt_broker_host} "
+                      f"-t energy -m '{json.dumps(energy)}'")
 
         # self.mqtt_telemetry.disconnect()
 
@@ -368,4 +364,3 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         else:
             logging.warning("Cannot infer the NuvlaBox VPN IP!")
             return None
-

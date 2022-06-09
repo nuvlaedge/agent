@@ -9,6 +9,7 @@ from agent.monitor.edge_status import EdgeStatus
 
 
 class TestVulnerabilitiesMonitor(unittest.TestCase):
+    openssh_ctr: str = 'OpenSSH 7.6p1 Ubuntu 4ubuntu0.5'
 
     def test_retrieve_security_vulnerabilities(self):
         fake_telemetry: Mock = Mock()
@@ -47,9 +48,10 @@ class TestVulnerabilitiesMonitor(unittest.TestCase):
         self.assertIsNone(test_monitor.data.summary)
 
         # Test simply vulnerability
+
         mock_retrieve.return_value = [
             {
-                "product": "OpenSSH 7.6p1 Ubuntu 4ubuntu0.5",
+                "product": self.openssh_ctr,
                 "vulnerability-id": "CVE-2021-28041",
                 "vulnerability-score": 7.1
             }
@@ -58,13 +60,13 @@ class TestVulnerabilitiesMonitor(unittest.TestCase):
         self.assertIsNotNone(test_monitor.data.summary)
         expected_out = {
             'items': [{
-                "product": "OpenSSH 7.6p1 Ubuntu 4ubuntu0.5",
+                "product": self.openssh_ctr,
                 "vulnerability-id": "CVE-2021-28041",
                 "vulnerability-score": 7.1
             }],
             'summary': {
                 'total': 1,
-                'affected-products': ["OpenSSH 7.6p1 Ubuntu 4ubuntu0.5"],
+                'affected-products': [self.openssh_ctr],
                 'average-score': 7.1
             }
         }
@@ -87,7 +89,7 @@ class TestVulnerabilitiesMonitor(unittest.TestCase):
         # Test simply vulnerability
         mock_retrieve.return_value = [
             {
-                "product": "OpenSSH 7.6p1 Ubuntu 4ubuntu0.5",
+                "product": self.openssh_ctr,
                 "vulnerability-id": "CVE-2021-28041",
                 "vulnerability-score": 7.1
             }
@@ -96,13 +98,13 @@ class TestVulnerabilitiesMonitor(unittest.TestCase):
         test_monitor.populate_nb_report(body)
         expected_out = {
             'items': [{
-                "product": "OpenSSH 7.6p1 Ubuntu 4ubuntu0.5",
+                "product": self.openssh_ctr,
                 "vulnerability-id": "CVE-2021-28041",
                 "vulnerability-score": 7.1
             }],
             'summary': {
                 'total': 1,
-                'affected-products': ["OpenSSH 7.6p1 Ubuntu 4ubuntu0.5"],
+                'affected-products': [self.openssh_ctr],
                 'average-score': 7.1
             }
         }

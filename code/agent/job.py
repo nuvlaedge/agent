@@ -7,7 +7,6 @@ Relays pull-mode jobs to local job-engine-lite
 """
 
 import logging
-import docker
 import json
 
 from agent.common import NuvlaBoxCommon

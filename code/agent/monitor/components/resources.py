@@ -85,13 +85,6 @@ class ResourcesMonitor(Monitor):
             if not device.get('size') or not device.get('children'):
                 continue
 
-            # TODO: Future feature, include drive information along with partitions
-            # it_drive: DiskDataStructure = self.clean_disk_report(device)
-            #
-            # if it_drive:
-            #     it_drive.is_partition = False
-            #     it_disk_status.append(it_drive)
-
             # Iterate list of partitions
             for partition in partitions:
                 if not partition.get('mountpoint'):

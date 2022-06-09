@@ -60,7 +60,7 @@ def local_peripheral_get_identifier(filepath):
     """
     try:
         peripheral_nuvla_id = NB.read_json_file(filepath)["id"]
-    except:
+    except KeyError:
         # if something happens, just return None
         return None
 
@@ -195,17 +195,16 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
         return out_peripheral.data, out_peripheral.data.get('status', 200)
 
     except nuvla.api.api.NuvlaError as e:
-        if e.response.status_code == 404:
+        if e.response.status_code == 404 and action == 'DELETE':
             logging.warning(f"Peripheral {per_nuvla_id} not found in Nuvla: "
                             f"{e.response.json()}")
 
-            if action == 'DELETE':
-                try:
-                    os.remove(peripheral_filepath)
-                except FileNotFoundError:
-                    pass
-                logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
-                return {"message": f"Deleted {peripheral_identifier}"}, 200
+            try:
+                os.remove(peripheral_filepath)
+            except FileNotFoundError:
+                pass
+            logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
+            return {"message": f"Deleted {peripheral_identifier}"}, 200
 
         # Maybe something went wrong, and we should try later, so keep the local
         # peripheral copy alive
@@ -275,7 +274,7 @@ def find(parameter, value, identifier_pattern):
         with open(filename) as f:
             try:
                 content = json.loads(f.read())
-            except:
+            except (json.JSONDecodeError, IOError):
                 continue
 
         if parameter and value:
@@ -301,7 +300,7 @@ def get(identifier):
         with open(search_for) as p:
             try:
                 return json.loads(p.read()), 200
-            except:
+            except (json.JSONDecodeError, IOError):
                 return {"error": "Cannot read peripheral information"}, 500
     else:
         return {"error": "Peripheral not found"}, 404

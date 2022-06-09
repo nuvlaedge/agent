@@ -12,6 +12,10 @@ from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
 import docker
 
 
+class InferIPError(Exception):
+    ...
+
+
 class DockerClient(ContainerRuntimeClient):
     """
     Docker client
@@ -100,11 +104,11 @@ class DockerClient(ContainerRuntimeClient):
                             f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
                         break
                 if not ip:
-                    raise Exception('Cannot infer IP')
-            except:
+                    raise InferIPError('Cannot infer IP')
+            except (IOError, InferIPError):
                 ip = '127.0.0.1'
             else:
-                # TODO: double check - we should never get here
+                # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaBox API IP!")
                     return None, 5000
@@ -134,7 +138,7 @@ class DockerClient(ContainerRuntimeClient):
             node_id = self.get_node_info()["Swarm"]["NodeID"]
             node_labels = self.client.api.inspect_node(node_id)["Spec"]["Labels"]
         except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
-            if not "node is not a swarm manager" in str(e).lower():
+            if "node is not a swarm manager" not in str(e).lower():
                 logging.debug(f"Cannot get node labels: {str(e)}")
             return []
 
@@ -172,10 +176,12 @@ class DockerClient(ContainerRuntimeClient):
 
         try:
             if job_container.status.lower() in ['running', 'restarting']:
-                logging.info(f'Job {job_id} is already running in container {job_container.name}')
+                logging.info(f'Job {job_id} is already running in container '
+                             f'{job_container.name}')
                 return True
             elif job_container.status.lower() in ['created']:
-                logging.warning(f'Job {job_id} was created by not started. Removing it and starting a new one')
+                logging.warning(f'Job {job_id} was created by not started. Removing it '
+                                f'and starting a new one')
                 job_container.remove()
             else:
                 # then it is stopped or dead. force kill it and re-initiate
@@ -185,8 +191,9 @@ class DockerClient(ContainerRuntimeClient):
             return True
         except docker.errors.NotFound:
             # then it stopped by itself...maybe it ran already and just finished
-            # let's not do anything just in case this is a late coming job. In the next telemetry cycle, if job is there
-            # again, then we run it because this container is already gone
+            # let's not do anything just in case this is a late coming job. In the next
+            # telemetry cycle, if job is there again, then we run it because this
+            # container is already gone
             return True
 
         return False
@@ -198,7 +205,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             compute_api = self.client.containers.get('compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
-        except:
+        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError):
             logging.error(f'Cannot infer compute-api network for local job {job_id}')
             return
 
@@ -262,7 +269,7 @@ class DockerClient(ContainerRuntimeClient):
             cpu_percent = 0.0
             if system_delta > 0.0 and online_cpus > 0:
                 cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
-        except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
+        except (IndexError, KeyError, ValueError, ZeroDivisionError):
             errors.append("CPU")
             cpu_percent = 0.0
 
@@ -286,7 +293,7 @@ class DockerClient(ContainerRuntimeClient):
                 mem_percent = 0.00
             else:
                 mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
-        except (IndexError, KeyError, ValueError) as e:
+        except (IndexError, KeyError, ValueError):
             errors.append("Mem")
             mem_percent = mem_usage = mem_limit = 0.00
 
@@ -322,13 +329,13 @@ class DockerClient(ContainerRuntimeClient):
         if io_bytes_recursive:
             try:
                 blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
-            except Exception as e:
+            except (IndexError, KeyError):
                 errors.append("blk_in")
                 blk_in = 0.0
 
             try:
                 blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
-            except Exception as e:
+            except (IndexError, KeyError):
                 errors.append("blk_out")
                 blk_out = 0.0
         else:
@@ -356,8 +363,9 @@ class DockerClient(ContainerRuntimeClient):
                 continue
 
             try:
-                old_cpu.append((float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
-                                float(container_stats["cpu_stats"]["system_cpu_usage"])))
+                old_cpu.append(
+                    (float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
+                     float(container_stats["cpu_stats"]["system_cpu_usage"])))
             except KeyError:
                 old_cpu.append((0.0, 0.0))
 
@@ -521,8 +529,9 @@ class DockerClient(ContainerRuntimeClient):
 
     def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
         try:
-            infra_service = self.infer_if_additional_coe_exists(fallback_address=api_endpoint.replace('https://', '').split(':')[0])
-        except:
+            infra_service = self.infer_if_additional_coe_exists(
+                fallback_address=api_endpoint.replace('https://', '').split(':')[0])
+        except IndexError:
             # this is a non-critical step, so we should never fail because of it
             infra_service = {}
         if api_endpoint:
@@ -586,9 +595,11 @@ class DockerClient(ContainerRuntimeClient):
         cmd = f'grep -R "{k8s_apiserver_process}" {self.hostfs}/proc/*/comm'
 
         try:
-            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5, encoding='UTF-8', shell=True).stdout
+            result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5,
+                         encoding='UTF-8', shell=True).stdout
         except TimeoutExpired as e:
-            logging.warning(f'Could not infer if Kubernetes is also installed on the host: {str(e)}')
+            logging.warning(f'Could not infer if Kubernetes is also installed on '
+                            f'the host: {str(e)}')
             return k8s_cluster_info
 
         if not result:

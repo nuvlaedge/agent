@@ -6,7 +6,6 @@ Controls all the functionalities of the Agent
 
 from argparse import ArgumentParser
 import os
-import sys
 import logging
 from logging import config as log_config_mod
 import time
@@ -127,7 +126,6 @@ def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
         root_logger.info(f'NuvlaBox resource updated. Refresh interval value: '
                          f'{refresh_interval}')
 
-        nb_updated_date = nuvlabox_resource['updated']
         old_nuvlabox_resource = activator.create_nb_document_file(nuvlabox_resource)
         activator.vpn_commission_if_needed(nuvlabox_resource, old_nuvlabox_resource)
 

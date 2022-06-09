@@ -54,6 +54,10 @@ def timeout(time):
         signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
+class OrchestratorException(Exception):
+    ...
+
+
 # --------------------
 class NuvlaBoxCommon:
     """ Common set of methods and variables for the NuvlaBox agent
@@ -250,8 +254,8 @@ class NuvlaBoxCommon:
             if os.path.exists(self.docker_socket_file):
                 return DockerClient(self.hostfs, self.installation_home)
             else:
-                raise Exception(f'Orchestrator is "{ORCHESTRATOR}", but file '
-                                f'{self.docker_socket_file} is not present')
+                raise OrchestratorException(f'Orchestrator is "{ORCHESTRATOR}", but file '
+                                            f'{self.docker_socket_file} is not present')
 
     def set_nuvlabox_id(self) -> str:
         """

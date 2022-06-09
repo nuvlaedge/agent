@@ -23,12 +23,9 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
     def __init__(self, data_volume):
         """ Constructs an Activation object """
 
-        # self.data_volume = data_volume
-        # self.activation_flag = "{}/.activated".format(self.data_volume)
         super().__init__(shared_data_volume=data_volume)
 
         self.activate_logger: logging.Logger = logging.getLogger(__name__)
-        # self.api = nb.ss_api() if not api else api
         self.user_info = {}
 
     def activation_is_possible(self):

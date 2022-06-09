@@ -29,6 +29,7 @@ class TestPowerMonitor(unittest.TestCase):
     @patch('os.listdir')
     @patch('os.path.exists')
     def test_get_power(self, mock_exists, mock_listdir):
+        power_open: str = 'agent.monitor.components.power.open'
         test_monitor: PowerMonitor = self.get_base_monitor()
         mock_exists.return_value = False
         self.assertIsNone(test_monitor.get_power('some_text'),
@@ -63,7 +64,7 @@ class TestPowerMonitor(unittest.TestCase):
                          'Got power consumption even though I2C rail files do not exist')
 
         # if rail files exist, open them, unless there is an error, which means = []
-        with patch('agent.monitor.components.power.open', mock_open(read_data=None)):
+        with patch(power_open, mock_open(read_data=None)):
             # 2 boards matching + 3 channels
             mock_exists.side_effect = [True] + \
                                       [False, True] + [True, True,
@@ -77,7 +78,7 @@ class TestPowerMonitor(unittest.TestCase):
                                                    True]  # 2 boards matching + 3 channels
         mock_listdir.side_effect = [['0-0040', '0-0041'],
                                     [], [], []]  # 3 channel reading
-        with patch('agent.monitor.components.power.open',
+        with patch(power_open,
                    mock_open(read_data='valid_data')):
             self.assertIsNone(test_monitor.get_power('ina3221x'),
                               'Got power consumption when rail files cannot be read')
@@ -96,7 +97,7 @@ class TestPowerMonitor(unittest.TestCase):
                                    []]  # 3 channel reading (1st valid)
         mock_listdir.side_effect = list_dir_right_sequence
 
-        with patch('agent.monitor.components.power.open',
+        with patch(power_open,
                    mock_open(read_data='not-float-data')):
             self.assertIsNone(test_monitor.get_power('ina3221x'),
                               'Got power consumption when rail files can be read but do '
@@ -115,7 +116,7 @@ class TestPowerMonitor(unittest.TestCase):
              'unit': 'mA'}
         ]
 
-        with patch('agent.monitor.components.power.open', mock_open(read_data='1')):
+        with patch(power_open, mock_open(read_data='1')):
             self.assertEqual(test_monitor.get_power('ina3221x').dict(by_alias=True),
                              expected_output[0],
                              'Unable to get power consumption')

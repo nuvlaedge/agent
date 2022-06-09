@@ -7,9 +7,9 @@ import os
 import threading
 from threading import Event, Thread
 from typing import Union, NoReturn, List, Dict
+from copy import copy
 
 from nuvla.api.models import CimiResource
-from copy import copy
 
 from agent.infrastructure import Infrastructure
 from agent.job import Job

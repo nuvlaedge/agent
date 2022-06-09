@@ -9,6 +9,7 @@ and respective credentials in Nuvla
 
 import logging
 import docker
+import docker.errors as docker_err
 import json
 import requests
 import time
@@ -187,9 +188,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 else:
                     diff_conf = {}
                     for key, value in current_conf.items():
-                        if key in old_conf:
-                            if old_conf[key] == value:
-                                continue
+                        if key in old_conf and old_conf[key] == value:
+                            continue
 
                         diff_conf[key] = value
 
@@ -228,14 +228,15 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         compute_api_url = f'https://{self.compute_api}:{container_api_port}'
 
         try:
-            if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
+            if self.container_runtime.client.containers.get(self.compute_api).status \
+                    != 'running':
                 return False
 
             requests.get(compute_api_url, timeout=3)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
             pass
-        except Exception as e:
+        except (docker_err.NotFound, docker_err.APIError):
             return False
 
         return True
@@ -490,7 +491,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         """
         try:
             vpn_client_running = self.container_runtime.is_vpn_client_running()
-        except docker.errors.NotFound as e:
+        except docker.errors.NotFound:
             vpn_client_running = False
             self.infra_logger.info("VPN client is not running")
 
@@ -612,8 +613,5 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         telemetry cycle
         """
         while True:
-            try:
-                self.try_commission()
-            except Exception as e:
-                self.infra_logger.exception('Error while trying to commission NuvlaBox')
+            self.try_commission()
             time.sleep(self.refresh_period)

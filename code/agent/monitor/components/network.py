@@ -73,14 +73,6 @@ class NetworkMonitor(Monitor):
             reason: str = f'Connection to server timed out: {ex}'
             self.logger.error(f'Cannot retrieve public IP. {reason}')
 
-        # TODO: Future feature, to include IPv6
-        # it_v6_response: requests.Response =
-        # requests.get("https://api64.ipify.org?format=json")
-        # Future feature, to include IPv6
-        # if it_v6_response.status_code == 200:
-        #     self.custom_data.public.ip_v6 =
-        #     json.loads(it_v6_response.content.decode("utf-8")).get("ip")
-
     def parse_host_ip_json(self, iface_data: Dict) -> Union[NetworkInterface, None]:
         """
         Receives a dict with the information of a host interface and returns a

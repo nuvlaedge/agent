@@ -24,8 +24,6 @@ class NetworkInterface(BaseDataStructure):
     iface_name: Union[str, None] = Field(alias='interface')
     ip: Union[str, None]
     default_gw: bool = Field(False, alias='default-gw')
-    # TODO: Future feature, to include IPv6
-    # ip_v6: Union[IPvAnyAddress, None]
 
     # Interface data traffic control
     tx_bytes: Union[int, None] = Field(alias='bytes-transmitted')
