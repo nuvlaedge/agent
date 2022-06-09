@@ -310,8 +310,8 @@ class NetworkMonitor(Monitor):
             updater()
 
     def populate_nb_report(self, nuvla_report: Dict):
-        # TODO: Until server is adapted, we only return a single IP address as
-        #       a string following the next priority.
+        # Until server is adapted, we only return a single IP address as
+        #  a string following the next priority.
         # 1.- VPN
         # 2.- Default Local Gateway
         # 3.- Public

@@ -431,8 +431,8 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(err, [],
                          'Reporting errors on blk stats when there should not be any')
 
-        # if the blk_stats are misformatted or there is any other exception during collection,
-        # then we get 0MBs for the corresponding metric, and an error
+        # if the blk_stats are misformatted or there is any other exception during
+        # collection, then we get 0MBs for the corresponding metric, and an error
         blk_stat['blkio_stats']['io_service_bytes_recursive'][0]['value'] = "saasd" # not a number
         self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (2, 0),
                          'Expected 0MBs for blk_in (due to misformatted value, but got something else instead')

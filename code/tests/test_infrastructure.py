@@ -664,7 +664,8 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_commission.assert_called_once()
         mock_sleep.assert_called_once()
 
-        # even if there's an exception in the commissioning cycle, it just restarts the cycle again
+        # even if there's an exception in the commissioning cycle, it just
+        # restarts the cycle again
         mock_commission.reset_mock()    # reset counters
         mock_sleep.reset_mock()
         mock_commission.side_effect = RuntimeError

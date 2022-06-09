@@ -60,7 +60,7 @@ def local_peripheral_get_identifier(filepath):
     """
     try:
         peripheral_nuvla_id = NB.read_json_file(filepath)["id"]
-    except KeyError:
+    except (KeyError, FileNotFoundError):
         # if something happens, just return None
         return None
 

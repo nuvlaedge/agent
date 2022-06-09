@@ -72,7 +72,7 @@ class PowerMonitor(Monitor):
 
         i2c_addresses_found = \
             [addr for addr in os.listdir(i2c_fs_path) if
-             re.match(r"[0-9]-[0-9][0-9][0-9][0-9]", addr)]
+             re.match(r"\d-\d\d\d\d", addr)]
         i2c_addresses_found.sort()
         channels = self._NVIDIA_MODEL[driver]['channels']
         for _, power_info in self._NVIDIA_MODEL[driver]['boards'].items():

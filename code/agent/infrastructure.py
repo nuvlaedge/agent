@@ -236,7 +236,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
             pass
-        except (docker_err.NotFound, docker_err.APIError):
+        except (docker_err.NotFound, docker_err.APIError, TimeoutError):
             return False
 
         return True
@@ -613,5 +613,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         telemetry cycle
         """
         while True:
-            self.try_commission()
+            try:
+                self.try_commission()
+            except RuntimeError as ex:
+                self.infra_logger.exception('Error while trying to commission NuvlaBox', ex)
             time.sleep(self.refresh_period)

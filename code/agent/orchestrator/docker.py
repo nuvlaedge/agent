@@ -105,7 +105,7 @@ class DockerClient(ContainerRuntimeClient):
                         break
                 if not ip:
                     raise InferIPError('Cannot infer IP')
-            except (IOError, InferIPError):
+            except (IOError, InferIPError, IndexError):
                 ip = '127.0.0.1'
             else:
                 # Double check - we should never get here
@@ -205,7 +205,8 @@ class DockerClient(ContainerRuntimeClient):
         try:
             compute_api = self.client.containers.get('compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
-        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError):
+        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
+                TimeoutError):
             logging.error(f'Cannot infer compute-api network for local job {job_id}')
             return
 
@@ -239,13 +240,14 @@ class DockerClient(ContainerRuntimeClient):
             # in the default bridge network, so it doesn't get affected by network changes
             # in the NuvlaBox
             self.client.api.connect_container_to_network(job_execution_id, 'bridge')
-        except Exception as e:
+        except docker.errors.APIError as e:
             logging.warning(f'Could not attach {job_execution_id} to bridge network: '
                             f'{str(e)}')
 
     @staticmethod
     def collect_container_metrics_cpu(cstats: dict, old_cpu_total: float,
-                                      old_cpu_system: float, errors: list=None) -> float:
+                                      old_cpu_system: float,
+                                      errors: list = None) -> float:
         """
         Calculates the CPU consumption for a give container
 
@@ -329,13 +331,13 @@ class DockerClient(ContainerRuntimeClient):
         if io_bytes_recursive:
             try:
                 blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
-            except (IndexError, KeyError):
+            except (IndexError, KeyError, TypeError):
                 errors.append("blk_in")
                 blk_in = 0.0
 
             try:
                 blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
-            except (IndexError, KeyError):
+            except (IndexError, KeyError, TypeError):
                 errors.append("blk_out")
                 blk_out = 0.0
         else:
@@ -531,7 +533,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             infra_service = self.infer_if_additional_coe_exists(
                 fallback_address=api_endpoint.replace('https://', '').split(':')[0])
-        except IndexError:
+        except (IndexError, ConnectionError):
             # this is a non-critical step, so we should never fail because of it
             infra_service = {}
         if api_endpoint:
@@ -569,7 +571,7 @@ class DockerClient(ContainerRuntimeClient):
         with open(k3s_conf) as kubeconfig:
             try:
                 k3s = yaml.safe_load(kubeconfig)
-            except yaml.YAMLError as exc:
+            except yaml.YAMLError:
                 return k3s_cluster_info
 
         k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
