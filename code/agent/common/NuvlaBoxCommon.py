@@ -8,14 +8,13 @@ List of common attributes for all classes
 import json
 import logging
 import os
-import socket
 import requests
 import signal
 import string
 import time
 
 from contextlib import contextmanager
-from subprocess import PIPE, Popen, run
+from subprocess import PIPE, Popen
 from nuvla.api import Api
 
 from agent.orchestrator import ContainerRuntimeClient
@@ -81,7 +80,8 @@ class NuvlaBoxCommon:
         self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.nuvla_endpoint, self.nuvla_endpoint_insecure = self.set_nuvla_endpoint()
         # Also store the Nuvla connection details for future restarts
-        conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
+        conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n" \
+               f"{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
         self.save_nuvla_configuration(self.nuvlabox_nuvla_configuration, conf)
 
         self.container_runtime = self.set_runtime_client_details()
@@ -120,39 +120,6 @@ class NuvlaBoxCommon:
         nbe_version = os.getenv('NUVLABOX_ENGINE_VERSION')
         self.nuvlabox_engine_version = str(nbe_version) if nbe_version else None
 
-        # https://docs.nvidia.com/jetson/archives/l4t-archived/l4t-3231/index.htm
-        # { driver: { board: { ic2_addrs: [addr,...], addr/device: { channel: railName}}}}
-        self.nvidia_software_power_consumption_model = {
-            "ina3221x": {
-                "channels": 3,
-                "boards": {
-                    "agx_xavier": {
-                        "i2c_addresses": ["1-0040", "1-0041"],
-                        "channels_path": ["1-0040/iio:device0", "1-0041/iio:device1"]
-                    },
-                    "nano": {
-                        "i2c_addresses": ["6-0040"],
-                        "channels_path": ["6-0040/iio:device0"]
-                    },
-                    "tx1": {
-                        "i2c_addresses": ["1-0040"],
-                        "channels_path": ["1-0040/iio:device0"]
-                    },
-                    "tx1_dev_kit": {
-                        "i2c_addresses": ["1-0042", "1-0043"],
-                        "channels_path": ["1-0042/iio:device2", "1-0043/iio:device3"]
-                    },
-                    "tx2": {
-                        "i2c_addresses": ["0-0040", "0-0041"],
-                        "channels_path": ["0-0040/iio:device0", "0-0041/iio:device1"]
-                    },
-                    "tx2_dev_kit": {
-                        "i2c_addresses": ["0-0042", "0-0043"],
-                        "channels_path": ["0-0042/iio:device2", "0-0043/iio:device3"]
-                    }
-                }
-            }
-        }
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
     def set_vpn_config_extra(self) -> str:

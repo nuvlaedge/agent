@@ -15,6 +15,7 @@ from typing import Dict, NoReturn, List
 from os import path, stat
 import socket
 import time
+import sys
 
 import psutil
 import paho.mqtt.client as mqtt
@@ -76,7 +77,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         super().__init__(shared_data_volume=data_volume)
         self.logger: logging.Logger = logging.getLogger('Telemetry')
         self.nb_status_id = nuvlabox_status_id
-        self.first_net_stats = {}
 
         self.status_default = {
             'resources': None,
@@ -292,7 +292,6 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         """ Gets several types of information to populate the NuvlaBox status """
 
         status_for_nuvla = self.status_default.copy()
-
         # Update monitor objects
         self.update_monitors(status_for_nuvla)
 

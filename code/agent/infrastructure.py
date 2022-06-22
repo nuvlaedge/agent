@@ -37,7 +37,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         Thread.__init__(self, daemon=True)
 
         self.infra_logger: logging.Logger = logging.getLogger(__name__)
-
+        
         if telemetry:
             self.telemetry_instance = telemetry
         else:
@@ -70,8 +70,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return true or false
         """
 
-        manager_token_file = "{}/{}".format(self.data_volume, self.swarm_manager_token_file)
-        worker_token_file = "{}/{}".format(self.data_volume, self.swarm_worker_token_file)
+        manager_token_file = f"{self.data_volume}/{self.swarm_manager_token_file}"
+        worker_token_file = f"{self.data_volume}/{self.swarm_worker_token_file}"
 
         try:
             open(worker_token_file).readlines()[0].replace('\n', '')
@@ -96,7 +96,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             client_cert = open(cert_file).read()
             client_key = open(key_file).read()
         except (FileNotFoundError, IndexError):
-            self.infra_logger.warning("Container orchestration API TLS keys have not been set yet!")
+            self.infra_logger.warning("Container orchestration API TLS keys have not been"
+                                      " set yet!")
             return None
 
         return client_ca, client_cert, client_key
@@ -117,7 +118,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         try:
             self.api()._cimi_post(self.nuvlabox_id+"/commission", json=payload)
         except Exception as e:
-            self.infra_logger.error("Could not commission with payload {}: {}".format(payload, e))
+            self.infra_logger.error(f"Could not commission with payload {payload}: {e}")
             return False
 
         if "vpn-csr" in payload:
@@ -132,10 +133,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             while attempts <= 20:
                 self.infra_logger.info("Getting VPN credential from Nuvla...")
                 try:
-                    credential_id = self.api().search("credential", filter=searcher_filter, last=1).resources[0].id
+                    credential_id = self.api().search("credential",
+                                                      filter=searcher_filter,
+                                                      last=1).resources[0].id
                     break
                 except IndexError:
-                    self.infra_logger.exception("Cannot find VPN credential in Nuvla after commissioning")
+                    self.infra_logger.exception("Cannot find VPN credential in Nuvla "
+                                                "after commissioning")
                     time.sleep(2)
                 except Exception as e:
                     self.infra_logger.info("something %s" % e)
@@ -143,7 +147,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 attempts += 1
 
             if not credential_id:
-                self.infra_logger.warning("Failing to provide necessary values for NuvlaBox VPN client")
+                self.infra_logger.warning("Failing to provide necessary values for "
+                                          "NuvlaBox VPN client")
                 return None
 
             vpn_credential = self.api()._cimi_get(credential_id)
@@ -152,11 +157,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
             vpn_conf_endpoints = ''
             for connection in vpn_server["vpn-endpoints"]:
-                vpn_conf_endpoints += "\n<connection>\nremote {} {} {}\n</connection>\n".format(
-                    connection["endpoint"],
-                    connection["port"],
-                    connection["protocol"]
-                )
+                vpn_conf_endpoints += \
+                    "\n<connection>\nremote {} {} {}\n</connection>\n".format(
+                        connection["endpoint"],
+                        connection["port"],
+                        connection["protocol"])
 
             vpn_fields = {
                 "vpn-intermediate-ca": "\n".join(vpn_credential["vpn-intermediate-ca"]),
@@ -195,13 +200,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
                     return diff_conf
         except FileNotFoundError:
-            self.infra_logger.info("Auto-commissioning the NuvlaBox for the first time...")
+            self.infra_logger.info("Auto-commissioning the NuvlaBox for the first time..")
             return current_conf
 
     def get_nuvlabox_capabilities(self, commissioning_dict: dict):
         """ Finds the NuvlaBox capabilities and adds them to the NB commissioning payload
 
-        :param commissioning_dict: the commission payload, as a dict, to be changed in case there are capabilities
+        :param commissioning_dict: the commission payload, as a dict, to be changed in
+        case there are capabilities
         :return:
         """
 
@@ -257,7 +263,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
     def get_node_role_from_status(self) -> str or None:
         """
-        Look up the local nuvlabox-status file and take the cluster-node-role value from there
+        Look up the local nuvlabox-status file and take the cluster-node-role value from
+        there
 
         :return: node role
         """
@@ -285,7 +292,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return: commission-ready cluster info
         """
 
-        cluster_info = self.container_runtime.get_cluster_info(default_cluster_name=f'cluster_{self.nuvlabox_id}')
+        cluster_info = self.container_runtime.get_cluster_info(
+            default_cluster_name=f'cluster_{self.nuvlabox_id}')
 
         node_info = self.container_runtime.get_node_info()
         node_id = self.container_runtime.get_node_id(node_info)
@@ -297,15 +305,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if not cluster_info:
             # it is not a manager but...
             if node_id and node_id == nuvlabox_status.get('node-id'):
-                # it is a worker, and NB status is aware of that, so we can update the cluster with it
+                # it is a worker, and NB status is aware of that, so we can update
+                # the cluster with it
                 return {
                     "cluster-worker-id": node_id,
                 }
             else:
                 return {}
 
-        if nuvlabox_status.get('node-id') in cluster_info.get('cluster-managers', []) and \
-                node_id == nuvlabox_status.get('node-id'):
+        if nuvlabox_status.get('node-id') in cluster_info.get('cluster-managers', []) \
+                and node_id == nuvlabox_status.get('node-id'):
             return cluster_info
 
         return {}
@@ -340,11 +349,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if self.get_node_role_from_status() != "worker":
             return
 
-        full_payload['removed'] = self.container_runtime.get_partial_decommission_attributes()
+        full_payload['removed'] = \
+            self.container_runtime.get_partial_decommission_attributes()
         if full_payload['removed'] != old_payload.get('removed', []):
             minimum_payload['removed'] = full_payload['removed']
 
-        # remove the keys from the commission payload, to avoid confusion on the server side
+        # remove the keys from the commission payload, to avoid confusion on the server
+        # side
         for attr in minimum_payload.get('removed', []):
             try:
                 full_payload.pop(attr)
@@ -353,23 +364,26 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 pass
 
     def commissioning_attr_has_changed(self, current: dict, old: dict, attr_name: str,
-                                        payload: dict, compare_with_nb_resource: bool = False):
+                                       payload: dict,
+                                       compare_with_nb_resource: bool = False):
         """
-        Compares the current attribute value with the old one, and if different, adds it to the
-        commissioning payload
+        Compares the current attribute value with the old one, and if different, adds it
+        to the commissioning payload
 
         Args:
             current (dict): current commissioning attributes
             old (dict): previous commissioning attributes
             attr_name (str): name of the attribute to be compared
             payload (dict): minimum commissioning payload
-            compare_with_nb_resource (bool): if True, will lookup the local .context file and check if attr has changed.
-                                            NOTE: this flag make the check ignore whatever the previous commission was
+            compare_with_nb_resource (bool): if True, will lookup the local .context file
+            and check if attr has changed. NOTE: this flag make the check ignore whatever
+            the previous commission was
         """
 
         if compare_with_nb_resource:
             with open(f'{self.data_volume}/{self.context}') as f:
-                # overwrite the old commissioning value with the one from the NB resource (source of truth)
+                # overwrite the old commissioning value with the one from the NB resource
+                # (source of truth)
                 old_value = json.load(f).get(attr_name)
                 if old_value:
                     old[attr_name] = old_value
@@ -396,15 +410,24 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
         commission_payload["tags"] = self.container_runtime.get_node_labels()
-        self.commissioning_attr_has_changed(commission_payload, old_commission_payload, "tags", minimum_commission_payload)
+        self.commissioning_attr_has_changed(
+            commission_payload,
+            old_commission_payload,
+            "tags",
+            minimum_commission_payload)
 
         infra_service = {}
         if self.compute_api_is_running(container_api_port):
-            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, self.get_tls_keys())
-        # 1st time commissioning the IS, so we need to also pass the keys, even if they haven't changed
-        infra_diff = {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
+            infra_service = \
+                self.container_runtime.define_nuvla_infra_service(api_endpoint,
+                                                                  self.get_tls_keys())
+        # 1st time commissioning the IS, so we need to also pass the keys, even if they
+        # haven't changed
+        infra_diff = \
+            {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
 
-        if self.container_runtime.infra_service_endpoint_keyname in old_commission_payload:
+        if self.container_runtime.infra_service_endpoint_keyname in \
+                old_commission_payload:
             minimum_commission_payload.update(infra_diff)
         else:
             minimum_commission_payload.update(infra_service)
@@ -421,23 +444,27 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 self.container_runtime.join_token_worker_keyname: cluster_join_tokens[1]
             })
 
-            self.commissioning_attr_has_changed(commission_payload,
-                                                old_commission_payload,
-                                                self.container_runtime.join_token_manager_keyname,
-                                                minimum_commission_payload)
-            self.commissioning_attr_has_changed(commission_payload,
-                                                old_commission_payload,
-                                                self.container_runtime.join_token_worker_keyname,
-                                                minimum_commission_payload)
+            self.commissioning_attr_has_changed(
+                commission_payload,
+                old_commission_payload,
+                self.container_runtime.join_token_manager_keyname,
+                minimum_commission_payload)
+            self.commissioning_attr_has_changed(
+                commission_payload,
+                old_commission_payload,
+                self.container_runtime.join_token_worker_keyname,
+                minimum_commission_payload)
 
         self.get_nuvlabox_capabilities(commission_payload)
         # capabilities should always be commissioned when infra is also being commissioned
         if any(k in minimum_commission_payload for k in infra_service):
-            minimum_commission_payload['capabilities'] = commission_payload.get('capabilities', [])
+            minimum_commission_payload['capabilities'] = \
+                commission_payload.get('capabilities', [])
         else:
-            self.commissioning_attr_has_changed(commission_payload, old_commission_payload,
-                                                "capabilities", minimum_commission_payload,
-                                                compare_with_nb_resource=True)
+            self.commissioning_attr_has_changed(
+                commission_payload, old_commission_payload,
+                "capabilities", minimum_commission_payload,
+                compare_with_nb_resource=True)
 
         # if this node is a worker, them we must force remove some assets
         self.needs_partial_decommission(minimum_commission_payload, commission_payload,
@@ -455,15 +482,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return str
         """
 
-        return 'method="create-credential-vpn-nuvlabox" and vpn-common-name="{}" and parent="{}"'.format(
-            self.nuvlabox_id,
-            vpn_server_id
-        )
+        return f'method="create-credential-vpn-nuvlabox" and ' \
+               f'vpn-common-name="{self.nuvlabox_id}" and parent="{vpn_server_id}"'
 
     def validate_local_vpn_credential(self, online_vpn_credential: dict):
         """
-        When the VPN credential exists in Nuvla, this function checks whether the local copy of that credential
-        matches. If it does not, issue a VPN recommissioning
+        When the VPN credential exists in Nuvla, this function checks whether the local
+        copy of that credential matches. If it does not, issue a VPN recommissioning
 
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
@@ -472,19 +497,21 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             local_vpn_credential = json.loads(vpn_local.read())
 
         if online_vpn_credential['updated'] != local_vpn_credential['updated']:
-            self.infra_logger.warning("VPN credential has been modified in Nuvla at {}. Recommissioning"
-                            .format(online_vpn_credential['updated']))
+            self.infra_logger.warning(f"VPN credential has been modified in Nuvla at "
+                                      f"{online_vpn_credential['updated']}. "
+                                      f"Recommissioning")
             # Recommission
             self.commission_vpn()
             remove(self.vpn_credential)
             return None
-            # else, do nothing cause nothing has changed
+            # else, do nothing because nothing has changed
 
     def fix_vpn_credential_mismatch(self, online_vpn_credential: dict):
         """
-        When a VPN credential exists in Nuvla but not locally, there is a mismatch to be investigated.
-        This function will double-check the local VPN client state, re-commission the VPN credential if needed, and
-        finally save the right VPN credential locally for future reference
+        When a VPN credential exists in Nuvla but not locally, there is a mismatch to be
+        investigated. This function will double-check the local VPN client state,
+        re-commission the VPN credential if needed, and finally save the right VPN
+        credential locally for future reference
 
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
@@ -498,12 +525,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if vpn_client_running and self.telemetry_instance.get_vpn_ip():
             # just save a copy of the VPN credential locally
             self.write_file(self.vpn_credential, online_vpn_credential, is_json=True)
-            self.infra_logger.info("VPN client is now running. Saving VPN credential locally at {}"
-                         .format(self.vpn_credential))
+            self.infra_logger.info(f"VPN client is now running. Saving VPN credential "
+                                   f"locally at {self.vpn_credential}")
         else:
-            # there is a VPN credential in Nuvla, but not locally, and the VPN client is not running
-            # maybe something went wrong, just recommission
-            self.infra_logger.warning("The local VPN client is either not running or missing its configuration. Forcing VPN recommissioning...")
+            # there is a VPN credential in Nuvla, but not locally, and the VPN client
+            # is not running maybe something went wrong, just recommission
+            self.infra_logger.warning("The local VPN client is either not running or "
+                                      "missing its configuration. Forcing VPN "
+                                      "recommissioning...")
             self.commission_vpn()
 
     def watch_vpn_credential(self, vpn_is_id=None):
@@ -518,7 +547,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         search_filter = self.build_vpn_credential_search_filter(vpn_is_id)
         self.infra_logger.debug("Watching VPN credential in Nuvla...")
         try:
-            credential_id = self.api().search("credential", filter=search_filter, last=1).resources[0].id
+            credential_id = self.api().search("credential",
+                                              filter=search_filter,
+                                              last=1).resources[0].id
             self.infra_logger.debug("Found VPN credential ID %s" % credential_id)
         except IndexError:
             credential_id = None
@@ -540,12 +571,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
             # IF there is a VPN credential in Nuvla:
             #  - if we also have one locally, BUT is different, then recommission
-            if path.exists(self.vpn_credential) and stat(self.vpn_credential).st_size != 0 and path.exists(self.vpn_client_conf_file):
+            if path.exists(self.vpn_credential) \
+                    and stat(self.vpn_credential).st_size != 0 \
+                    and path.exists(self.vpn_client_conf_file):
                 self.validate_local_vpn_credential(vpn_credential_nuvla)
             else:
                 # - IF we don't have it locally, but there's one in Nuvla, then:
-                #     - IF the vpn-client is already running, then all is good, just save the VPN credential locally
-                self.infra_logger.warning("VPN credential exists in Nuvla, but not locally")
+                #     - IF the vpn-client is already running, then all is good, just
+                #     save the VPN credential locally
+                self.infra_logger.warning("VPN credential exists in Nuvla, but not "
+                                          "locally")
                 self.fix_vpn_credential_mismatch(vpn_credential_nuvla)
 
     def set_immutable_ssh_key(self):
@@ -590,14 +625,16 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             with open(f'{self.data_volume}/{self.context}') as nb:
                 nb_owner = json.load(nb).get('owner')
 
-            event_owners = [nb_owner, self.nuvlabox_id] if nb_owner else [self.nuvlabox_id]
+            event_owners = [nb_owner, self.nuvlabox_id] if nb_owner \
+                else [self.nuvlabox_id]
             event['acl'] = {'owners': event_owners}
 
             self.infra_logger.info(f'Setting immutable SSH key {self.ssh_pub_key} for '
                                    f'{self.installation_home}')
             try:
                 with NuvlaBoxCommon.timeout(10):
-                    if not self.container_runtime.install_ssh_key(self.ssh_pub_key, ssh_folder):
+                    if not self.container_runtime.install_ssh_key(self.ssh_pub_key,
+                                                                  ssh_folder):
                         return
             except Exception as e:
                 msg = f'An error occurred while setting immutable SSH key: {str(e)}'
@@ -616,5 +653,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             try:
                 self.try_commission()
             except RuntimeError as ex:
-                self.infra_logger.exception('Error while trying to commission NuvlaBox', ex)
+                self.infra_logger.exception('Error while trying to commission NuvlaBox',
+                                            ex)
             time.sleep(self.refresh_period)

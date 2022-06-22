@@ -500,7 +500,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                         'Received malformed container stats from the statistics collection mechanism')
         mock_get_cpu.assert_called_once_with(json.loads(stats[1]), old_cpu_total_usage, old_cpu_system_cpu_usage, [])
 
-    @mock.patch('agent.common.NuvlaBoxCommon.socket.gethostname')
+    @mock.patch('socket.gethostname')
     @mock.patch('docker.models.containers.ContainerCollection.get')
     @mock.patch('docker.models.containers.ContainerCollection.list')
     def test_get_installation_parameters(self, mock_containers_list, mock_containers_get, mock_gethostname):

@@ -246,5 +246,6 @@ class Agent:
         self.handle_pull_jobs(response)
 
         if not self.infrastructure.is_alive():
-            self.infrastructure = Infrastructure(self._DATA_VOLUME)
+            if not self.infrastructure or self.infrastructure.ident:
+                self.infrastructure = Infrastructure(self._DATA_VOLUME)
             self.infrastructure.start()

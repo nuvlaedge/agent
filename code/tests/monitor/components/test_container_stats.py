@@ -28,10 +28,6 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.refresh_container_info()
         self.assertFalse(test_monitor.data.containers)
 
-        test_monitor.client_runtime.collect_container_metrics.return_value = [{}]
-        with self.assertRaises(TypeError):
-            test_monitor.refresh_container_info()
-
     @patch('time.sleep', side_effect=InterruptedError)
     def test_run(self, mock_sleep):
         mock_telemetry = Mock()

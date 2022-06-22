@@ -42,3 +42,6 @@ class EdgeStatus(pydantic.BaseModel):
 
     # GPIO Pins
     gpio_pins: Union[GpioData, None]
+
+    # Modification time controlled by Telemetry
+    current_time: Union[str, None]
