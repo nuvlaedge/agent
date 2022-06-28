@@ -91,6 +91,12 @@ class TelemetryTestCase(unittest.TestCase):
                          'Failed to initialized status structures')
         self.assertIsInstance(self.obj.mqtt_telemetry, mqtt.Client)
 
+    @mock.patch('agent.telemetry.active_monitors')
+    @mock.patch('agent.telemetry.get_monitor')
+    def test_initialize_monitors(self, get_mock, act_mock):
+        get_mock.return_value = mock.Mock()
+        self.obj.initialize_monitors()
+
     @mock.patch('os.system')
     def test_send_mqtt(self, mock_system):
         self.obj.mqtt_telemetry = mock.MagicMock()
