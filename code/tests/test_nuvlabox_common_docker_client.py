@@ -370,8 +370,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mem_stat = {
             "memory_stats": {
                 "stats":
-                    {"total_active_anon": 1024*1024},
-                "limit": 2*1024*1024
+                    {"file": 1024*1024},
+                "limit": 2*1024*1024,
+                "usage": 2*1024*1024
             }
         }
         err = []
