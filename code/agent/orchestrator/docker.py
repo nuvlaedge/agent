@@ -287,10 +287,10 @@ class DockerClient(ContainerRuntimeClient):
         :return: Memory consumption tuple with percentage, usage and limit
         """
         try:
-
-            mem_usage = \
-                float(cstats["memory_stats"]["stats"]["total_active_anon"]/1024/1024)
-            mem_limit = float(cstats["memory_stats"]["limit"] / 1024 / 1024)
+            # Get total mem usage and subtract cached memory
+            mem_usage = (float(cstats["memory_stats"]["usage"]) -
+                         float(cstats["memory_stats"]["stats"]["file"]))/1024/1024
+            mem_limit = float(cstats["memory_stats"]["limit"]) / 1024 / 1024
             if round(mem_limit, 2) == 0.00:
                 mem_percent = 0.00
             else:
