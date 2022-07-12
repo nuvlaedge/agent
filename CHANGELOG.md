@@ -17,6 +17,8 @@
 - Whole telemetry class has been refactored
 - Logging formatting modified and unified
 - Logging main configuration parsed from config file
+- Change Dockerfile to match common python3.8-alpine3.12 NE engine versions
+- Removed Wiring Pi from docker. TODO: remove GPIO monitor too, maybe to be provided as a peripheral
 
 ## [2.7.2] - 2022-04-18
 ### Added
