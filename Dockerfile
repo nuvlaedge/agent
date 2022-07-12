@@ -1,5 +1,5 @@
-ARG BASE_IMAGE
-FROM  ${BASE_IMAGE:-python:3.8-alpine3.12} AS psutil-builder
+ARG BASE_IMAGE=python:3.8-alpine3.12
+FROM  ${BASE_IMAGE} AS psutil-builder
 
 RUN apk update && apk add --no-cache gcc musl-dev linux-headers
 
@@ -10,7 +10,7 @@ RUN pip install -r requirements.base.txt
 
 # ---
 
-FROM  ${BASE_IMAGE:-python:3.8-alpine3.12}
+FROM  ${BASE_IMAGE}
 
 ARG GIT_BRANCH
 ARG GIT_COMMIT_ID
