@@ -8,6 +8,13 @@ DOCKER_IMAGE=$(basename `git rev-parse --show-toplevel`)
 # default env vars in GH actions
 GIT_BRANCH=$(echo ${GITHUB_REF} | awk -F'/' '{print $(NF)}' | sed -e 's/[^a-z0-9\._-]/-/g')
 
+# Take branch name from GITHUB_HEAD_REF on branches with PRs, otherwise use GITHUB_REF.
+if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
+    GIT_BRANCH=${GITHUB_HEAD_REF}
+else
+    GIT_BRANCH=$(echo ${GITHUB_REF} | awk -F'/' '{print $(NF)}' | sed -e 's/[^a-z0-9\._-]/-/g')
+fi
+    
 # non-tagged builds are not releases, so they always go on nuvladev
 DOCKER_ORG=${DOCKER_ORG:-nuvladev}
 

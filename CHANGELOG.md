@@ -1,4 +1,25 @@
 # Changelog
+
+## Unreleased
+### Added
+- Added new Pydantic BaseModel to validate data from Nuvla.
+- Added a modular monitor structure in which every monitor can be included or excluded. 
+  (Some are compulsory)
+- Added data structure for each monitor to allow data validation 
+- New future data structure provided to IP interfaces. Still need to adapt
+  server-side to enable it in Agent.
+- Added host device network interfaces reading. Using an auxiliary Docker
+  container connected to host network.
+- Added public IP(v4&v6) reading via ping to external server.
+### Changed
+- Telemetry class now is a watchdog of monitors. It keeps them running and starts them 
+  over if needed
+- Whole telemetry class has been refactored
+- Logging formatting modified and unified
+- Logging main configuration parsed from config file
+- Change Dockerfile to match common python3.8-alpine3.12 NE engine versions
+- Removed Wiring Pi from docker. TODO: remove GPIO monitor too, maybe to be provided as a peripheral
+
 ## [2.7.2] - 2022-04-18
 ### Added
 ### Changed
@@ -12,6 +33,7 @@
 ### Added 
  - New env var for vpn extra config
 ### Changed
+
 ## [2.6.0] - 2022-03-24
 ### Added 
  - Add org.opencontainers labels 
@@ -24,7 +46,7 @@
 ### Added 
  - Enable compression when sending data to api-server
 ### Changed
- - Code refactor and bufixes
+ - Code refactor and bugfixes
 ## [2.4.1] - 2021-11-29
 ### Added
 ### Changed

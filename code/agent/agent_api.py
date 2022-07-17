@@ -60,7 +60,7 @@ def local_peripheral_get_identifier(filepath):
     """
     try:
         peripheral_nuvla_id = NB.read_json_file(filepath)["id"]
-    except:
+    except (KeyError, FileNotFoundError):
         # if something happens, just return None
         return None
 
@@ -91,30 +91,36 @@ def post(payload):
     try:
         sanitize_peripheral_payload(payload)
     except KeyError as e:
-        logging.error("Payload {} is incomplete. Missing 'identifier'. {}".format(payload, e))
-        return {"error": "Payload {} is incomplete. Missing 'identifier'. {}".format(payload, e)}, 400
+        logging.error(f"Payload {payload} is incomplete. Missing 'identifier'. {e}")
+        return {"error": f"Payload {payload} is incomplete. Missing "
+                         f"'identifier'. {e}"}, 400
     except TypeError:
         logging.error("Payload {} malformed. It must be a JSON payload".format(payload))
-        return {"error": "Payload {} malformed. It must be a JSON payload".format(payload)}, 400
+        return {"error":f"Payload {payload} malformed. It must be a JSON payload"}, 400
 
     peripheral_identifier = payload['identifier']
     peripheral_filepath = "{}/{}".format(NB.peripherals_dir, peripheral_identifier)
 
     # Check if peripheral already exists locally before pushing to Nuvla
     if local_peripheral_exists(peripheral_filepath):
-        logging.error("Peripheral %s file already registered. Please delete it first" % peripheral_identifier)
-        return {"error": "Peripheral %s file already registered. Please delete it first" % peripheral_identifier}, 400
+        logging.error(f"Peripheral {peripheral_identifier} file already registered. "
+                      f"Please delete it first")
+        return {f"error": f"Peripheral {peripheral_identifier} file already registered."
+                          f" Please delete it first"}, 400
 
     # check if it already exists in Nuvla
     try:
-        existing_nuvla_per = NB.api().get('nuvlabox-peripheral', filter=f'identifier="{peripheral_identifier}"').data
+        existing_nuvla_per = NB.api().get(
+            'nuvlabox-peripheral',
+            filter=f'identifier="{peripheral_identifier}"').data
+
     except nuvla.api.api.NuvlaError as e:
         logging.exception("Unable to reach Nuvla")
         return e.response.json(), e.response.status_code
 
     if existing_nuvla_per.get('count', 0) > 0:
-        # already registered in Nuvla, but not locally...maybe something went wrong in a past mgmt action
-        # let's just update it
+        # already registered in Nuvla, but not locally...maybe something went wrong in a
+        # past mgmt action let's just update it
         fix_edit = modify(peripheral_identifier,
                           peripheral_nuvla_id=existing_nuvla_per['resources'][0]['id'],
                           payload=payload)
@@ -145,7 +151,7 @@ def post(payload):
         logging.info("Saving peripheral %s locally" % payload['id'])
         local_peripheral_save(peripheral_filepath, payload)
     except Exception as e:
-        logging.exception("Unable to save peripheral. Reverting request...")
+        logging.error("Unable to save peripheral. Reverting request...")
         modify(peripheral_identifier, peripheral_nuvla_id=payload['id'], action='DELETE')
         return {"error": "Unable to fulfill request: %s" % e}, 500
 
@@ -156,8 +162,8 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
     """ Modifies (edits or deletes) a peripheral from the local and Nuvla database
 
     :param peripheral_identifier: unique local identifier for the peripheral
-    :param peripheral_nuvla_id: (optional) Nuvla ID for the peripheral resource. If present, will not infer it from
-    the local file copy of the peripheral resource
+    :param peripheral_nuvla_id: (optional) Nuvla ID for the peripheral resource.
+    If present, will not infer it from the local file copy of the peripheral resource
     :param action: PUT or DELETE
     :param payload: body used for PUT
     :returns request message and status
@@ -170,41 +176,50 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
 
     peripheral_filepath = "{}/{}".format(NB.peripherals_dir, peripheral_identifier)
 
-    per_nuvla_id = peripheral_nuvla_id if peripheral_nuvla_id else local_peripheral_get_identifier(peripheral_filepath)
+    per_nuvla_id = peripheral_nuvla_id if peripheral_nuvla_id else \
+        local_peripheral_get_identifier(peripheral_filepath)
+
     if not per_nuvla_id:
-        logging.warning("{} not found and Nuvla resource ID not provided".format(peripheral_filepath))
+        logging.warning(f"{peripheral_filepath} not found and Nuvla resource ID not "
+                        f"provided")
         return {"error": "Peripheral not found"}, 404
 
     try:
         if action == 'DELETE':
-            out_peripheral = delete_peripheral(peripheral_nuvla_id, peripheral_filepath)
-            logging.info("Deleted {} from Nuvla".format(peripheral_nuvla_id))
+            out_peripheral = delete_peripheral(per_nuvla_id, peripheral_filepath)
+            logging.info(f"Deleted {per_nuvla_id} from Nuvla")
         else:
-            out_peripheral = edit_peripheral(peripheral_nuvla_id, payload, peripheral_filepath)
-            logging.info("Changed {} in Nuvla, with payload: {}".format(peripheral_nuvla_id, payload))
+            out_peripheral = edit_peripheral(per_nuvla_id, payload, peripheral_filepath)
+            logging.info(f"Changed {per_nuvla_id} in Nuvla, with payload: {payload}")
 
         return out_peripheral.data, out_peripheral.data.get('status', 200)
+
     except nuvla.api.api.NuvlaError as e:
-        if e.response.status_code == 404:
-            logging.warning(f"Peripheral {peripheral_nuvla_id} not found in Nuvla: {e.response.json()}")
+        if e.response.status_code == 404 and action == 'DELETE':
+            logging.warning(f"Peripheral {per_nuvla_id} not found in Nuvla: "
+                            f"{e.response.json()}")
 
-            if action == 'DELETE':
-                try:
-                    os.remove(peripheral_filepath)
-                except FileNotFoundError:
-                    pass
-                logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
-                return {"message": "Deleted %s" % peripheral_identifier}, 200
+            try:
+                os.remove(peripheral_filepath)
+            except FileNotFoundError:
+                pass
+            logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
+            return {"message": f"Deleted {peripheral_identifier}"}, 200
 
-        # Maybe something went wrong and we should try later, so keep the local peripheral copy alive
-        logging.warning("Cannot {} {} in Nuvla: {}".format(action, peripheral_nuvla_id, e.response.json()))
+        # Maybe something went wrong, and we should try later, so keep the local
+        # peripheral copy alive
+        logging.warning(f"Cannot {action} {peripheral_nuvla_id} in "
+                        f"Nuvla: {e.response.json()}")
         return e.response.json(), e.response.status_code
+
     except Exception as e:
-        logging.exception("While running {} on {} from Nuvla".format(action, peripheral_nuvla_id))
-        return {"error": f"Error occurred while doing {action} on {peripheral_identifier}: {str(e)}"}, 500
+        logging.exception(f"While running {action} on {peripheral_nuvla_id} from Nuvla")
+        return {"error": f"Error occurred while doing {action} on "
+                         f"{peripheral_identifier}: {str(e)}"}, 500
 
 
-def edit_peripheral(peripheral_id: str, body: dict, local_filepath: str) -> nuvla.api.api.CimiResponse:
+def edit_peripheral(peripheral_id: str, body: dict, local_filepath: str) \
+        -> nuvla.api.api.CimiResponse:
     """
     Edits a peripheral in Nuvla and locally if needed
 
@@ -213,14 +228,15 @@ def edit_peripheral(peripheral_id: str, body: dict, local_filepath: str) -> nuvl
     :param local_filepath: local peripheral file path
     :return: Nuvla response to the edit request
     """
-    r = NB.api().edit(peripheral_id, body)
+    response = NB.api().edit(peripheral_id, body)
     if local_peripheral_exists(local_filepath):
         local_peripheral_update(local_filepath, body)
 
-    return r
+    return response
 
 
-def delete_peripheral(peripheral_id: str, local_filepath: str) -> nuvla.api.api.CimiResponse:
+def delete_peripheral(peripheral_id: str, local_filepath: str) \
+        -> nuvla.api.api.CimiResponse:
     """
     Deletes a peripheral from Nuvla and locally as well
 
@@ -230,11 +246,11 @@ def delete_peripheral(peripheral_id: str, local_filepath: str) -> nuvla.api.api.
 
     Returns: Nuvla response to the delete request
     """
-    r = NB.api().delete(peripheral_id)
+    response = NB.api().delete(peripheral_id)
     if local_peripheral_exists(local_filepath):
         os.remove(local_filepath)
 
-    return r
+    return response
 
 
 def find(parameter, value, identifier_pattern):
@@ -242,13 +258,14 @@ def find(parameter, value, identifier_pattern):
 
     :param parameter: name of the parameter to search for
     :param value: value of that parameter
-    :param identifier_pattern: regex expression to limit the search query to peripherals matching the identifier pattern
+    :param identifier_pattern: regex expression to limit the search query to peripherals
+    matching the identifier pattern
     :returns list of peripheral matching the search query
     """
     matched_peripherals = {}
 
-    search_dir = "{}/{}".format(NB.peripherals_dir, identifier_pattern) if identifier_pattern \
-        else NB.peripherals_dir + "/**/**"
+    search_dir = "{}/{}".format(NB.peripherals_dir, identifier_pattern) \
+        if identifier_pattern else NB.peripherals_dir + "/**/**"
 
     for filename in glob.iglob(search_dir, recursive=True):
         if os.path.isdir(filename):
@@ -257,12 +274,13 @@ def find(parameter, value, identifier_pattern):
         with open(filename) as f:
             try:
                 content = json.loads(f.read())
-            except:
+            except (json.JSONDecodeError, IOError):
                 continue
 
         if parameter and value:
             if parameter in content and content[parameter] == value:
-                matched_peripherals[filename.replace(f'{NB.peripherals_dir}/', '')] = content
+                matched_peripherals[filename.replace(f'{NB.peripherals_dir}/', '')] = \
+                    content
         else:
             matched_peripherals[filename.replace(f'{NB.peripherals_dir}/', '')] = content
 
@@ -270,9 +288,10 @@ def find(parameter, value, identifier_pattern):
 
 
 def get(identifier):
-    """ Finds a specific locally registered peripherals that matches the identifier, by filename
+    """ Finds a specific locally registered peripherals that matches the identifier, by
+    filename
 
-    :param identifier: peripheral identifier and filename (including its subfolder if any)
+    :param identifier: peripheral identifier and filename(including its sub folder if any)
     :returns peripheral content
     """
     search_for = "{}/{}".format(NB.peripherals_dir, identifier)
@@ -281,7 +300,7 @@ def get(identifier):
         with open(search_for) as p:
             try:
                 return json.loads(p.read()), 200
-            except:
+            except (json.JSONDecodeError, IOError):
                 return {"error": "Cannot read peripheral information"}, 500
     else:
         return {"error": "Peripheral not found"}, 404
@@ -294,8 +313,8 @@ def save_vpn_ip(ip):
     :param ip: string
     :return:
     """
-    with open(NB.vpn_ip_file, 'w') as vpnip:
-        vpnip.write(str(ip))
+    with open(NB.vpn_ip_file, 'w') as vpn_ip:
+        vpn_ip.write(str(ip))
 
 
 def save_vulnerabilities(vulnerabilities):
@@ -305,5 +324,5 @@ def save_vulnerabilities(vulnerabilities):
     :param vulnerabilities: as JSON
     :return:
     """
-    with open(NB.vulnerabilities_file, 'w') as vf:
-        vf.write(json.dumps(vulnerabilities))
+    with open(NB.vulnerabilities_file, 'w') as file:
+        file.write(json.dumps(vulnerabilities))

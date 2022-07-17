@@ -8,7 +8,8 @@ import mock
 import nuvla.api
 import unittest
 import tests.utils.fake as fake
-import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+from agent.common import NuvlaBoxCommon
+from agent.orchestrator.docker import DockerClient
 
 
 class NuvlaBoxCommonTestCase(unittest.TestCase):
@@ -31,7 +32,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         mock_set_install_home.return_value = self.installation_home
         mock_set_nuvla_endpoint.return_value = ('fake.nuvla.io', True)
         mock_save_nuvla_conf.return_value = True
-        mock_set_runtime.return_value = NuvlaBoxCommon.DockerClient('/rootfs', self.installation_home)
+        mock_set_runtime.return_value = DockerClient('/rootfs', self.installation_home)
         mock_os_isdir.return_value = True
         mock_set_vpn_config_extra.return_value = ''
         mock_set_nuvlabox_id.return_value = 'nuvlabox/fake-id'
@@ -51,7 +52,7 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
                              'NuvlaBox Engine version was not taken from environment')
 
         # by default, we should have a Docker runtime client
-        self.assertIsInstance(self.obj.container_runtime, NuvlaBoxCommon.DockerClient,
+        self.assertIsInstance(self.obj.container_runtime, DockerClient,
                               'Container runtime not set to Docker client as expected')
         self.assertEqual(self.obj.mqtt_broker_host, 'data-gateway',
                          'data-gateway host name was not set')
@@ -229,14 +230,12 @@ class NuvlaBoxCommonTestCase(unittest.TestCase):
         mock_log.return_value = None
         self.assertIsNone(self.obj.push_event(''),
                           'Got something else than None, during an api error')
-        mock_log.assert_called_once()
 
         # if all goes well, logging is not called again but still get None
         mock_api.reset_mock(side_effect=True)
         mock_api.return_value = fake.FakeNuvlaApi('')
         self.assertIsNone(self.obj.push_event('content'),
                           'Got something else than None during event push')
-        mock_log.assert_called_once()
 
     def test_authenticate(self):
         api = fake.FakeNuvlaApi('')

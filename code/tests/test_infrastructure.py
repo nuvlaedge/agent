@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import docker
@@ -9,21 +8,22 @@ import requests
 import unittest
 import tests.utils.fake as fake
 import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
-from agent.Infrastructure import Infrastructure
+from agent.infrastructure import Infrastructure
 from threading import Thread
 
 
 class InfrastructureTestCase(unittest.TestCase):
 
-    agent_infrastructure_open = 'agent.Infrastructure.open'
+    agent_infrastructure_open = 'agent.infrastructure.open'
 
     def setUp(self):
         Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon, Thread),)
-        with mock.patch('agent.Infrastructure.Telemetry') as mock_telemetry:
+        with mock.patch('agent.infrastructure.Telemetry') as mock_telemetry:
             mock_telemetry.return_value = mock.MagicMock()
             self.shared_volume = "mock/path"
             self.refresh_period = 16    # change the default
-            self.obj = Infrastructure(self.shared_volume, self.refresh_period)
+            self.obj = Infrastructure(self.shared_volume, mock_telemetry,
+                                      refresh_period=self.refresh_period)
         # monkeypatch NuvlaBoxCommon attributes
         self.obj.data_volume = self.shared_volume
         self.obj.swarm_manager_token_file = 'swarm_manager_token_file'
@@ -60,28 +60,30 @@ class InfrastructureTestCase(unittest.TestCase):
         content = {'foo': 'bar'}
         mock_json_dumps.return_value = ''
 
-        with mock.patch("agent.Infrastructure.open") as mock_open:
+        with mock.patch("agent.infrastructure.open") as mock_open:
             mock_open.return_value.write.return_value = None
             self.assertEqual(self.obj.write_file('mock-file', 'something'), None,
                              'Unable to write raw string to file')
 
         mock_json_dumps.assert_not_called()
         # is JSON, then json.dumps must be called
-        with mock.patch("agent.Infrastructure.open") as mock_open:
+        with mock.patch("agent.infrastructure.open") as mock_open:
             mock_open.return_value.write.return_value = None
             self.assertEqual(self.obj.write_file('mock-file', content, is_json=True), None,
                              'Unable to write JSON to file')
 
         mock_json_dumps.assert_called_once_with(content)
 
-    @mock.patch('agent.Infrastructure.Infrastructure.write_file')
+    @mock.patch('agent.infrastructure.Infrastructure.write_file')
     def test_swarm_token_diff(self, mock_write_file):
-        # if one of the token files is not found, write the current tokens and return True (assume is different)
+        # if one of the token files is not found, write the current tokens and return
+        # True (assume is different)
         mock_write_file.return_value = None
         with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
             self.assertTrue(self.obj.swarm_token_diff('a', 'b'),
-                            'Failed to find Swarm token files but did not return True (should have written new tokens)')
+                            'Failed to find Swarm token files but did not return True '
+                            '(should have written new tokens)')
             self.assertEqual(mock_write_file.call_count, 2,
                              'Failed to write manager and worker token files when previous token files are not found')
             # same for errors while reading the files
@@ -481,7 +483,7 @@ class InfrastructureTestCase(unittest.TestCase):
         self.assertEqual(self.obj.build_vpn_credential_search_filter(vpn_server_id), expected,
                          'Failed to build VPN credential search filter')
 
-    @mock.patch('agent.Infrastructure.remove')
+    @mock.patch('agent.infrastructure.remove')
     @mock.patch.object(Infrastructure, 'commission_vpn')
     def test_validate_local_vpn_credential(self, mock_commission_vpn, mock_remove):
         local_vpn_content = {
@@ -540,8 +542,8 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_commission_vpn.assert_called_once()
         mock_write_file.assert_called_once()
 
-    @mock.patch('agent.Infrastructure.path.exists')
-    @mock.patch('agent.Infrastructure.stat')
+    @mock.patch('agent.infrastructure.path.exists')
+    @mock.patch('agent.infrastructure.stat')
     @mock.patch.object(Infrastructure, 'commission_vpn')
     @mock.patch.object(Infrastructure, 'api')
     @mock.patch.object(Infrastructure, 'validate_local_vpn_credential')
@@ -594,7 +596,7 @@ class InfrastructureTestCase(unittest.TestCase):
 
     @mock.patch.object(Infrastructure, 'write_file')
     @mock.patch.object(Infrastructure, 'push_event')
-    @mock.patch('agent.Infrastructure.path.exists')
+    @mock.patch('agent.infrastructure.path.exists')
     def test_set_immutable_ssh_key(self, mock_exists, mock_push_event, mock_write_file):
         mock_write_file.return_value = None
         # if ssh flag already exists, get None
@@ -662,7 +664,8 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_commission.assert_called_once()
         mock_sleep.assert_called_once()
 
-        # even if there's an exception in the commissioning cycle, it just restarts the cycle again
+        # even if there's an exception in the commissioning cycle, it just
+        # restarts the cycle again
         mock_commission.reset_mock()    # reset counters
         mock_sleep.reset_mock()
         mock_commission.side_effect = RuntimeError

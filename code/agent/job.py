@@ -7,7 +7,6 @@ Relays pull-mode jobs to local job-engine-lite
 """
 
 import logging
-import docker
 import json
 
 from agent.common import NuvlaBoxCommon
@@ -34,7 +33,6 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
 
     def check_job_is_running(self):
         """ Checks if the job is already running """
-
         return self.container_runtime.is_nuvla_job_running(self.job_id, self.job_id_clean)
 
     def launch(self):
@@ -42,7 +40,6 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
 
         :return:
         """
-
         try:
             with open(self.activation_flag) as a:
                 user_info = json.loads(a.read())
@@ -50,6 +47,9 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             logging.error(f'Cannot find NuvlaBox API key for job {self.job_id}')
             return
 
-        self.container_runtime.launch_job(self.job_id, self.job_id_clean, self.nuvla_endpoint,
-                                          self.nuvla_endpoint_insecure, user_info["api-key"], user_info["secret-key"],
-                                          self.job_engine_lite_image)
+        self.container_runtime.launch_job(
+            self.job_id, self.job_id_clean, self.nuvla_endpoint,
+            self.nuvla_endpoint_insecure,
+            user_info["api-key"],
+            user_info["secret-key"],
+            self.job_engine_lite_image)
