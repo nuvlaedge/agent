@@ -1,11 +1,6 @@
 # Changelog
 ## [2.8.0] - 2022-07-18
 ### Added
-### Changed
- - Use common base image for all NE components
-
-## Unreleased
-### Added
 - Added new Pydantic BaseModel to validate data from Nuvla.
 - Added a modular monitor structure in which every monitor can be included or excluded. 
   (Some are compulsory)
@@ -16,6 +11,7 @@
   container connected to host network.
 - Added public IP(v4&v6) reading via ping to external server.
 ### Changed
+- Use common base image for all NE components
 - Telemetry class now is a watchdog of monitors. It keeps them running and starts them 
   over if needed
 - Whole telemetry class has been refactored
