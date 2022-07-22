@@ -86,6 +86,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             'operating-system': None,
             'architecture': None,
             'ip': None,
+            'default-gw': None,
             'last-boot': None,
             'hostname': None,
             'docker-server-version': None,

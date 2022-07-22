@@ -321,6 +321,13 @@ class NetworkMonitor(Monitor):
 
         it_traffic: List = [x.dict(by_alias=True, exclude={'ip', 'default_gw'})
                             for _, x in self.data.local.items()]
+
+        # Define NuvlaEdge status default gateway
+        for _, iface_data in self.data.local.items():
+            if iface_data.default_gw:
+                nuvla_report['default-gw'] = iface_data.iface_name
+                break
+
         if it_traffic:
             nuvla_report['resources']['net-stats'] = it_traffic
 

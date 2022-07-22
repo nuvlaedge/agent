@@ -1,4 +1,9 @@
 # Changelog
+## Unreleased
+### Added
+- Added default-gw field to nuvlabox-status report. 
+### Changed 
+
 ## [2.8.0] - 2022-07-18
 ### Added
 - Added new Pydantic BaseModel to validate data from Nuvla.
