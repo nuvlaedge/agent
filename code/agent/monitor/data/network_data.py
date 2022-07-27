@@ -4,7 +4,7 @@
 
 Gathers all the requirements for status reporting
 """
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 
 from pydantic import Field
 
@@ -26,19 +26,28 @@ class NetworkInterface(BaseDataStructure):
     default_gw: bool = Field(False, alias='default-gw')
 
     # Interface data traffic control
-    tx_bytes: Union[int, None] = Field(alias='bytes-transmitted')
-    rx_bytes: Union[int, None] = Field(alias='bytes-received')
+    tx_bytes: Union[int, None] = Field(0, alias='bytes-transmitted')
+    rx_bytes: Union[int, None] = Field(0, alias='bytes-received')
+
+
+class IPAddresses(BaseDataStructure):
+    """
+    public: Public IPv4 and IPv6 addresses
+    local: Host device local interface and its corresponding IP addresses
+    vpn: VPN IPv4 address provided by OpenVpn server (If present)
+    swarm: SWARM node IP address (If present)
+    """
+    public: str = ''
+    swarm: str = ''
+    vpn: str = ''
+    local: str = ''
 
 
 class NetworkingData(BaseDataStructure):
     """
     Base model to gather all the IP addresses in the NuvlaEdge device
-        public: Public IPv4 and IPv6 addresses
-        local: Host device local interfaces and its corresponding IP addresses
-        vpn: VPN IPv4 address provided by OpenVpn server (If present)
-        swarm: SWARM node IP address (If present)
+
     """
-    public: NetworkInterface = NetworkInterface(iface_name="public")
-    local: Union[Dict[str, NetworkInterface], None] = {}
-    vpn: Union[NetworkInterface, None]
-    swarm: Union[NetworkInterface, None]
+    default_gw: Optional[str]
+    interfaces: Dict[str, NetworkInterface] = {}
+    ips: IPAddresses = IPAddresses()

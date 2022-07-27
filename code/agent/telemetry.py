@@ -283,10 +283,11 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     it_monitor.update_data()
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
-        self.logger.debug(f'Monitors processing time '
-                          f'{json.dumps(monitor_process_time, indent=4)}')
+        self.logger.info(f'Monitors processing time '
+                         f'{json.dumps(monitor_process_time, indent=4)}')
 
         for it_monitor in self.monitor_list.values():
+            self.logger.info(f'Updated by {it_monitor.name}')
             it_monitor.populate_nb_report(status_dict)
 
     def get_status(self):

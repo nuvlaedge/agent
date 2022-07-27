@@ -65,7 +65,7 @@ class NetworkMonitor(Monitor):
                 self._REMOTE_IPV4_API)
 
             if it_v4_response.status_code == 200:
-                self.data.public.ip = \
+                self.data.ips.public = \
                     json.loads(it_v4_response.content.decode("utf-8")).get("ip")
                 self.last_public_ip = time.time()
 
@@ -82,6 +82,7 @@ class NetworkMonitor(Monitor):
         @return: NetworkInterface class
         """
         try:
+
             is_default_gw = iface_data.get('dst', '') == 'default'
             return NetworkInterface(iface_name=iface_data['dev'],
                                     ip=iface_data['prefsrc'],
@@ -103,7 +104,7 @@ class NetworkMonitor(Monitor):
             True if the route is to be skipped
         """
         is_loop: bool = it_route.get('dst', '127.').startswith('127.')
-        already_registered: bool = it_route.get('dev', '') in self.data.local.keys()
+        already_registered: bool = it_route.get('dev', '') in self.data.interfaces.keys()
         not_complete: bool = 'prefsrc' not in it_route
 
         return is_loop or already_registered or not_complete
@@ -128,7 +129,7 @@ class NetworkMonitor(Monitor):
                 docker_err.ContainerError,
                 docker_err.APIError) as ex:
             self.logger.error(f'Local interface data auxiliary container '
-                                f'not run: {ex.explanation}')
+                              f'not run: {ex.explanation}')
             return None
 
     def read_traffic_data(self) -> List:
@@ -261,22 +262,31 @@ class NetworkMonitor(Monitor):
         if readable_route:
             for route in readable_route:
                 # Handle special cases
+                if route.get('dst', 'not_def') == 'default':
+                    self.data.default_gw = route.get('dev')
+
                 if self.is_skip_route(route):
                     continue
                 # Create new interface data structure
                 it_iface: NetworkInterface = self.parse_host_ip_json(route)
                 if it_iface:
-                    self.data.local[it_iface.iface_name] = it_iface
+                    if it_iface.iface_name == self.data.default_gw:
+                        it_iface.default_gw = True
+
+                        if self.data.ips.local != it_iface.ip:
+                            self.data.ips.local = it_iface.ip
+
+                    self.data.interfaces[it_iface.iface_name] = it_iface
 
         # Update traffic data
         it_traffic: List = self.read_traffic_data()
 
         for iface_traffic in it_traffic:
             it_name: str = iface_traffic.get("interface")
-            if it_name in self.data.local.keys():
-                self.data.local[it_name].tx_bytes = \
+            if it_name in self.data.interfaces.keys():
+                self.data.interfaces[it_name].tx_bytes = \
                     iface_traffic.get('bytes-transmitted', '')
-                self.data.local[it_name].rx_bytes = \
+                self.data.interfaces[it_name].rx_bytes = \
                     iface_traffic.get('bytes-received', '')
 
     def set_vpn_data(self) -> NoReturn:
@@ -289,18 +299,18 @@ class NetworkMonitor(Monitor):
                 it_line = file.read()
                 ip_address: str = str(it_line.splitlines()[0])
 
-            self.data.vpn = NetworkInterface(iface_name="vpn", ip=ip_address)
+            if self.data.ips.vpn != ip_address:
+                self.data.ips.vpn = ip_address
+
         else:
             self.logger.warning("Cannot infer the NuvlaBox VPN IP!")
 
     def set_swarm_data(self) -> NoReturn:
         """ Discovers the host SWARM IP address """
         it_ip: str = self.runtime_client.get_api_ip_port()[0]
-        self.data.swarm = None
-        if it_ip:
-            self.data.swarm = NetworkInterface(
-                iface_name="swarm",
-                ip=it_ip)
+
+        if self.data.ips.swarm != it_ip:
+            self.data.ips.swarm = it_ip
 
     def update_data(self) -> NoReturn:
         """
@@ -320,33 +330,31 @@ class NetworkMonitor(Monitor):
             nuvla_report['resources'] = {}
 
         it_traffic: List = [x.dict(by_alias=True, exclude={'ip', 'default_gw'})
-                            for _, x in self.data.local.items()]
+                            for _, x in self.data.interfaces.items()]
 
-        # Define NuvlaEdge status default gateway
-        for _, iface_data in self.data.local.items():
-            if iface_data.default_gw:
-                nuvla_report['default-gw'] = iface_data.iface_name
-                break
+        it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
+        it_report['interfaces'] = {name: {'ipv4': obj.ip}
+                                   for name, obj in self.data.interfaces.items()}
+        self.logger.error(json.dumps(it_report, indent=4))
+        nuvla_report['network'] = it_report
 
         if it_traffic:
             nuvla_report['resources']['net-stats'] = it_traffic
 
-        if self.data.vpn:
-            nuvla_report['ip'] = str(self.data.vpn.ip)
-            return str(self.data.vpn.ip)
+        if self.data.ips.vpn:
+            nuvla_report['ip'] = str(self.data.ips.vpn)
+            return str(self.data.ips.vpn)
 
-        if self.data.local:
-            for _, iface_data in self.data.local.items():
-                if iface_data.default_gw:
-                    nuvla_report['ip'] = str(iface_data.ip)
-                    return str(iface_data.ip)
+        if self.data.ips.local:
+            nuvla_report['ip'] = str(self.data.ips.local)
+            return str(self.data.ips.local)
 
-        if self.data.public.ip:
-            nuvla_report['ip'] = str(self.data.public.ip)
-            return str(self.data.public.ip)
+        if self.data.ips.public:
+            nuvla_report['ip'] = str(self.data.ips.public)
+            return str(self.data.ips.public)
 
-        if self.data.swarm:
-            nuvla_report['ip'] = str(self.data.swarm.ip)
-            return str(self.data.swarm.ip)
+        if self.data.ips.swarm:
+            nuvla_report['ip'] = str(self.data.ips.swarm)
+            return str(self.data.ips.swarm)
 
         return None

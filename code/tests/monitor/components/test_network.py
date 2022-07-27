@@ -41,16 +41,16 @@ class TestNetworkMonitor(unittest.TestCase):
             monitor.NetworkMonitor("file", Mock(), Mock())
         test_ip_monitor.last_public_ip = time.time()
         test_ip_monitor.set_public_data()
-        self.assertIsNone(test_ip_monitor.data.public.ip)
+        self.assertFalse(test_ip_monitor.data.ips.public)
 
         #
         status = Mock()
         status.iface_data = None
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("file", Mock(), status)
-        self.assertIsNone(test_ip_monitor.data.public.ip)
+        self.assertFalse(test_ip_monitor.data.ips.public)
         test_ip_monitor.set_public_data()
-        self.assertIsNotNone(test_ip_monitor.data.public.ip)
+        self.assertIsNotNone(test_ip_monitor.data.ips.public)
 
         # Test exception clause
         status.iface_data = None
@@ -67,7 +67,7 @@ class TestNetworkMonitor(unittest.TestCase):
             test_ip_monitor: monitor.NetworkMonitor = \
                 monitor.NetworkMonitor("file", Mock(), EdgeStatus())
             test_ip_monitor.set_public_data()
-            self.assertIsNone(test_ip_monitor.data.public.ip)
+            self.assertFalse(test_ip_monitor.data.ips.public)
 
     # -------------------- Local data tests -------------------- #
     def test_parse_host_ip_json(self):
@@ -122,16 +122,16 @@ class TestNetworkMonitor(unittest.TestCase):
                    'gather_host_ip_route') as test_gather:
             test_gather.return_value = None
             test_ip_monitor.set_local_data()
-            self.assertFalse(test_ip_monitor.data.local)
+            self.assertFalse(test_ip_monitor.data.ips.local)
 
         # Test Skip routes
         with patch('agent.monitor.components.network.NetworkMonitor.'
                    'is_skip_route') as test_skip, \
                 patch(self._path_json) as json_dict:
-            json_dict.return_value = ['Test']
+            json_dict.return_value = [{'Test': None}]
             test_skip.return_value = True
             test_ip_monitor.set_local_data()
-            self.assertFalse(test_ip_monitor.data.local)
+            self.assertFalse(test_ip_monitor.data.ips.local)
 
         status = Mock()
         status.iface_data = None
@@ -139,7 +139,7 @@ class TestNetworkMonitor(unittest.TestCase):
             monitor.NetworkMonitor("", Mock(), status)
         test_ip_monitor.runtime_client.client.containers.run.return_value = b"{[]}"
         test_ip_monitor.set_local_data()
-        self.assertFalse(test_ip_monitor.data.local)
+        self.assertFalse(test_ip_monitor.data.ips.local)
 
         # Test readable route
         test_ip_monitor: monitor.NetworkMonitor = \
@@ -147,7 +147,7 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor.is_skip_route = Mock(return_value=True)
         test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
         test_ip_monitor.set_local_data()
-        self.assertEqual(test_ip_monitor.data.local, {})
+        self.assertEqual(test_ip_monitor.data.ips.local, '')
 
         with patch(self._path_json) as json_dict:
             test_ip_monitor: monitor.NetworkMonitor = \
@@ -159,7 +159,7 @@ class TestNetworkMonitor(unittest.TestCase):
                                        'dev': 'eth0',
                                        'prefsrc': it_address}]
             test_ip_monitor.set_local_data()
-            self.assertEqual(test_ip_monitor.data.local['eth0'].ip, it_address)
+            self.assertEqual(test_ip_monitor.data.ips.local, it_address)
 
         # Test traffic readings
         with patch('agent.monitor.components.network.NetworkMonitor.'
@@ -170,12 +170,7 @@ class TestNetworkMonitor(unittest.TestCase):
             test_ip_monitor: monitor.NetworkMonitor = \
                 monitor.NetworkMonitor("", Mock(), True)
             test_ip_monitor.set_local_data()
-            self.assertFalse(test_ip_monitor.data.local)
-
-            test_traffic.return_value = [{'interface': 'a'}]
-            test_ip_monitor.data.local['a'] = NetworkInterface(iface_name='a')
-            with self.assertRaises(pydantic.error_wrappers.ValidationError):
-                test_ip_monitor.set_local_data()
+            self.assertFalse(test_ip_monitor.data.ips.local)
 
     def test_is_skip_route(self):
         test_ip_monitor: monitor.NetworkMonitor = \
@@ -199,17 +194,16 @@ class TestNetworkMonitor(unittest.TestCase):
 
             with patch(self.built_open, mock_open(read_data=it_ip)):
                 test_ip_monitor.set_vpn_data()
-                self.assertEqual(str(test_ip_monitor.data.vpn.ip), it_ip)
-
+                self.assertEqual(test_ip_monitor.data.ips.vpn, it_ip)
+        test_ip_monitor.data.ips.vpn = ''
         with patch("os.stat") as stat_mock, \
                 patch("os.path.exists") as exists_mock:
             exists_mock.return_value = True
             stat_mock.return_value = Mock(st_size=0)
 
             with patch(self.built_open, mock_open(read_data="")):
-                test_ip_monitor.data.vpn = NetworkInterface(iface_name="vpn")
                 test_ip_monitor.set_vpn_data()
-                self.assertIsNone(test_ip_monitor.data.vpn.ip)
+                self.assertFalse(test_ip_monitor.data.ips.vpn)
 
     # -------------------- Swarm data tests -------------------- #
     def test_set_swarm_data(self):
@@ -221,11 +215,11 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", runtime_mock, status)
         test_ip_monitor.set_swarm_data()
-        self.assertEqual(str(test_ip_monitor.data.swarm.ip), r_ip)
+        self.assertEqual(test_ip_monitor.data.ips.swarm, r_ip)
 
-        runtime_mock.container_runtime.get_api_ip_port.return_value = (None, None)
+        runtime_mock.container_runtime.get_api_ip_port.return_value = ('', '')
         test_ip_monitor.set_swarm_data()
-        self.assertIsNone(test_ip_monitor.data.swarm)
+        self.assertFalse(test_ip_monitor.data.ips.swarm)
 
         runtime_mock.container_runtime.get_api_ip_port.return_value = None
         with self.assertRaises(TypeError):
@@ -459,15 +453,13 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor.populate_nb_report(test_body)
         self.assertNotIn('ip', test_body)
 
-        test_ip_monitor.data.vpn = NetworkInterface()
-        test_ip_monitor.data.vpn.ip = "VPN_IP"
+        test_ip_monitor.data.ips.vpn = "VPN_IP"
         self.assertEqual("VPN_IP", test_ip_monitor.populate_nb_report(test_body))
         self.assertIn('ip', test_body)
         self.assertIn('resources', test_body)
         #
-        test_ip_monitor.data.vpn = NetworkInterface()
-        test_ip_monitor.data.public.ip = "PUB"
-        test_ip_monitor.data.vpn = None
+        test_ip_monitor.data.ips.vpn = ''
+        test_ip_monitor.data.ips.public = "PUB"
         self.assertEqual('PUB', test_ip_monitor.populate_nb_report(test_body))
 
         # Test local IP report
@@ -476,18 +468,18 @@ class TestNetworkMonitor(unittest.TestCase):
         test_body: dict = {}
         it_rand_ip = generate_random_ip_address()
 
-        test_ip_monitor.data.local = None
-        with self.assertRaises(AttributeError):
-            self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
+        test_ip_monitor.data.interfaces = {}
+        self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
 
-        test_ip_monitor.data.local = {
+        test_ip_monitor.data.interfaces = {
             'test_1': NetworkInterface(iface_name='test_1',
                                        default_gw=True,
                                        ip=it_rand_ip)}
+        test_ip_monitor.data.ips.local = it_rand_ip
         self.assertEqual(it_rand_ip, test_ip_monitor.populate_nb_report(test_body))
         self.assertEqual(test_body['ip'], it_rand_ip)
 
-        test_ip_monitor.data.local['test_1'].default_gw = False
+        test_ip_monitor.data.ips.local = ''
         self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
 
         # Test Swarm IP report
@@ -495,7 +487,6 @@ class TestNetworkMonitor(unittest.TestCase):
             monitor.NetworkMonitor("", runtime_mock, status)
         test_body: dict = {}
         test_ip_monitor.populate_nb_report(test_body)
-        test_ip_monitor.data.swarm = NetworkInterface()
-        test_ip_monitor.data.swarm.ip = 'SWARM'
+        test_ip_monitor.data.ips.swarm = 'SWARM'
         self.assertEqual('SWARM', test_ip_monitor.populate_nb_report(test_body))
         self.assertEqual('SWARM', test_body['ip'])

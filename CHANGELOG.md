@@ -1,8 +1,11 @@
 # Changelog
 ## Unreleased
 ### Added
-- Added default-gw field to nuvlabox-status report. 
+- Added network field to nuvlabox-status report.
+- Added new data structure to contain the main IP addresses
+- Added default-gw interface to network report
 ### Changed 
+- Adapted network monitor unittests
 
 ## [2.8.0] - 2022-07-18
 ### Added
