@@ -335,7 +335,7 @@ class NetworkMonitor(Monitor):
         it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
         it_report['interfaces'] = {name: {'ipv4': obj.ip}
                                    for name, obj in self.data.interfaces.items()}
-        self.logger.error(json.dumps(it_report, indent=4))
+
         nuvla_report['network'] = it_report
 
         if it_traffic:
