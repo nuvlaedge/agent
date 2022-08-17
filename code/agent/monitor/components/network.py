@@ -320,6 +320,25 @@ class NetworkMonitor(Monitor):
             updater()
 
     def populate_nb_report(self, nuvla_report: Dict):
+        """
+                Network report structure:
+                network: {
+                    default_gw: str,
+                    ips: {
+                        local: str,
+                        public: str,
+                        swarm: str,
+                        vpn: str
+                        }
+                    interfaces: {
+                        iface_name: {
+                            "ip": [{
+                                "address": "ip_Add"
+                            }]
+                        }
+
+                }
+                """
         # Until server is adapted, we only return a single IP address as
         #  a string following the next priority.
         # 1.- VPN
@@ -333,7 +352,7 @@ class NetworkMonitor(Monitor):
                             for _, x in self.data.interfaces.items()]
 
         it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
-        it_report['interfaces'] = {name: {'ipv4': obj.ip}
+        it_report['interfaces'] = {name: {'ip': [{'address': obj.ip}]}
                                    for name, obj in self.data.interfaces.items()}
 
         nuvla_report['network'] = it_report
