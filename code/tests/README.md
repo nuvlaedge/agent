@@ -1,6 +1,6 @@
-# NuvlaBox Agent Unit Tests
+# NuvlaEdge Agent Unit Tests
 
-This folder contains all the unit tests available for the NuvlaBox Agent. For each Agent module, there is a respective 
+This folder contains all the unit tests available for the NuvlaEdge Agent. For each Agent module, there is a respective 
 test file, where each module class and/or function is tested.
 
 ## Run the tests

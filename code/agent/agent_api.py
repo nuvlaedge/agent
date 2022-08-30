@@ -1,9 +1,9 @@
 #!/usr/local/bin/python3.7
 # -*- coding: utf-8 -*-
 
-""" NuvlaBox Agent API
+""" NuvlaEdge Agent API
 
-List of functions to support the NuvlaBox Agent API instantiated by app.py
+List of functions to support the NuvlaEdge Agent API instantiated by app.py
 """
 
 import json
@@ -12,10 +12,10 @@ import os
 import glob
 import nuvla.api
 
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 
 nuvla_resource = "nuvlabox-peripheral"
-NB = NuvlaBoxCommon.NuvlaBoxCommon()
+NB = NuvlaEdgeCommon.NuvlaEdgeCommon()
 
 
 def local_peripheral_exists(filepath):
@@ -78,14 +78,14 @@ def sanitize_peripheral_payload(payload: dict):
     _ = payload['identifier']
 
     # complete the payload with the NB specific attributes, in case they are missing
-    payload['parent'] = NB.nuvlabox_id
-    payload['version'] = NB.get_nuvlabox_version()
+    payload['parent'] = NB.nuvlaedge_id
+    payload['version'] = NB.get_nuvlaedge_version()
 
 
 def post(payload):
-    """ Creates a new nuvlabox-peripheral resource in Nuvla
+    """ Creates a new nuvlaedge-peripheral resource in Nuvla
 
-    :param payload: base JSON payload for the nuvlabox-peripheral resource
+    :param payload: base JSON payload for the nuvlaedge-peripheral resource
     :returns request message and status
     """
     try:
@@ -111,7 +111,7 @@ def post(payload):
     # check if it already exists in Nuvla
     try:
         existing_nuvla_per = NB.api().get(
-            'nuvlabox-peripheral',
+            nuvla_resource,
             filter=f'identifier="{peripheral_identifier}"').data
 
     except nuvla.api.api.NuvlaError as e:
@@ -203,7 +203,7 @@ def modify(peripheral_identifier, peripheral_nuvla_id=None, action='PUT', payloa
                 os.remove(peripheral_filepath)
             except FileNotFoundError:
                 pass
-            logging.info("Deleted {} from the NuvlaBox".format(peripheral_filepath))
+            logging.info("Deleted {} from the NuvlaEdge".format(peripheral_filepath))
             return {"message": f"Deleted {peripheral_identifier}"}, 200
 
         # Maybe something went wrong, and we should try later, so keep the local

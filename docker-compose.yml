@@ -11,16 +11,16 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /:/rootfs:ro
     environment:
-      - NUVLABOX_API_KEY=${NUVLABOX_API_KEY}
-      - NUVLABOX_API_SECRET=${NUVLABOX_API_SECRET}
-      - NUVLABOX_UUID=${NUVLABOX_UUID}
-      - NUVLABOX_ENGINE_VERSION=dev
-      - NUVLABOX_IMMUTABLE_SSH_PUB_KEY=${NUVLABOX_SSH_PUB_KEY}
+      - NUVLAEDGE_API_KEY=${NUVLAEDGE_API_KEY}
+      - NUVLAEDGE_API_SECRET=${NUVLAEDGE_API_SECRET}
+      - NUVLAEDGE_UUID=${NUVLAEDGE_UUID}
+      - NUVLAEDGE_ENGINE_VERSION=dev
+      - NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY=${NUVLAEDGE_SSH_PUB_KEY}
       - HOST_HOME=${HOME}
       - VPN_INTERFACE_NAME=${VPN_INTERFACE_NAME:-vpn}
       - NUVLA_ENDPOINT=${NUVLA_ENDPOINT:-nuvla.io}
       - NUVLA_ENDPOINT_INSECURE=${NUVLA_ENDPOINT_INSECURE:-False}
       - VPN_CONFIG_EXTRA=${VPN_CONFIG_EXTRA}
     labels:
-      - nuvlabox.component=True
-      - nuvlabox.deployment=production
+      - nuvlaedge.component=True
+      - nuvlaedge.deployment=production

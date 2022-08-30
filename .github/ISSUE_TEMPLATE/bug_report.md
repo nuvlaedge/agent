@@ -29,7 +29,7 @@ If applicable, add screenshots and/or logs to help explain your problem.
  - Docker version [e.g. 19.03.1]
  - Docker Compose versions [e.g. 1.14.1]
  - Internet connection type [e.g. offline, 3G, ethernet]
- - List of NuvlaBox components involved [e.g. nuvlabox/agent:1.0.0, nuvlabox/system-manager:0.3.0]
+ - List of NuvlaEdge components involved [e.g. nuvlaedge/agent:1.0.0, nuvlaedge/system-manager:0.3.0]
 
 **Additional context**
 Add any other context about the problem here.

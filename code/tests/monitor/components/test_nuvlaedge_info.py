@@ -35,7 +35,7 @@ class TestNuvlaEdgeInfoMonitor(unittest.TestCase):
         test_monitor.data.installation_parameters = None
         test_monitor.runtime_client.get_installation_parameters.return_value = \
             {'path': '/path'}
-        test_monitor.runtime_client.get_all_nuvlabox_components.return_value = \
+        test_monitor.runtime_client.get_all_nuvlaedge_components.return_value = \
             ['component_1']
         test_monitor.update_data()
         self.assertTrue(test_monitor.data)
@@ -55,7 +55,7 @@ class TestNuvlaEdgeInfoMonitor(unittest.TestCase):
         test_monitor.data.installation_parameters = None
         test_monitor.runtime_client.get_installation_parameters.return_value = \
             {'path': '/path'}
-        test_monitor.runtime_client.get_all_nuvlabox_components.return_value = \
+        test_monitor.runtime_client.get_all_nuvlaedge_components.return_value = \
             ['component_1']
         test_monitor.update_data()
         test_monitor.populate_nb_report(test_nb_report)

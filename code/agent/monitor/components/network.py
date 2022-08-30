@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" NuvlaBox IP address monitoring class.
+""" NuvlaEdge IP address monitoring class.
 
 This class is devoted to finding and reporting IP addresses of the Host,
 Docker Container, and VPN along with their corresponding interface names.
@@ -14,7 +14,7 @@ from typing import List, NoReturn, Dict, Union
 import requests
 from docker import errors as docker_err
 
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface
 from agent.monitor import Monitor
 from ..components import monitor
@@ -45,7 +45,7 @@ class NetworkMonitor(Monitor):
         self.first_net_stats: Dict = {}
         self.previous_net_stats_file: str = telemetry.previous_net_stats_file
         self.vpn_ip_file: str = telemetry.vpn_ip_file
-        self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
+        self.runtime_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
         self.last_public_ip: float = 0.0
@@ -280,7 +280,7 @@ class NetworkMonitor(Monitor):
                     iface_traffic.get('bytes-received', '')
 
     def set_vpn_data(self) -> NoReturn:
-        """ Discovers the NuvlaBox VPN IP  """
+        """ Discovers the NuvlaEdge VPN IP  """
 
         # Check if file exists and not empty
         if os.path.exists(self.vpn_ip_file) and \
@@ -291,7 +291,7 @@ class NetworkMonitor(Monitor):
 
             self.data.vpn = NetworkInterface(iface_name="vpn", ip=ip_address)
         else:
-            self.logger.warning("Cannot infer the NuvlaBox VPN IP!")
+            self.logger.warning("Cannot infer the NuvlaEdge VPN IP!")
 
     def set_swarm_data(self) -> NoReturn:
         """ Discovers the host SWARM IP address """

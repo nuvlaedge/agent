@@ -174,7 +174,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
         mock_cert.return_value = None
 
         test_monitor.client_runtime.get_client_version.return_value = '1.0'
-        with patch('agent.monitor.components.container_stats.NuvlaBoxCommon') as \
+        with patch('agent.monitor.components.container_stats.NuvlaEdgeCommon') as \
                 mock_nb_common:
             mock_nb_common.ORCHESTRATOR = 'docker'
             test_monitor.update_data()
@@ -183,7 +183,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
             mock_cert.assert_called_once()
             mock_update.assert_called_once()
 
-        with patch('agent.monitor.components.container_stats.NuvlaBoxCommon') as \
+        with patch('agent.monitor.components.container_stats.NuvlaEdgeCommon') as \
                 mock_nb_common:
             mock_nb_common.ORCHESTRATOR = 'not_docker'
             test_monitor.client_runtime.get_client_version.return_value = '1.0'

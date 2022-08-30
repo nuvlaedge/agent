@@ -17,11 +17,11 @@ class KubernetesClient(ContainerRuntimeClient):
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
-        self.namespace = os.getenv('MY_NAMESPACE', 'nuvlabox')
-        self.job_engine_lite_image = os.getenv('NUVLABOX_JOB_ENGINE_LITE_IMAGE')
+        self.namespace = os.getenv('MY_NAMESPACE', 'nuvlaedge')
+        self.job_engine_lite_image = os.getenv('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE')
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
-        self.vpn_client_component = os.getenv('NUVLABOX_VPN_COMPONENT_NAME', 'vpn-client')
+        self.vpn_client_component = os.getenv('NUVLAEDGE_VPN_COMPONENT_NAME', 'vpn-client')
         self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
         self.join_token_manager_keyname = 'kubernetes-token-manager'
         self.join_token_worker_keyname = 'kubernetes-token-worker'
@@ -130,7 +130,7 @@ class KubernetesClient(ContainerRuntimeClient):
         return False
 
     def install_ssh_key(self, ssh_pub_key, ssh_folder):
-        name = 'nuvlabox-ssh-installer'
+        name = 'nuvlaedge-ssh-installer'
         try:
             existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
         except client.exceptions.ApiException as e:
@@ -296,11 +296,11 @@ class KubernetesClient(ContainerRuntimeClient):
         return out
 
     def get_installation_parameters(self, search_label):
-        nuvlabox_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
-                                                                           label_selector=search_label).items
+        nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
+                                                                            label_selector=search_label).items
 
         environment = []
-        for dep in nuvlabox_deployments:
+        for dep in nuvlaedge_deployments:
             dep_containers = dep.spec.template.spec.containers
             for container in dep_containers:
                 try:
@@ -403,7 +403,6 @@ class KubernetesClient(ContainerRuntimeClient):
         # TODO
         return {}
 
-    def get_all_nuvlabox_components(self) -> list:
+    def get_all_nuvlaedge_components(self) -> list:
         # TODO
         return []
-

@@ -110,7 +110,7 @@ class DockerClient(ContainerRuntimeClient):
             else:
                 # Double check - we should never get here
                 if not ip:
-                    logging.warning("Cannot infer the NuvlaBox API IP!")
+                    logging.warning("Cannot infer the NuvlaEdge API IP!")
                     return None, 5000
 
         return ip, 5000
@@ -238,7 +238,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             # for some jobs (like clustering), it is better if the job container is also
             # in the default bridge network, so it doesn't get affected by network changes
-            # in the NuvlaBox
+            # in the NuvlaEdge
             self.client.api.connect_container_to_network(job_execution_id, 'bridge')
         except docker.errors.APIError as e:
             logging.warning(f'Could not attach {job_execution_id} to bridge network: '
@@ -435,7 +435,7 @@ class DockerClient(ContainerRuntimeClient):
         return out
 
     def get_installation_parameters(self, search_label):
-        nuvlabox_containers = self.client.containers.list(filters={'label': search_label})
+        nuvlaedge_containers = self.client.containers.list(filters={'label': search_label})
 
         try:
             myself = self.client.containers.get(socket.gethostname())
@@ -454,8 +454,8 @@ class DockerClient(ContainerRuntimeClient):
 
             environment.append(env_var)
 
-        nuvlabox_containers = list(filter(lambda x: x.id != myself.id, nuvlabox_containers))
-        for container in nuvlabox_containers:
+        nuvlaedge_containers = list(filter(lambda x: x.id != myself.id, nuvlaedge_containers))
+        for container in nuvlaedge_containers:
             c_labels = container.labels
             if c_labels.get('com.docker.compose.project', '') == project_name and \
                     c_labels.get('com.docker.compose.project.working_dir', '') == working_dir:
@@ -664,8 +664,8 @@ class DockerClient(ContainerRuntimeClient):
 
         return k8s_cluster_info
 
-    def get_all_nuvlabox_components(self) -> list:
-        nuvlabox_containers = self.client.containers.list(filters={'label': 'nuvlabox.component=True'},
-                                                          all=True)
+    def get_all_nuvlaedge_components(self) -> list:
+        nuvlaedge_containers = self.client.containers.list(filters={'label': 'nuvlaedge.component=True'},
+                                                           all=True)
 
-        return list(map(lambda y: y.name, nuvlabox_containers))
+        return list(map(lambda y: y.name, nuvlaedge_containers))

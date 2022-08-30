@@ -1,5 +1,5 @@
-# Automatic release of NuvlaBox Engine, for every new tag
-name: "NuvlaBox Component Release"
+# Automatic release of NuvlaEdge Engine, for every new tag
+name: "NuvlaEdge Component Release"
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
         env:
           DOCKER_USERNAME: ${{ secrets.SIXSQ_DOCKER_USERNAME }}
           DOCKER_PASSWORD: ${{ secrets.SIXSQ_DOCKER_PASSWORD }}
-          DOCKER_ORG: nuvlabox
+          DOCKER_ORG: nuvlaedge
         run: ./container-release.sh
 
 

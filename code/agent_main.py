@@ -16,14 +16,14 @@ import requests
 
 import agent.api_endpoint as endpoint
 from agent import Agent, Activate, Infrastructure
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 
 # Logging globals
 log_format: str = '[%(asctime)s - %(name)s/%(funcName)s - %(levelname)s]: %(message)s'
 default_log_filename: str = 'agent.log'
 
 # Nuvlaedge globals
-data_volume: str = '/srv/nuvlabox/shared'
+data_volume: str = '/srv/nuvlaedge/shared'
 network_timeout: int = 10
 refresh_interval: int = 30
 
@@ -34,7 +34,7 @@ def parse_arguments() -> ArgumentParser:
     Returns: ArgumentParser. A configured argument parser object class
 
     """
-    parser: ArgumentParser = ArgumentParser(description="NuvlaBox Agent")
+    parser: ArgumentParser = ArgumentParser(description="NuvlaEdge Agent")
     parser.add_argument('--debug', dest='debug', default=False, action='store_true',
                         help='use for increasing the verbosity level')
 
@@ -52,7 +52,7 @@ def configure_root_logger(logger: logging.Logger, debug: bool):
     if debug:
         logger.setLevel(logging.DEBUG)
     else:
-        env_level: str = os.environ.get('NUVLABOX_LOG_LEVEL', '')
+        env_level: str = os.environ.get('NUVLAEDGE_LOG_LEVEL', '')
         if env_level:
             logger.setLevel(logging.getLevelName(env_level))
         else:
@@ -80,7 +80,7 @@ def configure_endpoint_api(agent: Agent) -> Thread:
                                daemon=True)
     it_thread.start()
 
-    with NuvlaBoxCommon.timeout(10):
+    with NuvlaEdgeCommon.timeout(10):
         root_logger.info('Waiting for API to be ready...')
         wait_for_api_ready()
 
@@ -101,13 +101,13 @@ def wait_for_api_ready():
         except (requests.HTTPError, requests.exceptions.RequestException):
             time.sleep(1)
 
-    root_logger.info('NuvlaBox Agent has been initialized.')
+    root_logger.info('NuvlaEdge Agent has been initialized.')
 
 
 def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
                     infra: Infrastructure):
     """
-    Checks if the NuvlaBox resource has been updated in Nuvla
+    Checks if the NuvlaEdge resource has been updated in Nuvla
 
     Args:
         activator: instance of Activate
@@ -117,21 +117,21 @@ def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
     """
     global refresh_interval
 
-    nuvlabox_resource: Dict = activator.get_nuvlabox_info()
-    if nuvlabox_resource.get('state', '').startswith('DECOMMISSION'):
+    nuvlaedge_resource: Dict = activator.get_nuvlaedge_info()
+    if nuvlaedge_resource.get('state', '').startswith('DECOMMISSION'):
         exit_flag = False
 
-    if nb_updated_date != nuvlabox_resource['updated'] and exit_flag:
-        refresh_interval = nuvlabox_resource['refresh-interval']
-        root_logger.info(f'NuvlaBox resource updated. Refresh interval value: '
+    if nb_updated_date != nuvlaedge_resource['updated'] and exit_flag:
+        refresh_interval = nuvlaedge_resource['refresh-interval']
+        root_logger.info(f'NuvlaEdge resource updated. Refresh interval value: '
                          f'{refresh_interval}')
 
-        old_nuvlabox_resource = activator.create_nb_document_file(nuvlabox_resource)
-        activator.vpn_commission_if_needed(nuvlabox_resource, old_nuvlabox_resource)
+        old_nuvlaedge_resource = activator.create_nb_document_file(nuvlaedge_resource)
+        activator.vpn_commission_if_needed(nuvlaedge_resource, old_nuvlaedge_resource)
 
     # if there's a mention to the VPN server, then watch the VPN credential
-    if nuvlabox_resource.get("vpn-server-id"):
-        infra.watch_vpn_credential(nuvlabox_resource.get("vpn-server-id"))
+    if nuvlaedge_resource.get("vpn-server-id"):
+        infra.watch_vpn_credential(nuvlaedge_resource.get("vpn-server-id"))
 
 
 def main():
@@ -152,7 +152,7 @@ def main():
     main_agent.initialize_agent()
 
     watchdog_thread: Union[Thread, None] = None
-    nuvlabox_info_updated_date: str = ''
+    nuvlaedge_info_updated_date: str = ''
 
     # Setup Endpoint API
     api_thread: Thread = configure_endpoint_api(main_agent)
@@ -169,7 +169,7 @@ def main():
             watchdog_thread = Thread(target=preflight_check,
                                      args=(main_agent.activate,
                                            agent_exit_flag,
-                                           nuvlabox_info_updated_date,
+                                           nuvlaedge_info_updated_date,
                                            main_agent.infrastructure
                                            ,),
                                      daemon=True)

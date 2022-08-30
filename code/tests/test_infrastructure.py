@@ -7,7 +7,7 @@ import mock
 import requests
 import unittest
 import tests.utils.fake as fake
-import agent.common.NuvlaBoxCommon as NuvlaBoxCommon
+import agent.common.NuvlaEdgeCommon as NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
 from threading import Thread
 
@@ -17,25 +17,25 @@ class InfrastructureTestCase(unittest.TestCase):
     agent_infrastructure_open = 'agent.infrastructure.open'
 
     def setUp(self):
-        Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon, Thread),)
+        Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread),)
         with mock.patch('agent.infrastructure.Telemetry') as mock_telemetry:
             mock_telemetry.return_value = mock.MagicMock()
             self.shared_volume = "mock/path"
             self.refresh_period = 16    # change the default
             self.obj = Infrastructure(self.shared_volume, mock_telemetry,
                                       refresh_period=self.refresh_period)
-        # monkeypatch NuvlaBoxCommon attributes
+        # monkeypatch NuvlaEdgeCommon attributes
         self.obj.data_volume = self.shared_volume
         self.obj.swarm_manager_token_file = 'swarm_manager_token_file'
         self.obj.swarm_worker_token_file = 'swarm_worker_token_file'
         self.obj.ca = 'ca'
         self.obj.cert = 'cert'
         self.obj.key = 'key'
-        self.obj.nuvlabox_id = 'nuvlabox/fake-id'
+        self.obj.nuvlaedge_id = 'nuvlabox/fake-id'
         self.obj.context = 'context'
         self.obj.commissioning_file = '.commission'
         self.obj.container_runtime = mock.MagicMock()
-        self.obj.nuvlabox_status_file = '.status'
+        self.obj.nuvlaedge_status_file = '.status'
         self.obj.container_runtime.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.obj.vpn_credential = 'vpn'
         self.obj.vpn_client_conf_file = 'vpn-conf'
@@ -203,18 +203,18 @@ class InfrastructureTestCase(unittest.TestCase):
             self.assertEqual(self.obj.needs_commission(current_conf), new_conf,
                              'Failed to calculate difference between new commissioning payload and old')
 
-    def test_get_nuvlabox_capabilities(self):
+    def test_get_nuvlaedge_capabilities(self):
         commission_payload = {}
         # monkeypatch the check for capability
         self.obj.container_runtime.has_pull_job_capability.return_value = False
 
         # fn will change the given arg
-        self.obj.get_nuvlabox_capabilities(commission_payload)
+        self.obj.get_nuvlaedge_capabilities(commission_payload)
         self.assertEqual(commission_payload, {'capabilities': []},
                          'Failed to get NB capabilities when there is no PULL mode')
 
         self.obj.container_runtime.has_pull_job_capability.return_value = True
-        self.obj.get_nuvlabox_capabilities(commission_payload)
+        self.obj.get_nuvlaedge_capabilities(commission_payload)
         self.assertEqual(commission_payload, {'capabilities': ['NUVLA_JOB_PULL']},
                          'Failed to get NB capabilities when PULL mode is set')
 
@@ -223,11 +223,11 @@ class InfrastructureTestCase(unittest.TestCase):
 
 
         # only works for non-k8s installations
-        NuvlaBoxCommon.ORCHESTRATOR = 'kubernetes'
+        NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
         self.assertFalse(self.obj.compute_api_is_running(''),
                          'Tried to check compute-api for a Kubernetes installation')
 
-        NuvlaBoxCommon.ORCHESTRATOR = 'docker'
+        NuvlaEdgeCommon.ORCHESTRATOR = 'docker'
         # if compute-api is running, return True
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'
@@ -248,18 +248,18 @@ class InfrastructureTestCase(unittest.TestCase):
         self.assertTrue(self.obj.compute_api_is_running(''),
                         'Unable to detect that compute-api is running')
 
-    def test_get_local_nuvlabox_status(self):
+    def test_get_local_nuvlaedge_status(self):
         with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
-            self.assertEqual(self.obj.get_local_nuvlabox_status(), {},
+            self.assertEqual(self.obj.get_local_nuvlaedge_status(), {},
                              'Returned something other than {} even though NB status file does not exist')
 
         nb_status = {'foo': 'bar'}
         with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(nb_status))):
-            self.assertEqual(self.obj.get_local_nuvlabox_status(), nb_status,
-                             'Unable to get NuvlaBox Status from local file')
+            self.assertEqual(self.obj.get_local_nuvlaedge_status(), nb_status,
+                             'Unable to get NuvlaEdge Status from local file')
 
-    @mock.patch.object(Infrastructure, 'get_local_nuvlabox_status')
+    @mock.patch.object(Infrastructure, 'get_local_nuvlaedge_status')
     def test_get_node_role_from_status(self, mock_get_status):
         mock_get_status.return_value = {}
         # simple attribute lookup
@@ -282,7 +282,7 @@ class InfrastructureTestCase(unittest.TestCase):
             self.assertEqual(self.obj.read_commissioning_file(), commission_content,
                              'Failed to read commissioning file')
 
-    @mock.patch.object(Infrastructure, 'get_local_nuvlabox_status')
+    @mock.patch.object(Infrastructure, 'get_local_nuvlaedge_status')
     def test_needs_cluster_commission(self, mock_get_status):
         self.obj.container_runtime.get_node_info.return_value = None
         # if cluster details DO NOT exist, check for a match on the node ID for WORKER commissioning
@@ -405,16 +405,16 @@ class InfrastructureTestCase(unittest.TestCase):
             self.obj.commissioning_attr_has_changed(current, old, 'str-attr', payload, compare_with_nb_resource=True)
             # old has been updated
             self.assertEqual(old['str-attr'], 'older-value',
-                             'Failed to update old commission payload based on attr value from NuvlaBox context')
+                             'Failed to update old commission payload based on attr value from NuvlaEdge context')
             # payload still match with current, since it's old who was updated based on NB context
             self.assertEqual(payload, {'str-attr': 'value'},
-                             'Failed to add modified string attribute to commission payload, from NuvlaBox context')
+                             'Failed to add modified string attribute to commission payload, from NuvlaEdge context')
 
     @mock.patch.object(Infrastructure, 'get_tls_keys')
     @mock.patch.object(Infrastructure, 'write_file')
     @mock.patch.object(Infrastructure, 'do_commission')
     @mock.patch.object(Infrastructure, 'needs_partial_decommission')
-    @mock.patch.object(Infrastructure, 'get_nuvlabox_capabilities')
+    @mock.patch.object(Infrastructure, 'get_nuvlaedge_capabilities')
     @mock.patch.object(Infrastructure, 'swarm_token_diff')
     @mock.patch.object(Infrastructure, 'compute_api_is_running')
     @mock.patch.object(Infrastructure, 'commissioning_attr_has_changed')
@@ -479,7 +479,7 @@ class InfrastructureTestCase(unittest.TestCase):
         # should simply return a string, formatted with the NB ID and input arg
         vpn_server_id = 'fake-vpn-server-id'
         expected = f'method="create-credential-vpn-nuvlabox" ' \
-                   f'and vpn-common-name="{self.obj.nuvlabox_id}" and parent="{vpn_server_id}"'
+                   f'and vpn-common-name="{self.obj.nuvlaedge_id}" and parent="{vpn_server_id}"'
         self.assertEqual(self.obj.build_vpn_credential_search_filter(vpn_server_id), expected,
                          'Failed to build VPN credential search filter')
 

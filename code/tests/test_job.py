@@ -6,13 +6,13 @@ import mock
 import unittest
 from tests.utils.fake import Fake
 from agent.job import Job
-from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
+from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
 
 
 class JobTestCase(unittest.TestCase):
 
     def setUp(self):
-        Job.__bases__ = (Fake.imitate(NuvlaBoxCommon),)
+        Job.__bases__ = (Fake.imitate(NuvlaEdgeCommon),)
         self.shared_volume = "mock/path"
         self.job_id = "job/fake-id"
         self.job_engine_lite_image = 'job-lite'
@@ -37,9 +37,9 @@ class JobTestCase(unittest.TestCase):
         self.assertEqual(self.obj.job_id_clean, self.job_id.replace('/', '-'),
                          'Failed to convert job ID into container-friendly name')
 
-        # also make sure NuvlaBoxCommon has been inherited
+        # also make sure NuvlaEdgeCommon has been inherited
         self.assertIsNotNone(self.obj.api(),
-                             'NuvlaBoxCommon was not inherited properly')
+                             'NuvlaEdgeCommon was not inherited properly')
 
     def test_check_job_is_running(self):
         self.obj.container_runtime.is_nuvla_job_running.return_value = False

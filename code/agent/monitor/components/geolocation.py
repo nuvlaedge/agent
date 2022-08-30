@@ -70,7 +70,7 @@ class GeoLocationMonitor(Monitor):
                           response: dict) -> list:
         """
         Gets the output from the IP-based geolocation request made to the online service,
-        parses it, and builds the inferred location, as a list, for the NuvlaBox Status
+        parses it, and builds the inferred location, as a list, for the NuvlaEdge Status
 
         Args:
             service_info: info about the service queried for retrieving the location

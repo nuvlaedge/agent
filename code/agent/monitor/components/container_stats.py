@@ -7,7 +7,7 @@ from subprocess import CompletedProcess
 
 from docker import errors as docker_err
 
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 from agent.monitor.data.orchestrator_data import (DeploymentData, ContainerStatsData,
                                                   ClusterStatusData)
 from agent.monitor import Monitor
@@ -24,10 +24,10 @@ class ContainerStatsMonitor(Monitor):
     def __init__(self, name: str, telemetry, enable_monitor: bool):
         super().__init__(name, DeploymentData, enable_monitor)
         self.is_thread = True
-        self.client_runtime: NuvlaBoxCommon.ContainerRuntimeClient = \
+        self.client_runtime: NuvlaEdgeCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
-        self.nuvlabox_id: str = telemetry.nuvlabox_id
+        self.nuvlaedge_id: str = telemetry.nuvlaedge_id
         self.swarm_node_cert_path: str = telemetry.swarm_node_cert
         self.nuvla_timestamp_format: str = telemetry.nuvla_timestamp_format
 
@@ -88,7 +88,7 @@ class ContainerStatsMonitor(Monitor):
 
     def update_cluster_data(self):
         """
-        Gets and sets all the cluster attributes for the nuvlabox-status
+        Gets and sets all the cluster attributes for the nuvlaedge-status
 
         """
 
@@ -96,7 +96,7 @@ class ContainerStatsMonitor(Monitor):
         node_id = self.client_runtime.get_node_id(node)
         cluster_id = self.client_runtime.get_cluster_id(
             node,
-            f'cluster_{self.nuvlabox_id}')
+            f'cluster_{self.nuvlaedge_id}')
 
         cluster_managers = self.client_runtime.get_cluster_managers()
         if not self.data.cluster_data:
@@ -104,7 +104,7 @@ class ContainerStatsMonitor(Monitor):
 
         if node_id:
             self.data.cluster_data.node_id = node_id
-            self.data.cluster_data.orchestrator = NuvlaBoxCommon.ORCHESTRATOR_COE
+            self.data.cluster_data.orchestrator = NuvlaEdgeCommon.ORCHESTRATOR_COE
             self.data.cluster_data.cluster_node_role = 'worker'
 
         if cluster_id:
@@ -152,7 +152,7 @@ class ContainerStatsMonitor(Monitor):
     def update_data(self):
         version: str = self.client_runtime.get_client_version()
 
-        if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
+        if NuvlaEdgeCommon.ORCHESTRATOR == 'docker':
             self.data.docker_server_version = version
         else:
             self.data.kubelet_version = version

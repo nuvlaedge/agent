@@ -23,11 +23,11 @@ class ContainerRuntimeClient(ABC):
     def __init__(self, host_rootfs, host_home):
         self.client = None
         self.hostfs = host_rootfs
-        self.job_engine_lite_component = "nuvlabox-job-engine-lite"
+        self.job_engine_lite_component = "nuvlaedge-job-engine-lite"
         self.job_engine_lite_image = None
         self.vpn_client_component = 'vpn-client'
         self.host_home = host_home
-        self.ignore_env_variables = ['NUVLABOX_API_KEY', 'NUVLABOX_API_SECRET']
+        self.ignore_env_variables = ['NUVLAEDGE_API_KEY', 'NUVLAEDGE_API_SECRET']
         self.data_gateway_name = None
 
     @abstractmethod
@@ -69,7 +69,7 @@ class ContainerRuntimeClient(ABC):
     @abstractmethod
     def has_pull_job_capability(self):
         """
-        Checks if NuvlaBox supports pull mode for jobs
+        Checks if NuvlaEdge supports pull mode for jobs
         """
 
     @abstractmethod
@@ -141,7 +141,7 @@ class ContainerRuntimeClient(ABC):
     @abstractmethod
     def get_installation_parameters(self, search_label):
         """
-        Scans all the NuvlaBox components and returns all parameters that are relevant to
+        Scans all the NuvlaEdge components and returns all parameters that are relevant to
          the installation of the NB
         :param search_label: label to be used for searching the components
         """
@@ -234,7 +234,7 @@ class ContainerRuntimeClient(ABC):
         Tries to discover if there is another COE running in the host,
         that can be used for deploying apps from Nuvla
 
-        @param fallback_address: fallback IP/FQDN of the NuvlaBox's infrastructure service
+        @param fallback_address: fallback IP/FQDN of the NuvlaEdge's infrastructure service
          in case we cannot find one for the additional COE
 
         @returns COE attributes as a dict, as expected by the Nuvla commissioning:
@@ -242,9 +242,9 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def get_all_nuvlabox_components(self) -> list:
+    def get_all_nuvlaedge_components(self) -> list:
         """
-        Finds the names of all NuvlaBox components installed on the edge device
+        Finds the names of all NuvlaEdge components installed on the edge device
 
         :return: list of components' names
         """

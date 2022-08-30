@@ -9,11 +9,11 @@ import nuvla
 import requests
 import unittest
 from tests.utils.fake import Fake, FakeNuvlaApi, FakeRequestsResponse
-from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
+from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
 
 
-with mock.patch.object(agent.common.NuvlaBoxCommon, 'NuvlaBoxCommon') as mock_nb_common:
-    mock_nb_common.return_value = Fake.imitate(NuvlaBoxCommon)
+with mock.patch.object(agent.common.NuvlaEdgeCommon, 'NuvlaEdgeCommon') as mock_nb_common:
+    mock_nb_common.return_value = Fake.imitate(NuvlaEdgeCommon)
     from agent import agent_api as AgentApi
 
 
@@ -24,7 +24,7 @@ class AgentApiTestCase(unittest.TestCase):
     def setUp(self):
         self.peripheral_filepath = 'mock/peripheral/path'
         self.peripheral_content = {'id': 'nuvlabox-peripheral/fake-peripheral', 'foo': 'bar'}
-        AgentApi.NB.nuvlabox_id = 'nuvlabox/fake-id'
+        AgentApi.NB.nuvlaedge_id = 'nuvlabox/fake-id'
         AgentApi.NB.peripherals_dir = 'fake/path'
         AgentApi.NB.vpn_ip_file = 'fake/path/to/vpn/file'
         AgentApi.NB.vulnerabilities_file = 'fake/path/to/vpn/vuln-file'
@@ -88,7 +88,7 @@ class AgentApiTestCase(unittest.TestCase):
                          self.peripheral_content['id'],
                          'Failed to give back right peripheral ID')
 
-    @mock.patch('agent.agent_api.NB.get_nuvlabox_version')
+    @mock.patch('agent.agent_api.NB.get_nuvlaedge_version')
     def test_sanitize_peripheral_payload(self, mock_get_version):
         # if payload is broken, an exception should be thrown
         self.assertRaises(TypeError, AgentApi.sanitize_peripheral_payload, self.malformed_payload)
@@ -98,9 +98,9 @@ class AgentApiTestCase(unittest.TestCase):
         mock_get_version.return_value = 2
         AgentApi.sanitize_peripheral_payload(self.valid_payload)
         self.assertIn('version', self.valid_payload,
-                      'Peripheral payload was not completed with NuvlaBox Engine version')
+                      'Peripheral payload was not completed with NuvlaEdge Engine version')
         self.assertIn('parent', self.valid_payload,
-                      'Peripheral payload was not completed with NuvlaBox resource parent ID')
+                      'Peripheral payload was not completed with NuvlaEdge resource parent ID')
         self.assertEqual(self.valid_payload.get('identifier'), self.peripheral_identifier)
 
     @mock.patch('agent.agent_api.local_peripheral_save')
