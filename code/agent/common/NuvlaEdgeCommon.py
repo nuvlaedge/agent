@@ -93,7 +93,6 @@ class NuvlaEdgeCommon:
         self.status_file = ".status"
         self.status_notes_file = ".status_notes"
         self.nuvlaedge_status_file = "{}/.nuvlabox-status".format(self.data_volume)
-        self.nuvlaedge_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
         self.ip_file = ".ip"
         self.ip_geolocation_file = "{}/.ipgeolocation".format(self.data_volume)
         self.vulnerabilities_file = "{}/vulnerabilities".format(self.data_volume)

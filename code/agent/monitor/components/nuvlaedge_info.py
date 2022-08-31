@@ -23,7 +23,7 @@ class NuvlaEdgeInfoMonitor(Monitor):
         self.runtime_client: NuvlaCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
         self.ne_id: str = telemetry.nb_status_id
-        self.ne_engine_version: str = telemetry.nuvlabox_engine_version
+        self.ne_engine_version: str = telemetry.nuvlaedge_engine_version
         self.installation_home: str = telemetry.installation_home
 
         if not telemetry.edge_status.nuvlaedge_info:
