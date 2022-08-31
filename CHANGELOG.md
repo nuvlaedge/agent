@@ -1,4 +1,8 @@
 # Changelog
+## [2.9.0] - 2022-08-31
+### Added
+### Changed
+ - Migration to NuvlaEdge
 ## [2.8.0] - 2022-07-18
 ### Added
 - Added new Pydantic BaseModel to validate data from Nuvla.
