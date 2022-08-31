@@ -10,7 +10,7 @@ import sys
 class TestAgent(TestCase):
     agent_open: str = 'agent.agent.open'
 
-    @patch('agent.agent.NuvlaBoxCommon')
+    @patch('agent.agent.NuvlaEdgeCommon')
     @patch('agent.agent.Activate')
     def setUp(self, nb_mock, activate_mock) -> None:
         self.test_agent: Agent = Agent(True)
@@ -20,11 +20,11 @@ class TestAgent(TestCase):
         self.test_agent.activate.activation_is_possible.side_effect =\
             [(False, None), (True, None)]
 
-        self.test_agent.activate.update_nuvlabox_resource.return_value = \
+        self.test_agent.activate.update_nuvlaedge_resource.return_value = \
             ({'nuvlabox-status': 1}, None)
         self.test_agent.activate_nuvlaedge()
         self.assertEqual(self.test_agent.activate.activation_is_possible.call_count, 2)
-        self.assertEqual(self.test_agent.activate.update_nuvlabox_resource.call_count, 1)
+        self.assertEqual(self.test_agent.activate.update_nuvlaedge_resource.call_count, 1)
         self.assertEqual(self.test_agent.activate.vpn_commission_if_needed.call_count, 1)
         self.assertEqual(wait_mock.call_count, 1)
 

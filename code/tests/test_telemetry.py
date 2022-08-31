@@ -7,7 +7,7 @@ import unittest
 import socket
 
 import tests.utils.fake as fake
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 import paho.mqtt.client as mqtt
 from agent.telemetry import Telemetry
 
@@ -18,16 +18,16 @@ class TelemetryTestCase(unittest.TestCase):
 
     @mock.patch('agent.telemetry.Telemetry.initialize_monitors')
     def setUp(self, mock_monitor_initializer):
-        fake_nuvlabox_common = fake.Fake.imitate(NuvlaBoxCommon.NuvlaBoxCommon)
-        setattr(fake_nuvlabox_common, 'container_runtime', mock.MagicMock())
-        setattr(fake_nuvlabox_common, 'container_stats_json_file', 'fake-stats-file')
-        setattr(fake_nuvlabox_common, 'vpn_ip_file', 'fake-vpn-file')
-        Telemetry.__bases__ = (fake_nuvlabox_common,)
+        fake_nuvlaedge_common = fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon)
+        setattr(fake_nuvlaedge_common, 'container_runtime', mock.MagicMock())
+        setattr(fake_nuvlaedge_common, 'container_stats_json_file', 'fake-stats-file')
+        setattr(fake_nuvlaedge_common, 'vpn_ip_file', 'fake-vpn-file')
+        Telemetry.__bases__ = (fake_nuvlaedge_common,)
 
         self.shared_volume = "mock/path"
-        self.nuvlabox_status_id = "nuvlabox-status/fake-id"
+        self.nuvlaedge_status_id = "nuvlabox-status/fake-id"
 
-        self.obj = Telemetry(self.shared_volume, self.nuvlabox_status_id)
+        self.obj = Telemetry(self.shared_volume, self.nuvlaedge_status_id)
 
         # monkeypatching
         self.obj.mqtt_broker_host = 'fake-data-gateway'
@@ -36,13 +36,13 @@ class TelemetryTestCase(unittest.TestCase):
         self.obj.swarm_node_cert = 'swarm-cert'
         self.obj.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
         self.obj.installation_home = '/home/fake-user'
-        self.obj.nuvlabox_id = 'nuvlabox/fake-id'
-        self.obj.nuvlabox_engine_version = '2.1.0'
+        self.obj.nuvlaedge_id = 'nuvlabox/fake-id'
+        self.obj.nuvlaedge_engine_version = '2.1.0'
         self.obj.hostfs = '/rootfs'
         self.obj.vulnerabilities_file = 'vuln'
         self.obj.ip_geolocation_file = 'geolocation'
         self.obj.previous_net_stats_file = 'prev-net'
-        self.obj.nuvlabox_status_file = '.status'
+        self.obj.nuvlaedge_status_file = '.status'
         self.obj.vpn_ip_file = '.ip'
         self.obj.nvidia_software_power_consumption_model = {
             "ina3221x": {
@@ -82,11 +82,11 @@ class TelemetryTestCase(unittest.TestCase):
         logging.disable(logging.NOTSET)
 
     def test_init(self):
-        # make sure attrs are set and NuvlaBoxCommon is inherited
+        # make sure attrs are set and NuvlaEdgeCommon is inherited
         self.assertIsNotNone(self.obj.status_default,
                              'Telemetry status not initialized')
         self.assertIsNotNone(self.obj.container_runtime,
-                             'NuvlaBoxCommon not inherited')
+                             'NuvlaEdgeCommon not inherited')
         self.assertEqual(self.obj.status_default, self.obj.status,
                          'Failed to initialized status structures')
         self.assertIsInstance(self.obj.mqtt_telemetry, mqtt.Client)
@@ -128,7 +128,7 @@ class TelemetryTestCase(unittest.TestCase):
         self.obj.mqtt_telemetry.connect.reset_mock(side_effect=True)
         self.obj.mqtt_telemetry.connect.return_value = None
         self.assertIsNone(self.obj.send_mqtt(''),
-                          'Failed to send NuvlaBox status to MQTT broker')
+                          'Failed to send NuvlaEdge status to MQTT broker')
         mock_system.assert_called_once()
 
         # and if all metrics are passed, send them ALL
@@ -220,7 +220,7 @@ class TelemetryTestCase(unittest.TestCase):
                               'Failed to update status')
 
         self.assertEqual(self.obj.status, new_status,
-                         'NuvlaBox status was not updated in memory')
+                         'NuvlaEdge status was not updated in memory')
 
         minimum_payload_keys = {'current-time', 'id', 'new-value'}
         self.assertEqual(minimum_payload_keys & set(new_status.keys()), minimum_payload_keys,

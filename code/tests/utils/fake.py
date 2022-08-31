@@ -162,7 +162,7 @@ class MockContainer(object):
         self.labels = {
             'com.docker.compose.project.working_dir': '/workdir',
             'com.docker.compose.project.config_files': 'a.yml,b.yml',
-            'com.docker.compose.project': 'nuvlabox'
+            'com.docker.compose.project': 'nuvlaedge'
         }
         self.attrs = {
             'Config': {
@@ -219,10 +219,10 @@ class FakeNuvlaApi(object):
     def get(self, id, **kwargs):
         return self.Response(id, self.kwargs.get('data', {}))
 
-    def edit(self, nuvlabox_id, payload):
+    def edit(self, nuvlaedge_id, payload):
         return self.mock_response
 
-    def delete(self, nuvlabox_id):
+    def delete(self, nuvlaedge_id):
         return self.mock_response
 
     def add(self, resource, _):

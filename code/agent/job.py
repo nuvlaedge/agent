@@ -1,7 +1,7 @@
 #!/usr/local/bin/python3.7
 # -*- coding: utf-8 -*-
 
-""" NuvlaBox Job
+""" NuvlaEdge Job
 
 Relays pull-mode jobs to local job-engine-lite
 """
@@ -9,15 +9,15 @@ Relays pull-mode jobs to local job-engine-lite
 import logging
 import json
 
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 
 
-class Job(NuvlaBoxCommon.NuvlaBoxCommon):
+class Job(NuvlaEdgeCommon.NuvlaEdgeCommon):
     """ The Job class, which includes all methods and
     properties necessary to handle pull mode jobs
 
     Attributes:
-        data_volume: path to shared NuvlaBox data
+        data_volume: path to shared NuvlaEdge data
         job_id: Nuvla UUID of the job
         job_engine_lite_image: Docker image for Job Engine lite
     """
@@ -44,7 +44,7 @@ class Job(NuvlaBoxCommon.NuvlaBoxCommon):
             with open(self.activation_flag) as a:
                 user_info = json.loads(a.read())
         except FileNotFoundError:
-            logging.error(f'Cannot find NuvlaBox API key for job {self.job_id}')
+            logging.error(f'Cannot find NuvlaEdge API key for job {self.job_id}')
             return
 
         self.container_runtime.launch_job(

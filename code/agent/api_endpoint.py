@@ -16,7 +16,7 @@ endpoint_logger: logging.Logger = logging.getLogger(__name__)
 
 @app.route('/api/status')
 def set_status():
-    """ API endpoint to let other components set the NuvlaBox status """
+    """ API endpoint to let other components set the NuvlaEdge status """
 
     value = request.args.get('value')
     log = str(request.args.get('log'))
@@ -24,7 +24,7 @@ def set_status():
     if not value:
         endpoint_logger.warning("Received status request with no value. Nothing to do")
     else:
-        endpoint_logger.info(f"Setting NuvlaBox status to {value}")
+        endpoint_logger.info(f"Setting NuvlaEdge status to {value}")
         if log:
             print(app.config["telemetry"], dir(app.config["telemetry"]))
 
@@ -110,7 +110,7 @@ def get_agent_container_id():
 @app.route('/api/peripheral', defaults={'identifier': None}, methods=['POST', 'GET'])
 @app.route('/api/peripheral/<path:identifier>', methods=['GET', 'PUT', 'DELETE'])
 def manage_peripheral(identifier):
-    """ API endpoint to let other components manage NuvlaBox peripherals
+    """ API endpoint to let other components manage NuvlaEdge peripherals
 
     :param identifier: local id of the peripheral to be managed
     """

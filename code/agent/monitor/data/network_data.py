@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" NuvlaBox Edge Networking data structure
+""" NuvlaEdge Edge Networking data structure
 
 Gathers all the requirements for status reporting
 """

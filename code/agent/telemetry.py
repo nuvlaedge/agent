@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-""" NuvlaBox Telemetry
+""" NuvlaEdge Telemetry
 
-It takes care of updating the NuvlaBox status
+It takes care of updating the NuvlaEdge status
 resource in Nuvla.
 """
 
@@ -20,7 +20,7 @@ import sys
 import psutil
 import paho.mqtt.client as mqtt
 
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
@@ -62,21 +62,21 @@ class MonitoredDict(dict):
         logging.debug(f'{self.name} updated: {self}')
 
 
-class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
+class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
     """ The Telemetry class, which includes all methods and
-    properties necessary to categorize a NuvlaBox and send all
-    data into the respective NuvlaBox status at Nuvla
+    properties necessary to categorize a NuvlaEdge and send all
+    data into the respective NuvlaEdge status at Nuvla
 
     Attributes:
-        data_volume: path to shared NuvlaBox data
+        data_volume: path to shared NuvlaEdge data
     """
 
-    def __init__(self, data_volume, nuvlabox_status_id, excluded_monitors: str = ''):
+    def __init__(self, data_volume, nuvlaedge_status_id, excluded_monitors: str = ''):
         """ Constructs an Telemetry object, with a status placeholder """
 
         super().__init__(shared_data_volume=data_volume)
         self.logger: logging.Logger = logging.getLogger('Telemetry')
-        self.nb_status_id = nuvlabox_status_id
+        self.nb_status_id = nuvlaedge_status_id
 
         self.status_default = {
             'resources': None,
@@ -161,10 +161,10 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                       f'{caller.code_context}')
         logging.debug(f'Telemetry.status updated: {value}')
 
-    def send_mqtt(self, nuvlabox_status, cpu=None, ram=None, disks=None, energy=None):
+    def send_mqtt(self, nuvlaedge_status, cpu=None, ram=None, disks=None, energy=None):
         """ Gets the telemetry data and send the stats into the MQTT broker
 
-        :param nuvlabox_status: full dump of the NB status {}
+        :param nuvlaedge_status: full dump of the NB status {}
         :param cpu: tuple (capacity, load)
         :param ram: tuple (capacity, used)
         :param disks: list of {device: partition_name, capacity: value, used: value}
@@ -175,7 +175,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             self.mqtt_telemetry.connect(self.mqtt_broker_host, self.mqtt_broker_port,
                                         self.mqtt_broker_keep_alive)
         except ConnectionRefusedError:
-            logging.warning("Connection to NuvlaBox MQTT broker refused")
+            logging.warning("Connection to NuvlaEdge MQTT broker refused")
             self.mqtt_telemetry.disconnect()
             return
         except socket.timeout:
@@ -183,13 +183,13 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                             f' {self.mqtt_broker_host}')
             return
         except socket.gaierror:
-            logging.warning("The NuvlaBox MQTT broker is not reachable...trying again"
+            logging.warning("The NuvlaEdge MQTT broker is not reachable...trying again"
                             " later")
             self.mqtt_telemetry.disconnect()
             return
 
-        os.system(f"mosquitto_pub -h {self.mqtt_broker_host} -t nuvlabox-status "
-                  f"-m '{json.dumps(nuvlabox_status)}'")
+        os.system(f"mosquitto_pub -h {self.mqtt_broker_host} -t nuvlaedge-status "
+                  f"-m '{json.dumps(nuvlaedge_status)}'")
 
         if cpu:
             # e1 = self.mqtt_telemetry.publish("cpu/capacity", payload=str(cpu[0]))
@@ -227,9 +227,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
 
     def set_status_operational_status(self, body: dict, node: dict):
         """
-        Gets and sets the operational status and status_notes for the nuvlabox-status
+        Gets and sets the operational status and status_notes for the nuvlaedge-status
 
-        :param body: payload for the nuvlabox-status update request
+        :param body: payload for the nuvlaedge-status update request
         :param node: information about the underlying COE node
         """
         operational_status_notes = self.get_operational_status_notes()
@@ -289,7 +289,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             it_monitor.populate_nb_report(status_dict)
 
     def get_status(self):
-        """ Gets several types of information to populate the NuvlaBox status """
+        """ Gets several types of information to populate the NuvlaEdge status """
 
         status_for_nuvla = self.status_default.copy()
         # Update monitor objects
@@ -342,24 +342,24 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         return items_changed_or_added, attributes_to_delete
 
     def update_status(self):
-        """ Runs a cycle of the categorization, to update the NuvlaBox status """
+        """ Runs a cycle of the categorization, to update the NuvlaEdge status """
         new_status, all_status = self.get_status()
         self.logger.debug(f'Updating nuvla status on time '
                           f'{new_status.get("current-time")}')
 
         # write all status into the shared volume for the other
         # components to re-use if necessary
-        with open(self.nuvlabox_status_file, 'w', encoding='UTF-8') as ne_status_file:
+        with open(self.nuvlaedge_status_file, 'w', encoding='UTF-8') as ne_status_file:
             ne_status_file.write(json.dumps(all_status))
 
         self.status.update(new_status)
 
     def get_vpn_ip(self):
-        """ Discovers the NuvlaBox VPN IP  """
+        """ Discovers the NuvlaEdge VPN IP  """
 
         if path.exists(self.vpn_ip_file) and stat(self.vpn_ip_file).st_size != 0:
             with open(self.vpn_ip_file, encoding='UTF-8') as vpn_file:
                 return vpn_file.read().splitlines()[0]
         else:
-            logging.warning("Cannot infer the NuvlaBox VPN IP!")
+            logging.warning("Cannot infer the NuvlaEdge VPN IP!")
             return None

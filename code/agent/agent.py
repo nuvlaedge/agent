@@ -15,7 +15,7 @@ from agent.infrastructure import Infrastructure
 from agent.job import Job
 from agent.telemetry import Telemetry
 from agent.activate import Activate
-from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
+from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
 
 
 class Agent:
@@ -23,7 +23,7 @@ class Agent:
     Parent agent class in change of gathering all the subcomponents and synchronize them
     """
     # Default shared volume location
-    _DATA_VOLUME: str = "/srv/nuvlabox/shared"
+    _DATA_VOLUME: str = "/srv/nuvlaedge/shared"
 
     # Event timeout controller
     agent_event: Event = Event()
@@ -41,7 +41,7 @@ class Agent:
         self.agent_flag: bool = agent_flag
 
         # Class containing  mainly hardcoded paths, ports and addresses related tu nuvla
-        self.nuvlaedge_common: NuvlaBoxCommon = NuvlaBoxCommon()
+        self.nuvlaedge_common: NuvlaEdgeCommon = NuvlaEdgeCommon()
 
         # Class responsible for activating an controlling previous nuvla installations
         self.activate: Activate = Activate(self._DATA_VOLUME)
@@ -78,7 +78,7 @@ class Agent:
 
         # Gather resources post-activation
         nuvlaedge_resource, old_nuvlaedge_resource = \
-            self.activate.update_nuvlabox_resource()
+            self.activate.update_nuvlaedge_resource()
         self.nuvlaedge_status_id = nuvlaedge_resource["nuvlabox-status"]
         self.activate.vpn_commission_if_needed(nuvlaedge_resource, old_nuvlaedge_resource)
         self.logger.info(f'NuvlaEdge status id {self.nuvlaedge_status_id}')
@@ -101,7 +101,7 @@ class Agent:
 
     def initialize_telemetry(self) -> NoReturn:
         """
-        Gathers the required environmental data and creates the nuvlabox telemetry class
+        Gathers the required environmental data and creates the nuvlaedge telemetry class
         Returns:
 
         """
@@ -130,7 +130,7 @@ class Agent:
 
     def send_heartbeat(self) -> Dict:
         """
-        Updates the NuvlaBox Status according to the local status file
+        Updates the NuvlaEdge Status according to the local status file
 
         Returns: a dict with the response from Nuvla
         """
@@ -148,14 +148,14 @@ class Agent:
                           f'_delete_attributes = {_del_attr}  status = {status}')
 
         if not status_current_time:
-            status = {'status-notes': ['NuvlaBox Telemetry is starting']}
+            status = {'status-notes': ['NuvlaEdge Telemetry is starting']}
             self.telemetry.status.update(status)
 
         else:
             if status_current_time <= self.past_status_time:
                 status = {
                     'status-notes': status.get('status-notes', []) + [
-                        'NuvlaBox telemetry is falling behind'],
+                        'NuvlaEdge telemetry is falling behind'],
                     'status': 'DEGRADED'
                 }
                 self.telemetry.status.update(status)
@@ -163,7 +163,7 @@ class Agent:
                 del_attr = _del_attr
 
         if del_attr:
-            self.logger.info(f'Deleting the following attributes from NuvlaBox Status: '
+            self.logger.info(f'Deleting the following attributes from NuvlaEdge Status: '
                              f'{", ".join(del_attr)}')
 
         try:
@@ -175,7 +175,7 @@ class Agent:
             self.telemetry.status_on_nuvla.update(status)
 
         except:
-            self.logger.error("Unable to update NuvlaBox status in Nuvla")
+            self.logger.error("Unable to update NuvlaEdge status in Nuvla")
             raise
 
         self.past_status_time = copy(status_current_time)

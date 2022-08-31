@@ -1,4 +1,4 @@
-""" NuvlaBox Edge Status
+""" NuvlaEdge Edge Status
 
 Gathers all the requiremets for status reporting
 """

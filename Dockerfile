@@ -28,20 +28,20 @@ LABEL org.opencontainers.image.authors="support@sixsq.com"
 LABEL org.opencontainers.image.created=${GIT_BUILD_TIME}
 LABEL org.opencontainers.image.url=${PROJECT_URL}
 LABEL org.opencontainers.image.vendor="SixSq SA"
-LABEL org.opencontainers.image.title="NuvlaBox Agent"
-LABEL org.opencontainers.image.description="Sends the NuvlaBox telemetry, hearbeat, and lifecycle management information to Nuvla"
+LABEL org.opencontainers.image.title="NuvlaEdge Agent"
+LABEL org.opencontainers.image.description="Sends the NuvlaEdge telemetry, hearbeat, and lifecycle management information to Nuvla"
 
 COPY --from=psutil-builder /usr/local/lib/python3.8/site-packages /usr/local/lib/python3.8/site-packages
 
 RUN apk update && apk add --no-cache procps curl mosquitto-clients openssl
 
-COPY code/ LICENSE /opt/nuvlabox/
+COPY code/ LICENSE /opt/nuvlaedge/
 
-WORKDIR /opt/nuvlabox/
+WORKDIR /opt/nuvlaedge/
 
 RUN pip install -r requirements.txt
 
-VOLUME /srv/nuvlabox/shared
+VOLUME /srv/nuvlaedge/shared
 
 ONBUILD RUN ./license.sh
 

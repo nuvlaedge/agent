@@ -6,7 +6,7 @@ import datetime
 import psutil
 
 
-import agent.common.NuvlaBoxCommon as NuvlaCommon
+import agent.common.NuvlaEdgeCommon as NuvlaCommon
 from agent.monitor import Monitor
 from agent.monitor.data.nuvlaedge_data import NuvlaEdgeData as NuvlaInfo
 from agent.monitor.data.nuvlaedge_data import InstallationParametersData
@@ -23,7 +23,7 @@ class NuvlaEdgeInfoMonitor(Monitor):
         self.runtime_client: NuvlaCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
         self.ne_id: str = telemetry.nb_status_id
-        self.ne_engine_version: str = telemetry.nuvlabox_engine_version
+        self.ne_engine_version: str = telemetry.nuvlaedge_engine_version
         self.installation_home: str = telemetry.installation_home
 
         if not telemetry.edge_status.nuvlaedge_info:
@@ -51,14 +51,14 @@ class NuvlaEdgeInfoMonitor(Monitor):
         # installation parameters
         if not self.data.installation_parameters:
             self.data.installation_parameters = InstallationParametersData()
-        filter_label = "nuvlabox.component=True"
+        filter_label = "nuvlaedge.component=True"
 
         self.data.installation_parameters = \
             InstallationParametersData.parse_obj(
                 self.runtime_client.get_installation_parameters(filter_label))
 
         # Components running in the current NuvlaEdge deployment
-        self.data.components = self.runtime_client.get_all_nuvlabox_components()
+        self.data.components = self.runtime_client.get_all_nuvlaedge_components()
 
     def populate_nb_report(self, nuvla_report: Dict):
         nuvla_report.update(self.data.dict(by_alias=True, exclude_none=True))

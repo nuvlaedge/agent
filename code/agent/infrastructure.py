@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-""" NuvlaBox Infrastructure
+""" NuvlaEdge Infrastructure
 
-It takes care of updating the NuvlaBox infrastructure services
+It takes care of updating the NuvlaEdge infrastructure services
 and respective credentials in Nuvla
 """
 
@@ -13,14 +13,14 @@ import docker.errors as docker_err
 import json
 import requests
 import time
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaEdgeCommon
 from agent.telemetry import Telemetry
 from datetime import datetime
 from os import path, stat, remove
 from threading import Thread
 
 
-class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
+class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
     """ The Infrastructure class includes all methods and
     properties necessary update the infrastructure services
     and respective credentials in Nuvla, whenever the local
@@ -37,7 +37,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         Thread.__init__(self, daemon=True)
 
         self.infra_logger: logging.Logger = logging.getLogger(__name__)
-        
+
         if telemetry:
             self.telemetry_instance = telemetry
         else:
@@ -114,9 +114,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                                     "to do")
             return
 
-        self.infra_logger.info("Commissioning the NuvlaBox...{}".format(payload))
+        self.infra_logger.info("Commissioning the NuvlaEdge...{}".format(payload))
         try:
-            self.api()._cimi_post(self.nuvlabox_id+"/commission", json=payload)
+            self.api()._cimi_post(self.nuvlaedge_id+"/commission", json=payload)
         except Exception as e:
             self.infra_logger.error(f"Could not commission with payload {payload}: {e}")
             return False
@@ -148,7 +148,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
             if not credential_id:
                 self.infra_logger.warning("Failing to provide necessary values for "
-                                          "NuvlaBox VPN client")
+                                          "NuvlaEdge VPN client")
                 return None
 
             vpn_credential = self.api()._cimi_get(credential_id)
@@ -200,11 +200,11 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
                     return diff_conf
         except FileNotFoundError:
-            self.infra_logger.info("Auto-commissioning the NuvlaBox for the first time..")
+            self.infra_logger.info("Auto-commissioning the NuvlaEdge for the first time..")
             return current_conf
 
-    def get_nuvlabox_capabilities(self, commissioning_dict: dict):
-        """ Finds the NuvlaBox capabilities and adds them to the NB commissioning payload
+    def get_nuvlaedge_capabilities(self, commissioning_dict: dict):
+        """ Finds the NuvlaEdge capabilities and adds them to the NB commissioning payload
 
         :param commissioning_dict: the commission payload, as a dict, to be changed in
         case there are capabilities
@@ -225,7 +225,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         :return: True or False
         """
 
-        if NuvlaBoxCommon.ORCHESTRATOR not in ['docker', 'swarm']:
+        if NuvlaEdgeCommon.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
         if not container_api_port:
@@ -247,29 +247,29 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         return True
 
-    def get_local_nuvlabox_status(self) -> dict:
+    def get_local_nuvlaedge_status(self) -> dict:
         """
-        Reads the local nuvlabox-status file
+        Reads the local nuvlaedge-status file
 
         Returns:
             dict: content of the file, or empty dict in case it doesn't exist
         """
 
         try:
-            with open(self.nuvlabox_status_file) as ns:
+            with open(self.nuvlaedge_status_file) as ns:
                 return json.load(ns)
         except FileNotFoundError:
             return {}
 
     def get_node_role_from_status(self) -> str or None:
         """
-        Look up the local nuvlabox-status file and take the cluster-node-role value from
+        Look up the local nuvlaedge-status file and take the cluster-node-role value from
         there
 
         :return: node role
         """
 
-        return self.get_local_nuvlabox_status().get('cluster-node-role')
+        return self.get_local_nuvlaedge_status().get('cluster-node-role')
 
     def read_commissioning_file(self) -> dict:
         """
@@ -293,18 +293,18 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         """
 
         cluster_info = self.container_runtime.get_cluster_info(
-            default_cluster_name=f'cluster_{self.nuvlabox_id}')
+            default_cluster_name=f'cluster_{self.nuvlaedge_id}')
 
         node_info = self.container_runtime.get_node_info()
         node_id = self.container_runtime.get_node_id(node_info)
 
-        # we only commission the cluster when the NuvlaBox status
+        # we only commission the cluster when the NuvlaEdge status
         # has already been updated with its "node-id"
-        nuvlabox_status = self.get_local_nuvlabox_status()
+        nuvlaedge_status = self.get_local_nuvlaedge_status()
 
         if not cluster_info:
             # it is not a manager but...
-            if node_id and node_id == nuvlabox_status.get('node-id'):
+            if node_id and node_id == nuvlaedge_status.get('node-id'):
                 # it is a worker, and NB status is aware of that, so we can update
                 # the cluster with it
                 return {
@@ -313,8 +313,8 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             else:
                 return {}
 
-        if nuvlabox_status.get('node-id') in cluster_info.get('cluster-managers', []) \
-                and node_id == nuvlabox_status.get('node-id'):
+        if nuvlaedge_status.get('node-id') in cluster_info.get('cluster-managers', []) \
+                and node_id == nuvlaedge_status.get('node-id'):
             return cluster_info
 
         return {}
@@ -455,7 +455,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 self.container_runtime.join_token_worker_keyname,
                 minimum_commission_payload)
 
-        self.get_nuvlabox_capabilities(commission_payload)
+        self.get_nuvlaedge_capabilities(commission_payload)
         # capabilities should always be commissioned when infra is also being commissioned
         if any(k in minimum_commission_payload for k in infra_service):
             minimum_commission_payload['capabilities'] = \
@@ -476,14 +476,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                             is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
-        """ Simply build the API query for searching this NuvlaBox's VPN credential
+        """ Simply build the API query for searching this NuvlaEdge's VPN credential
 
         :param vpn_server_id: ID of the VPN server
         :return str
         """
 
         return f'method="create-credential-vpn-nuvlabox" and ' \
-               f'vpn-common-name="{self.nuvlabox_id}" and parent="{vpn_server_id}"'
+               f'vpn-common-name="{self.nuvlaedge_id}" and parent="{vpn_server_id}"'
 
     def validate_local_vpn_credential(self, online_vpn_credential: dict):
         """
@@ -605,7 +605,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             "category": "action",
             "content": {
                 "resource": {
-                    "href": self.nuvlabox_id
+                    "href": self.nuvlaedge_id
                 },
                 "state": f"Unknown problem while setting immutable SSH key"
             },
@@ -625,14 +625,14 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             with open(f'{self.data_volume}/{self.context}') as nb:
                 nb_owner = json.load(nb).get('owner')
 
-            event_owners = [nb_owner, self.nuvlabox_id] if nb_owner \
-                else [self.nuvlabox_id]
+            event_owners = [nb_owner, self.nuvlaedge_id] if nb_owner \
+                else [self.nuvlaedge_id]
             event['acl'] = {'owners': event_owners}
 
             self.infra_logger.info(f'Setting immutable SSH key {self.ssh_pub_key} for '
                                    f'{self.installation_home}')
             try:
-                with NuvlaBoxCommon.timeout(10):
+                with NuvlaEdgeCommon.timeout(10):
                     if not self.container_runtime.install_ssh_key(self.ssh_pub_key,
                                                                   ssh_folder):
                         return
@@ -653,6 +653,6 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             try:
                 self.try_commission()
             except RuntimeError as ex:
-                self.infra_logger.exception('Error while trying to commission NuvlaBox',
+                self.infra_logger.exception('Error while trying to commission NuvlaEdge',
                                             ex)
             time.sleep(self.refresh_period)

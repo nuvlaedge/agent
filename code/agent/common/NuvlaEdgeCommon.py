@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-""" NuvlaBox Common
+""" NuvlaEdge Common
 
 List of common attributes for all classes
 """
@@ -58,11 +58,11 @@ class OrchestratorException(Exception):
 
 
 # --------------------
-class NuvlaBoxCommon:
-    """ Common set of methods and variables for the NuvlaBox agent
+class NuvlaEdgeCommon:
+    """ Common set of methods and variables for the NuvlaEdge agent
     """
 
-    def __init__(self, shared_data_volume="/srv/nuvlabox/shared"):
+    def __init__(self, shared_data_volume="/srv/nuvlaedge/shared"):
         """ Constructs an Infrastructure object, with a status placeholder
 
         :param shared_data_volume: shared volume target path
@@ -72,17 +72,17 @@ class NuvlaBoxCommon:
         self.data_volume = shared_data_volume
         self.docker_socket_file = '/var/run/docker.sock'
         self.hostfs = "/rootfs"
-        self.ssh_pub_key = os.environ.get('NUVLABOX_IMMUTABLE_SSH_PUB_KEY')
+        self.ssh_pub_key = os.environ.get('NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY')
         self.host_user_home_file = f'{self.data_volume}/.host_user_home'
         self.installation_home = self.set_installation_home(self.host_user_home_file)
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
         self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
-        self.nuvlabox_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
+        self.nuvlaedge_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.nuvla_endpoint, self.nuvla_endpoint_insecure = self.set_nuvla_endpoint()
         # Also store the Nuvla connection details for future restarts
         conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n" \
                f"{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
-        self.save_nuvla_configuration(self.nuvlabox_nuvla_configuration, conf)
+        self.save_nuvla_configuration(self.nuvlaedge_nuvla_configuration, conf)
 
         self.container_runtime = self.set_runtime_client_details()
         self.mqtt_broker_host = self.container_runtime.data_gateway_name
@@ -92,8 +92,7 @@ class NuvlaBoxCommon:
         self.commissioning_file = ".commission"
         self.status_file = ".status"
         self.status_notes_file = ".status_notes"
-        self.nuvlabox_status_file = "{}/.nuvlabox-status".format(self.data_volume)
-        self.nuvlabox_engine_version_file = "{}/.nuvlabox-engine-version".format(self.data_volume)
+        self.nuvlaedge_status_file = "{}/.nuvlabox-status".format(self.data_volume)
         self.ip_file = ".ip"
         self.ip_geolocation_file = "{}/.ipgeolocation".format(self.data_volume)
         self.vulnerabilities_file = "{}/vulnerabilities".format(self.data_volume)
@@ -108,7 +107,7 @@ class NuvlaBoxCommon:
 
         self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
         self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
-        self.vpn_client_conf_file = "{}/nuvlabox.conf".format(self.vpn_folder)
+        self.vpn_client_conf_file = "{}/nuvlaedge.conf".format(self.vpn_folder)
         self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
         self.vpn_config_extra = self.set_vpn_config_extra()
         self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
@@ -116,9 +115,9 @@ class NuvlaBoxCommon:
         self.mqtt_broker_keep_alive = 90
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
         self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
-        self.nuvlabox_id = self.set_nuvlabox_id()
-        nbe_version = os.getenv('NUVLABOX_ENGINE_VERSION')
-        self.nuvlabox_engine_version = str(nbe_version) if nbe_version else None
+        self.nuvlaedge_id = self.set_nuvlaedge_id()
+        nbe_version = os.getenv('NUVLAEDGE_ENGINE_VERSION')
+        self.nuvlaedge_engine_version = str(nbe_version) if nbe_version else None
 
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
@@ -174,7 +173,7 @@ class NuvlaBoxCommon:
         nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
         nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
         try:
-            with open(self.nuvlabox_nuvla_configuration) as nuvla_conf:
+            with open(self.nuvlaedge_nuvla_configuration) as nuvla_conf:
                 local_nuvla_conf = nuvla_conf.read().split()
 
             nuvla_endpoint_line = list(filter(lambda x: x.startswith(self.nuvla_endpoint_key), local_nuvla_conf))
@@ -186,9 +185,9 @@ class NuvlaBoxCommon:
             if nuvla_endpoint_insecure_line:
                 nuvla_endpoint_insecure_raw = nuvla_endpoint_insecure_line[0].split('=')[-1]
         except FileNotFoundError:
-            self.logger.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaBox Engine...')
+            self.logger.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaEdge Engine...')
         except IndexError as e:
-            self.logger.debug(f'Unable to read Nuvla configuration from {self.nuvlabox_nuvla_configuration}: {str(e)}')
+            self.logger.debug(f'Unable to read Nuvla configuration from {self.nuvlaedge_nuvla_configuration}: {str(e)}')
 
         while nuvla_endpoint_raw[-1] == "/":
             nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
@@ -224,45 +223,45 @@ class NuvlaBoxCommon:
                 raise OrchestratorException(f'Orchestrator is "{ORCHESTRATOR}", but file '
                                             f'{self.docker_socket_file} is not present')
 
-    def set_nuvlabox_id(self) -> str:
+    def set_nuvlaedge_id(self) -> str:
         """
-        Discovers the NuvlaBox ID either from env or from a previous run
+        Discovers the NuvlaEdge ID either from env or from a previous run
 
-        :return: clean nuvlabox ID as a str
+        :return: clean NuvlaEdge ID as a str
         """
-        new_nuvlabox_id = os.getenv('NUVLABOX_UUID')
+        new_nuvlaedge_id = os.getenv('NUVLAEDGE_UUID', os.getenv('NUVLABOX_UUID'))
 
         if os.path.exists("{}/{}".format(self.data_volume, self.context)):
             try:
-                nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
-                if new_nuvlabox_id and new_nuvlabox_id.split('/')[-1] != nuvlabox_id.split('/')[-1]:
-                    raise RuntimeError(f'You are trying to install a new NuvlaBox {new_nuvlabox_id} even though a '
-                                       f'previous NuvlaBox installation ({nuvlabox_id}) still exists in the system! '
+                nuvlaedge_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
+                if new_nuvlaedge_id and new_nuvlaedge_id.split('/')[-1] != nuvlaedge_id.split('/')[-1]:
+                    raise RuntimeError(f'You are trying to install a new NuvlaEdge {new_nuvlaedge_id} even though a '
+                                       f'previous NuvlaEdge installation ({nuvlaedge_id}) still exists in the system! '
                                        f'You can either delete the previous installation (removing all data volumes) or '
-                                       f'fix the NUVLABOX_UUID environment variable to match the old {nuvlabox_id}')
+                                       f'fix the NUVLAEDGE_UUID environment variable to match the old {nuvlaedge_id}')
             except json.decoder.JSONDecodeError as e:
-                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
+                raise Exception(f'NUVLAEDGE_UUID not provided and cannot read previous context from '
                                 f'{self.data_volume}/{self.context}: {str(e)}')
-        elif new_nuvlabox_id:
-            nuvlabox_id = new_nuvlabox_id
+        elif new_nuvlaedge_id:
+            nuvlaedge_id = new_nuvlaedge_id
         else:
-            raise Exception(f'NUVLABOX_UUID not provided')
+            raise Exception(f'NUVLAEDGE_UUID not provided')
 
-        if not nuvlabox_id.startswith("nuvlabox/"):
-            nuvlabox_id = 'nuvlabox/{}'.format(nuvlabox_id)
+        if not nuvlaedge_id.startswith("nuvlabox/"):
+            nuvlaedge_id = 'nuvlabox/{}'.format(nuvlaedge_id)
 
-        return nuvlabox_id
+        return nuvlaedge_id
 
     @staticmethod
     def get_api_keys():
-        nuvlabox_api_key = os.environ.get("NUVLABOX_API_KEY")
-        nuvlabox_api_secret = os.environ.get("NUVLABOX_API_SECRET")
-        if nuvlabox_api_key:
-            del os.environ["NUVLABOX_API_KEY"]
-        if nuvlabox_api_secret:
-            del os.environ["NUVLABOX_API_SECRET"]
+        nuvlaedge_api_key = os.environ.get("NUVLAEDGE_API_KEY")
+        nuvlaedge_api_secret = os.environ.get("NUVLAEDGE_API_SECRET")
+        if nuvlaedge_api_key:
+            del os.environ["NUVLAEDGE_API_KEY"]
+        if nuvlaedge_api_secret:
+            del os.environ["NUVLAEDGE_API_SECRET"]
 
-        return nuvlabox_api_key, nuvlabox_api_secret
+        return nuvlaedge_api_key, nuvlaedge_api_secret
 
     def api(self):
         """ Returns an Api object """
@@ -332,14 +331,14 @@ class NuvlaBoxCommon:
         with open(file_path) as f:
             return json.load(f)
 
-    def get_nuvlabox_version(self) -> int:
+    def get_nuvlaedge_version(self) -> int:
         """
-        Gives back this NuvlaBox Engine's version
+        Gives back this NuvlaEdge Engine's version
 
-        :return: major version of the NuvlaBox Engine, as an integer
+        :return: major version of the NuvlaEdge Engine, as an integer
         """
-        if self.nuvlabox_engine_version:
-            version = int(self.nuvlabox_engine_version.split('.')[0])
+        if self.nuvlaedge_engine_version:
+            version = int(self.nuvlaedge_engine_version.split('.')[0])
         elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
             version = self.read_json_file(f"{self.data_volume}/{self.context}")['version']
         else:
@@ -348,7 +347,7 @@ class NuvlaBoxCommon:
         return version
 
     def get_operational_status(self):
-        """ Retrieves the operational status of the NuvlaBox from the .status file """
+        """ Retrieves the operational status of the NuvlaEdge from the .status file """
 
         try:
             operational_status = open("{}/{}".format(self.data_volume,
@@ -365,7 +364,7 @@ class NuvlaBoxCommon:
 
     def get_operational_status_notes(self) -> list:
         """
-        Retrieves the operational status notes of the NuvlaBox from the .status_notes
+        Retrieves the operational status notes of the NuvlaEdge from the .status_notes
         file
         """
 
@@ -381,7 +380,7 @@ class NuvlaBoxCommon:
     def set_local_operational_status(self, operational_status):
         """ Write the operational status into the .status file
 
-        :param operational_status: status of the NuvlaBox
+        :param operational_status: status of the NuvlaEdge
         """
 
         with open("{}/{}".format(self.data_volume, self.status_file), 'w') as s:
@@ -412,7 +411,7 @@ ${vpn_certificate}
 
 # Client Key
 <key>
-${nuvlabox_vpn_key}
+${nuvlaedge_vpn_key}
 </key>
 
 # Shared key
@@ -425,7 +424,7 @@ remote-cert-tls server
 verify-x509-name "${vpn_common_name_prefix}" name-prefix
 
 script-security 2
-up /opt/nuvlabox/scripts/get_ip.sh
+up /opt/nuvlaedge/scripts/get_ip.sh
 
 auth-nocache
 auth-retry nointeract
@@ -443,12 +442,12 @@ ${vpn_extra_config}
             vpnf.write(tpl.substitute(values))
 
     def prepare_vpn_certificates(self):
-        nuvlabox_vpn_key = f'{self.vpn_folder}/nuvlabox-vpn.key'
-        nuvlabox_vpn_csr = f'{self.vpn_folder}/nuvlabox-vpn.csr'
+        nuvlaedge_vpn_key = f'{self.vpn_folder}/nuvlaedge-vpn.key'
+        nuvlaedge_vpn_csr = f'{self.vpn_folder}/nuvlaedge-vpn.csr'
 
         cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt',
-               'ec_paramgen_curve:secp521r1', '-keyout', nuvlabox_vpn_key, '-out',
-               nuvlabox_vpn_csr, '-subj', f'/CN={self.nuvlabox_id.split("/")[-1]}']
+               'ec_paramgen_curve:secp521r1', '-keyout', nuvlaedge_vpn_key, '-out',
+               nuvlaedge_vpn_csr, '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
 
         r = self.shell_execute(cmd)
 
@@ -459,22 +458,22 @@ ${vpn_extra_config}
 
         try:
             wait = 0
-            while not os.path.exists(nuvlabox_vpn_csr) and \
-                    not os.path.exists(nuvlabox_vpn_key):
+            while not os.path.exists(nuvlaedge_vpn_csr) and \
+                  not os.path.exists(nuvlaedge_vpn_key):
                 if wait > 25:
                     # appr 5 sec
                     raise TimeoutError
                 wait += 1
                 time.sleep(0.2)
 
-            with open(nuvlabox_vpn_csr) as csr:
+            with open(nuvlaedge_vpn_csr) as csr:
                 vpn_csr = csr.read()
 
-            with open(nuvlabox_vpn_key) as key:
+            with open(nuvlaedge_vpn_key) as key:
                 vpn_key = key.read()
         except TimeoutError:
-            self.logger.error(f'Unable to lookup {nuvlabox_vpn_key} and '
-                              f'{nuvlabox_vpn_csr}')
+            self.logger.error(f'Unable to lookup {nuvlaedge_vpn_key} and '
+                              f'{nuvlaedge_vpn_csr}')
             return None, None
 
         return vpn_csr, vpn_key
@@ -520,7 +519,7 @@ ${vpn_extra_config}
             'vpn_common_name_prefix': vpn_conf_fields['vpn-common-name-prefix'],
             'vpn_endpoints_mapped': vpn_conf_fields['vpn-endpoints-mapped'],
             'vpn_interface_name': self.vpn_interface_name,
-            'nuvlabox_vpn_key': vpn_key,
+            'nuvlaedge_vpn_key': vpn_key,
             'vpn_extra_config': self.vpn_config_extra
         }
 
