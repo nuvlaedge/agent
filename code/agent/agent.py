@@ -20,7 +20,7 @@ from agent.common.NuvlaBoxCommon import NuvlaBoxCommon
 
 class Agent:
     """
-    Parent agent class in change of gathering all the subcomponents and synchronize them
+    Parent agent class in charge of gathering all the subcomponents and synchronize them
     """
     # Default shared volume location
     _DATA_VOLUME: str = "/srv/nuvlabox/shared"
@@ -95,9 +95,10 @@ class Agent:
             self.logger.warning('Host user home directory not defined.'
                                 'This might impact future SSH management actions')
         else:
-            with open(self.infrastructure.host_user_home_file, 'w', encoding='UTF-8') \
-                    as user_home:
+            with open(self.infrastructure.host_user_home_file, 'w',
+                      encoding='UTF-8') as user_home:
                 user_home.write(self.infrastructure.installation_home)
+            self.infrastructure.set_immutable_ssh_key()
 
     def initialize_telemetry(self) -> NoReturn:
         """
