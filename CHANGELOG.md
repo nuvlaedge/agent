@@ -1,4 +1,8 @@
 # Changelog
+## [2.9.1] - 2022-09-05
+### Added 
+ - Add code lost during Telemetry refactor (#114)
+### Changed
 ## [2.9.0] - 2022-08-31
 ### Added
 ### Changed
