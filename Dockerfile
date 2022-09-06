@@ -33,7 +33,7 @@ LABEL org.opencontainers.image.description="Sends the NuvlaBox telemetry, hearbe
 
 COPY --from=psutil-builder /usr/local/lib/python3.8/site-packages /usr/local/lib/python3.8/site-packages
 
-RUN apk update && apk add --no-cache procps curl mosquitto-clients openssl
+RUN apk update && apk add --no-cache procps curl mosquitto-clients openssl lsblk
 
 COPY code/ LICENSE /opt/nuvlabox/
 

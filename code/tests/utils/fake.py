@@ -159,6 +159,7 @@ class MockContainer(object):
         self.status = status
         self.name = myid if myid else random.randint(100, 999)
         self.id = random.randint(100, 999) if not myid else myid
+        self.short_id = self.id
         self.labels = {
             'com.docker.compose.project.working_dir': '/workdir',
             'com.docker.compose.project.config_files': 'a.yml,b.yml',
@@ -175,6 +176,8 @@ class MockContainer(object):
             },
             'RestartCount': 1
         }
+    def stats():
+        pass
 
     def remove(self):
         """ Not implemented """
