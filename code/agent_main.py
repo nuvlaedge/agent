@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 import os
 import logging
 from logging import config as log_config_mod
+import socket
 import time
 from typing import Union, Dict
 from threading import Event, Thread
@@ -144,6 +145,8 @@ def main():
     Returns: None
 
     """
+
+    socket.setdefaulttimeout(network_timeout)
 
     main_event: Event = Event()
     agent_exit_flag: bool = True
