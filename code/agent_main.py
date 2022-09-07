@@ -95,7 +95,7 @@ def wait_for_api_ready():
     """
     while True:
         try:
-            req = requests.get('http://localhost/api/healthcheck')
+            req = requests.get('http://localhost/api/healthcheck', timeout=10)
             req.raise_for_status()
             if req.status_code == 200:
                 break
