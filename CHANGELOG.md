@@ -1,4 +1,10 @@
 # Changelog
+## [2.8.1] - 2022-09-07
+### Added 
+ - Add missing dependency lsblk 
+ - Add timeout to requests to geolocation services
+### Changed
+ - Set missing default socket timeout
 ## [2.8.0] - 2022-07-18
 ### Added
 ### Changed
