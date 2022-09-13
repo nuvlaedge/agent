@@ -3,7 +3,7 @@ name: "NuvlaEdge Component Build"
 on:
   push:
     branches:
-      - 'master'
+      - 'main'
     tags-ignore:
       - '*.*.*'
   pull_request:
