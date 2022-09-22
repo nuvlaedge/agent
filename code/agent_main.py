@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 import os
 import logging
 from logging import config as log_config_mod
+import socket
 import time
 from typing import Union, Dict
 from threading import Event, Thread
@@ -94,7 +95,7 @@ def wait_for_api_ready():
     """
     while True:
         try:
-            req = requests.get('http://localhost/api/healthcheck')
+            req = requests.get('http://localhost/api/healthcheck', timeout=10)
             req.raise_for_status()
             if req.status_code == 200:
                 break
@@ -144,6 +145,8 @@ def main():
     Returns: None
 
     """
+
+    socket.setdefaulttimeout(network_timeout)
 
     main_event: Event = Event()
     agent_exit_flag: bool = True

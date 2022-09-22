@@ -2,11 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import base64
+import contextlib
 import datetime
 import json
 import subprocess
 import docker
 import logging
+import math
 import mock
 import requests
 import unittest
@@ -31,7 +33,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
             }
         }
         self.job_engine_lite_component = 'fake-job-lite'
-        logging.disable(logging.CRITICAL)
+        logging.disable(logging.INFO)
 
     def tearDown(self):
         self.obj.client.close()
@@ -332,39 +334,68 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_containers_run.assert_called_once()
         mock_net_connect.assert_called_once_with(job_exec_id, 'bridge')
 
+    # Only available in Python >= 3.10
+    @contextlib.contextmanager
+    def assertNoLogs(self, logger=None, level=None):
+        len_log_records = None
+        exception_in_with = False
+        try:
+            with self.assertLogs(logger=logger, level=level) as log:
+                try:
+                    yield log
+                except Exception:
+                    exception_in_with = True
+                    raise
+                finally:
+                    len_log_records = len(log.records)
+        except AssertionError as ae:
+            if exception_in_with:
+                print(f'raise {ae}')
+                raise
+
+        print('finally')
+        print(f'len_log_records={len_log_records}')
+        if len_log_records > 0:
+            raise AssertionError('Unexpected logs found: {!r}'.format(log.output))
+
     def test_collect_container_metrics_cpu(self):
         cpu_stat = {
             "cpu_stats": {
                 "cpu_usage": {
+                    "total_usage": "30"
+                },
+                "system_cpu_usage": "300",
+            },
+            "precpu_stats": {
+                "cpu_usage": {
                     "total_usage": "10"
                 },
                 "system_cpu_usage": "100",
-                "online_cpus": 2
             },
+            "online_cpus": 2,
         }
-        old_cpu_total = 5
-        old_cpu_system = 50
-        err = []
+
         # if all is well, we should expect a float value bigger than 0
-        self.assertIsInstance(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err),
+        self.assertIsInstance(self.obj.collect_container_metrics_cpu(cpu_stat),
                               float,
                               "Received unexpected type of CPU usage percentage for container")
-        self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 20.0,
-                         "The provided default should return a CPU usage of 20%, but that was not the case")
-        self.assertEqual(len(err), 0,
-                         "There should not have been any CPU collection errors")
+        with self.assertNoLogs(level='WARNING') as log:
+            self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat), 20.0,
+                             "The provided default should return a CPU usage of 20%, but that was not the case")
 
-        # if online_cpus is not reported, then we get 0% usage
-        cpu_stat['cpu_stats'].pop('online_cpus')
-        self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 0.0,
-                         "Expecting 0% CPU usage due to lack of details, but got something else")
+        # if online_cpus is not reported, then we get 'nan' usage
+        cpu_stat.pop('online_cpus')
+        self.assertTrue(math.isnan(self.obj.collect_container_metrics_cpu(cpu_stat)),
+                        "Expecting 'nan' CPU usage due to lack of details, but got something else")
 
-        # if a mandatory attribute does not exist, then we get 0% again, but with an error
+        # if a mandatory attribute does not exist, then we get 'nan' again, but with an error
         cpu_stat.pop('cpu_stats')
-        self.assertEqual(self.obj.collect_container_metrics_cpu(cpu_stat, old_cpu_total, old_cpu_system, err), 0.0,
-                         "Expecting 0% CPU usage due to missing mandatory keys, but got something else")
-        self.assertGreater(len(err), 0,
-                           "Expecting an error due to the lack to CPU info to collect, but did not get any")
+        cpu_stat['online_cpus'] = 2
+        with self.assertLogs(level='WARNING') as log:
+            self.assertTrue(math.isnan(self.obj.collect_container_metrics_cpu(cpu_stat)),
+                            "Expecting 'nan' CPU usage due to missing mandatory keys, but got something else")
+            self.assertIn('Failed to get CPU', '\n'.join(log.output),
+                          'Expecting an error due to the lack to CPU info to collect, but did not get any')
 
     def test_collect_container_metrics_mem(self):
         mem_stat = {
@@ -377,24 +408,24 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         }
         err = []
         # if all is well, we expect a float value higher than 0.0%
-        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (50.0, 1, 2),
+        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat), (50.0, 1, 2),
                          "Expecting a memory usage of 50%, but got something else instead")
         self.assertEqual(len(err), 0,
                          "There should not have been any Memory collection errors")
 
         # if the memory limit is set to 0, then we expect 0%, with no errors
         mem_stat['memory_stats']['limit'] = 0
-        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (0.0, 1, 0),
+        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat), (0.0, 1, 0),
                          "Expecting a memory usage of 50%, but got something else instead")
         self.assertEqual(len(err), 0,
                          "There should not have been any Memory collection errors, even though the results was 0%")
 
         # if there are missing fields, then an error should be added, and 0% should be returned
         mem_stat.pop('memory_stats')
-        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat, err), (0.0, 0.0, 0.0),
+        self.assertEqual(self.obj.collect_container_metrics_mem(mem_stat), (0.0, 0.0, 0.0),
                          "Expecting 0% due to missing fields, but got something else")
-        self.assertGreater(len(err), 0,
-                           "There should have been Memory collection errors since fields are missing")
+        #self.assertGreater(len(err), 0,
+        #                   "There should have been Memory collection errors since fields are missing")
 
     def test_collect_container_metrics_net(self):
         net_stat = {
@@ -425,25 +456,24 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                     }]
             }
         }
-        err = []
         # if all goes well, we expect 1MB blk_in and 2MB blk_out, and no errors
-        self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (2, 1),
-                         'Failed to get block statistics for a container')
-        self.assertEqual(err, [],
-                         'Reporting errors on blk stats when there should not be any')
+        with self.assertNoLogs(level='WARNING') as log:
+            self.assertEqual(self.obj.collect_container_metrics_block(blk_stat), (2, 1),
+                             'Failed to get block statistics for a container')
 
         # if the blk_stats are misformatted or there is any other exception during
         # collection, then we get 0MBs for the corresponding metric, and an error
         blk_stat['blkio_stats']['io_service_bytes_recursive'][0]['value'] = "saasd" # not a number
-        self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (2, 0),
-                         'Expected 0MBs for blk_in (due to misformatted value, but got something else instead')
-        self.assertEqual(err, ['blk_in'],
-                         'An error occurred while collecting the container blk_in, but it was not reported')
+        with self.assertLogs(level='WARNING') as log:
+            self.assertEqual(self.obj.collect_container_metrics_block(blk_stat), (2, 0),
+                             'Expected 0MBs for blk_in (due to misformatted value, but got something else instead')
+            self.assertIn('Failed to get block usage (In)', '\n'.join(log.output),
+                          'An error occurred while collecting the container blk_in, but it was not reported')
 
         # if blkio stats are missing a field, then we expect (0,0) MBs
         blk_stat.pop('blkio_stats')
         err = []
-        self.assertEqual(self.obj.collect_container_metrics_block(blk_stat, err), (0, 0),
+        self.assertEqual(self.obj.collect_container_metrics_block(blk_stat), (0, 0),
                          'Expected 0MBs for container block stats (due to missing stats), but got something else')
         self.assertEqual(err, [],
                          'There should be no errors reported when blk stats are not given by Docker')
@@ -452,10 +482,11 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_net')
     @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_mem')
     @mock.patch('agent.orchestrator.docker.DockerClient.collect_container_metrics_cpu')
-    @mock.patch('docker.api.container.ContainerApiMixin.stats')
+    @mock.patch('tests.utils.fake.MockContainer.stats') #@mock.patch('docker.api.container.ContainerApiMixin.stats')
     @mock.patch('docker.models.containers.ContainerCollection.list')
     def test_collect_container_metrics(self, mock_containers_list, mock_container_stats, mock_get_cpu,
                                        mock_get_mem, mock_get_net, mock_get_block):
+
         # if there are no containers, we should get an empty list
         mock_containers_list.return_value = []
         stats = []
@@ -480,26 +511,26 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
             "online_cpus": 2
         }
         stats = [
-            '{"cpu_stats": {}}',
-            '{"cpu_stats": %s}' % json.dumps(cpu_stats)
+            {"cpu_stats": {}},
+            {"cpu_stats": cpu_stats}
         ]
-        mock_container_stats.return_value = iter(stats)
+        mock_container_stats.return_value = stats[1]
         self.assertIsInstance(self.obj.collect_container_metrics(), list,
                               'Expecting a list from the container metrics collection, but got something else')
         # there is only 1 container, so each collector should only have been called once
-        mock_get_cpu.assert_called_once_with(json.loads(stats[1]), 0, 0, [])
+        mock_get_cpu.assert_called_once_with(stats[1])
 
         # if all containers have valid stats though, we should expect the "old_cpu" to be different from (0,0)
         # and the output to container all the expected fields to be included in the telemetry
         mock_get_cpu.reset_mock()
         stats[0] = stats[1]
-        mock_container_stats.return_value = iter(stats)
+        mock_container_stats.return_value = stats[1]
         expected_fields = ['id', 'name', 'container-status',
                            'cpu-percent', 'mem-usage-limit', 'mem-percent',
                            'net-in-out', 'blk-in-out', 'restart-count']
         self.assertTrue(set(expected_fields).issubset(list(self.obj.collect_container_metrics()[0].keys())),
                         'Received malformed container stats from the statistics collection mechanism')
-        mock_get_cpu.assert_called_once_with(json.loads(stats[1]), old_cpu_total_usage, old_cpu_system_cpu_usage, [])
+        mock_get_cpu.assert_called_once_with(stats[1])
 
     @mock.patch('socket.gethostname')
     @mock.patch('docker.models.containers.ContainerCollection.get')

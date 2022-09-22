@@ -31,6 +31,8 @@ class ContainerStatsMonitor(Monitor):
         self.swarm_node_cert_path: str = telemetry.swarm_node_cert
         self.nuvla_timestamp_format: str = telemetry.nuvla_timestamp_format
 
+        self.data.containers = {}
+
         if not telemetry.edge_status.container_stats:
             telemetry.edge_status.container_stats = self.data
 
@@ -41,15 +43,12 @@ class ContainerStatsMonitor(Monitor):
         """
         it_containers: List = self.client_runtime.collect_container_metrics()
 
-        self.data.containers = {}
+
         for i in it_containers:
             it_cont: ContainerStatsData = ContainerStatsData.parse_obj(i)
             self.data.containers[it_cont.id] = it_cont
 
     def run(self) -> None:
-        if not self.data.containers:
-            self.data.containers = {}
-
         while True:
             self.refresh_container_info()
             self.update_data()
