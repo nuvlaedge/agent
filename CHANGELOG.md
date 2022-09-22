@@ -1,4 +1,10 @@
 # Changelog
+## [2.8.2] - 2022-09-22
+### Added 
+ - add code lost during refactor (cherry-pick)
+### Changed
+ - container_stats.py: fixed possible None value
+ - fix tests
 ## [2.8.1] - 2022-09-07
 ### Added 
  - Add missing dependency lsblk 
