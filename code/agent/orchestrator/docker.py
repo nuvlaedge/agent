@@ -245,45 +245,38 @@ class DockerClient(ContainerRuntimeClient):
                             f'{str(e)}')
 
     @staticmethod
-    def collect_container_metrics_cpu(cstats: dict, old_cpu_total: float,
-                                      old_cpu_system: float,
-                                      errors: list = None) -> float:
+    def collect_container_metrics_cpu(container_stats: dict) -> float:
         """
         Calculates the CPU consumption for a give container
 
-        :param cstats: Docker container statistics
-        :param old_cpu_total: previous total CPU usage
-        :param old_cpu_system: previous system CPU usage
-        :param errors: ongoing list of collection errors to append to if needed
+        :param container_stats: Docker container statistics
         :return: CPU consumption in percentage
         """
+        cs = container_stats
+        cpu_percent = float('nan')
+
         try:
-            cpu_total = float(cstats["cpu_stats"]["cpu_usage"]["total_usage"])
-            cpu_system = float(cstats["cpu_stats"]["system_cpu_usage"])
+            cpu_delta = float(cs["cpu_stats"]["cpu_usage"]["total_usage"]) - \
+                        float(cs["precpu_stats"]["cpu_usage"]["total_usage"])
+            system_delta = float(cs["cpu_stats"]["system_cpu_usage"]) - \
+                           float(cs["precpu_stats"]["system_cpu_usage"])
+            online_cpus_alt = len(cs["cpu_stats"]["cpu_usage"].get("percpu_usage", []))
+            online_cpus = cs.get('online_cpus', online_cpus_alt)
 
-            online_cpus = cstats["cpu_stats"] \
-                .get("online_cpus",
-                     len(cstats["cpu_stats"]["cpu_usage"].get("percpu_usage", [])))
-
-            cpu_delta = cpu_total - old_cpu_total
-            system_delta = cpu_system - old_cpu_system
-
-            cpu_percent = 0.0
             if system_delta > 0.0 and online_cpus > 0:
                 cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
-        except (IndexError, KeyError, ValueError, ZeroDivisionError):
-            errors.append("CPU")
-            cpu_percent = 0.0
+        except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
+            logging.warning('Failed to get CPU usage for container '
+                            f'{cs.get("id","?")[:12]} ({cs.get("name")}): {e}')
 
         return cpu_percent
 
     @staticmethod
-    def collect_container_metrics_mem(cstats: dict, errors: list) -> tuple:
+    def collect_container_metrics_mem(cstats: dict) -> tuple:
         """
         Calculates the Memory consumption for a give container
 
         :param cstats: Docker container statistics
-        :param errors: ongoing list of collection errors to append to if needed
         :return: Memory consumption tuple with percentage, usage and limit
         """
         try:
@@ -298,9 +291,10 @@ class DockerClient(ContainerRuntimeClient):
                 mem_percent = 0.00
             else:
                 mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
-        except (IndexError, KeyError, ValueError):
-            errors.append("Mem")
+        except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
             mem_percent = mem_usage = mem_limit = 0.00
+            logging.warning('Failed to get Memory consumption for container '
+                            f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
 
         return mem_percent, mem_usage, mem_limit
 
@@ -313,129 +307,108 @@ class DockerClient(ContainerRuntimeClient):
         :return: tuple with network bytes IN and OUT
         """
         net_in = net_out = 0.0
-        if "networks" in cstats:
-            net_in = sum(cstats["networks"][iface]["rx_bytes"]
-                         for iface in cstats["networks"]) / 1000 / 1000
-            net_out = sum(cstats["networks"][iface]["tx_bytes"]
-                          for iface in cstats["networks"]) / 1000 / 1000
+        try:
+            if "networks" in cstats:
+                net_in = sum(cstats["networks"][iface]["rx_bytes"]
+                             for iface in cstats["networks"]) / 1000 / 1000
+                net_out = sum(cstats["networks"][iface]["tx_bytes"]
+                              for iface in cstats["networks"]) / 1000 / 1000
+        except (IndexError, KeyError, ValueError) as e:
+            logging.warning('Failed to get Network consumption for container '
+                            f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
 
         return net_in, net_out
 
     @staticmethod
-    def collect_container_metrics_block(cstats: dict, errors: list) -> tuple:
+    def collect_container_metrics_block(cstats: dict) -> tuple:
         """
         Calculates the block consumption for a give container
 
         :param cstats: Docker container statistics
-        :param errors: ongoing list of collection errors to append to if needed
         :return: tuple with block bytes IN and OUT
         """
+        blk_out = blk_in = 0.0
+
         io_bytes_recursive = cstats.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
         if io_bytes_recursive:
             try:
                 blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
-            except (IndexError, KeyError, TypeError):
-                errors.append("blk_in")
-                blk_in = 0.0
-
+            except (IndexError, KeyError, TypeError) as e:
+                logging.warning('Failed to get block usage (In) for container '
+                                f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
             try:
                 blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
             except (IndexError, KeyError, TypeError):
-                errors.append("blk_out")
-                blk_out = 0.0
-        else:
-            blk_out = blk_in = 0.0
+                logging.warning('Failed to get block usage (Out) for container '
+                                f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
 
         return blk_out, blk_in
 
+    def list_containers(self, *args, **kwargs):
+        """
+        Bug: Sometime the Docker Python API fails to get the list of containers with the exception:
+        'requests.exceptions.HTTPError: 404 Client Error: Not Found'
+        This is due to docker listing containers and then inpecting them one by one.
+        If in the mean time a container has been removed, it fails with the above exception.
+        As a workaround, the list operation is retried if an exception occurs.
+        """
+        tries = 0
+        max_tries = 3
+
+        while True:
+            try:
+                return self.client.containers.list(*args, **kwargs)
+            except requests.exceptions.HTTPError:
+                tries += 1
+                logging.warning(f'Failed to list containers. Try {tries}/{max_tries}.')
+                if tries >= max_tries:
+                    raise
+
+    def get_containers_stats(self, *args, **kwargs):
+        containers_stats = []
+        for container in self.list_containers(*args, **kwargs):
+            try:
+                containers_stats.append((container, container.stats(stream=False)))
+            except Exception as e:
+                logging.warning('Failed to get stats for container '
+                                f'{container.short_id} ({container.name}): {e}')
+        return containers_stats
+
     def collect_container_metrics(self):
+        containers_metrics = []
 
-        docker_stats = []
-
-        all_containers = self.client.containers.list()
-        for container in all_containers:
-            docker_stats.append(self.client.api.stats(container.id))
-
-        # get first samples (needed for cpu monitoring)
-        old_cpu = []
-
-        for c_stat in docker_stats:
-            try:
-                container_stats = json.loads(next(c_stat))
-            except docker.errors.NotFound:
-                logging.warning(f'Docker container id {c_stat} not found')
-                old_cpu.append(None)
-                continue
-
-            try:
-                old_cpu.append(
-                    (float(container_stats["cpu_stats"]["cpu_usage"]["total_usage"]),
-                     float(container_stats["cpu_stats"]["system_cpu_usage"])))
-            except KeyError:
-                old_cpu.append((0.0, 0.0))
-
-        # now the actual monitoring
-        out = []
-        for i, c_stat in enumerate(docker_stats):
-            if not old_cpu:
-                logging.warning(f'Container {all_containers[i]} '
-                                f'info not available, skipping this iteration')
-                continue
-            container = all_containers[i]
-            try:
-                container_stats = json.loads(next(c_stat))
-            except StopIteration:
-                logging.warning(f'Container {c_stat} stats iteration finished, return')
-                continue
-            except docker.errors.NotFound:
-                logging.warning(f'Docker container id {c_stat} not found')
-                continue
-            collection_errors = []
-
-            #
-            # -----------------
+        for container, stats in self.get_containers_stats():
             # CPU
             cpu_percent = \
-                self.collect_container_metrics_cpu(container_stats, old_cpu[i][0],
-                                                   old_cpu[i][1], collection_errors)
-            #
-            # -----------------
-            # MEM
+                self.collect_container_metrics_cpu(stats)
+            # RAM
             mem_percent, mem_usage, mem_limit = \
-                self.collect_container_metrics_mem(container_stats, collection_errors)
-            #
-            # -----------------
+                self.collect_container_metrics_mem(stats)
             # NET
-            net_in, net_out = self.collect_container_metrics_net(container_stats)
-            #
-            # -----------------
-            # BLOCK
+            net_in, net_out = \
+                self.collect_container_metrics_net(stats)
+            # DISK
             blk_out, blk_in = \
-                self.collect_container_metrics_block(container_stats, collection_errors)
+                self.collect_container_metrics_block(stats)
 
-            if collection_errors:
-                logging.info(f"Cannot get {','.join(collection_errors)} "
-                             f"stats for container {container.name}")
-
-            # -----------------
-            out.append({
+            containers_metrics.append({
                 'id': container.id,
                 'name': container.name,
                 'container-status': container.status,
                 'cpu-percent': "%.2f" % round(cpu_percent, 2),
-                'mem-usage-limit': ("{}MiB / {}GiB".format(round(mem_usage, 2),
-                                                           round(mem_limit / 1024, 2))),
+                'mem-usage-limit': ("{}MiB / {}MiB".format(round(mem_usage, 1),
+                                                           round(mem_limit, 1))),
                 'mem-percent': "%.2f" % mem_percent,
-                'net-in-out': "%sMB / %sMB" % (round(net_in, 2), round(net_out, 2)),
-                'blk-in-out': "%sMB / %sMB" % (round(blk_in, 2), round(blk_out, 2)),
+                'net-in-out': "%sMB / %sMB" % (round(net_in, 1), round(net_out, 1)),
+                'blk-in-out': "%sMB / %sMB" % (round(blk_in, 1), round(blk_out, 1)),
                 'restart-count': (int(container.attrs["RestartCount"])
                                   if "RestartCount" in container.attrs else 0)
             })
 
-        return out
+        return containers_metrics
 
     def get_installation_parameters(self, search_label):
-        nuvlabox_containers = self.client.containers.list(filters={'label': search_label})
+        nuvlabox_containers = self.list_containers(filters={'label': search_label})
 
         try:
             myself = self.client.containers.get(socket.gethostname())
@@ -665,7 +638,7 @@ class DockerClient(ContainerRuntimeClient):
         return k8s_cluster_info
 
     def get_all_nuvlabox_components(self) -> list:
-        nuvlabox_containers = self.client.containers.list(filters={'label': 'nuvlabox.component=True'},
-                                                          all=True)
+        nuvlabox_containers = self.list_containers(filters={'label': 'nuvlabox.component=True'},
+                                                   all=True)
 
         return list(map(lambda y: y.name, nuvlabox_containers))
