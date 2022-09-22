@@ -1,4 +1,8 @@
 # Changelog
+## [2.9.2] - 2022-09-22
+### Added
+### Changed
+ - Port of fixes from 2.8.1 and 2.8.2
 
 ## Unreleased
 ### Added
