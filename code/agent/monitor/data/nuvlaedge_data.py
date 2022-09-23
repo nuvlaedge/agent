@@ -1,7 +1,7 @@
 """
     NuvlaEdge data structures module
 """
-from typing import Union, List
+from typing import Union, List, Optional
 
 from pydantic import Field
 
@@ -11,8 +11,10 @@ from agent.monitor import BaseDataStructure
 class InstallationParametersData(BaseDataStructure):
     """ Provides a standard structure for installation parameters data """
 
-    project_name: Union[str, None] = Field(alias='project-name')
-    environment: Union[List[str], None]
+    project_name: Optional[str] = Field(alias='project-name')
+    environment: Optional[List[str]]
+    working_dir: Optional[str] = Field(alias='working-dir')
+    config_files: Optional[List[str]] = Field(alias='config-files')
 
 
 class NuvlaEdgeData(BaseDataStructure):
