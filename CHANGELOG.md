@@ -1,4 +1,8 @@
 # Changelog
+## [2.8.3] - 2022-09-24
+### Added
+### Changed
+ - Fix bug where installation-parameters working-dir and config-files were not set (backport)
 ## [2.8.2] - 2022-09-22
 ### Added 
  - add code lost during refactor (cherry-pick)
