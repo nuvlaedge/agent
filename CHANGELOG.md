@@ -1,4 +1,8 @@
 # Changelog
+## [2.9.3] - 2022-09-26
+### Added
+### Changed
+ - Fix bug where installation-parameters working-dir and config-files were not set
 ## [2.9.2] - 2022-09-22
 ### Added
 ### Changed
@@ -17,6 +21,11 @@
 ### Added
 ### Changed
  - Migration to NuvlaEdge
+
+## [2.8.3] - 2022-09-24
+### Added
+### Changed
+ - Fix bug where installation-parameters working-dir and config-files were not set (backport)
 
 ## [2.8.2] - 2022-09-22
 ### Added
