@@ -2,12 +2,16 @@
 Implementation of the Monitor and BaseDataStructure to be extended by every
 component and data structure
 """
+import json
+import os
+import time
 import logging
+from datetime import datetime
 from threading import Thread
 from abc import ABC, abstractmethod
-from typing import Type, Dict
+from typing import Type, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
 
 
 class Monitor(ABC, Thread):
@@ -21,7 +25,12 @@ class Monitor(ABC, Thread):
         # Define default thread attributes
         self.daemon = True
         self.thread_period: int = thread_period
-        self.is_thread: bool = False
+
+        # TODO: FUTURE: Standardize system conf propagation
+        if os.environ.get('NE_THREAD_MONITORS', 'False') == 'False':
+            self.is_thread: bool = False
+        else:
+            self.is_thread: bool = True
 
         self.name: str = name
         self.data: data_type = data_type(telemetry_name=name)
@@ -31,6 +40,7 @@ class Monitor(ABC, Thread):
 
         # Enable flag
         self._enabled_monitor: bool = enable_monitor
+        self.updated: bool = False
 
     @property
     def enabled_monitor(self):
@@ -69,6 +79,13 @@ class Monitor(ABC, Thread):
         """
         ...
 
+    def run(self) -> None:
+        while True:
+            self.update_data()
+            self.updated = True
+
+            time.sleep(self.thread_period)
+
 
 def underscore_to_hyphen(field_name: str) -> str:
     """
@@ -87,9 +104,18 @@ class BaseDataStructure(BaseModel):
     Base data structure for providing a common configuration for all the
     structures.
     """
+    # updated: bool = False
+    # updated_date: Optional[datetime]
 
     class Config:
         """ Configuration class for base telemetry data """
         allow_population_by_field_name = True
         alias_generator = underscore_to_hyphen
         validate_assignment = True
+
+    # @root_validator
+    # def check_updated(cls, values):
+    #     values['updated'] = True
+    #     values['updated_date'] = datetime.now()
+        # print(f'\n\n {json.dumps(values, indent=4)} \n\n')
+        # return values

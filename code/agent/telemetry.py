@@ -271,22 +271,38 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                                         f'Re-initializing...')
                     self.monitor_list[monitor_name] = \
                         get_monitor(monitor_name)(monitor_name, self, True)
-                else:
-                    self.logger.info(f'Starting monitor {it_monitor.name} '
-                                      f'thread for first time')
-                    it_monitor.start()
+
+                self.logger.info(f'Starting monitor {it_monitor.name} '
+                                 f'thread for first time')
+                it_monitor.start()
+
             else:
                 if not it_monitor.is_alive():
                     init_time: float = time.time()
 
-                    it_monitor.update_data()
+                    try:
+                        it_monitor.update_data()
+                        it_monitor.updated = True
+                    except Exception as ex:
+                        self.logger.warning(f'Something went wrong updating monitor '
+                                            f'{monitor_name}. Error: {ex}')
+
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
         self.logger.debug(f'Monitors processing time '
                           f'{json.dumps(monitor_process_time, indent=4)}')
 
+        # Retrieve monitoring data
         for it_monitor in self.monitor_list.values():
-            it_monitor.populate_nb_report(status_dict)
+            try:
+                if it_monitor.updated:
+                    it_monitor.populate_nb_report(status_dict)
+                else:
+                    self.logger.info(f'Data not updated yet in monitor '
+                                     f'{it_monitor.name}')
+            except Exception as ex:
+                self.logger.warning(f'Error retrieving data from monitor '
+                                    f'{it_monitor.name}. Error: {ex}')
 
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
@@ -304,11 +320,15 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(
-            status_for_nuvla,
-            status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
-            status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
-            status_for_nuvla.get('resources', {}).get('disks', []))
+        try:
+            # Try to retrieve data if available
+            self.send_mqtt(
+                status_for_nuvla,
+                status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
+                status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
+                status_for_nuvla.get('resources', {}).get('disks', []))
+        except AttributeError:
+            pass
 
         # get all status for internal monitoring
         all_status = status_for_nuvla.copy()

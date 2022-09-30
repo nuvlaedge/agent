@@ -43,16 +43,9 @@ class ContainerStatsMonitor(Monitor):
         """
         it_containers: List = self.client_runtime.collect_container_metrics()
 
-
         for i in it_containers:
             it_cont: ContainerStatsData = ContainerStatsData.parse_obj(i)
             self.data.containers[it_cont.id] = it_cont
-
-    def run(self) -> None:
-        while True:
-            self.refresh_container_info()
-            self.update_data()
-            time.sleep(self.thread_period)
 
     def get_cluster_manager_attrs(self, managers: list, node_id: str) -> tuple:
         """
@@ -149,6 +142,7 @@ class ContainerStatsMonitor(Monitor):
         return None
 
     def update_data(self):
+        self.refresh_container_info()
         version: str = self.client_runtime.get_client_version()
 
         if NuvlaBoxCommon.ORCHESTRATOR == 'docker':
