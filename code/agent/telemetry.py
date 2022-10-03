@@ -320,6 +320,7 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
             datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
 
         # Publish the telemetry into the Data Gateway
+        all_status = status_for_nuvla.copy()
         try:
             # Try to retrieve data if available
             self.send_mqtt(
@@ -327,20 +328,19 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
                 status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
                 status_for_nuvla.get('resources', {}).get('disks', []))
-        except AttributeError:
-            pass
 
-        # get all status for internal monitoring
-        all_status = status_for_nuvla.copy()
-        all_status.update({
-            "cpu-usage": psutil.cpu_percent(),
-            "cpu-load": status_for_nuvla.get('resources', {}).get('cpu', {}).get('load'),
-            "disk-usage": psutil.disk_usage("/")[3],
-            "memory-usage": psutil.virtual_memory()[2],
-            "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
-            "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
-            "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
-        })
+            # get all status for internal monitoring
+            all_status.update({
+                "cpu-usage": psutil.cpu_percent(),
+                "cpu-load": status_for_nuvla.get('resources', {}).get('cpu', {}).get('load'),
+                "disk-usage": psutil.disk_usage("/")[3],
+                "memory-usage": psutil.virtual_memory()[2],
+                "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
+                "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
+                "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
+            })
+        except AttributeError:
+            self.logger.warning(f'Resources information not ready yet. ')
 
         return status_for_nuvla, all_status
 
