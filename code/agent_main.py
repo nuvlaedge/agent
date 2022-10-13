@@ -8,6 +8,7 @@ from argparse import ArgumentParser
 import os
 import logging
 from logging import config as log_config_mod
+import signal
 import socket
 import time
 from typing import Union, Dict
@@ -27,6 +28,25 @@ default_log_filename: str = 'agent.log'
 data_volume: str = '/srv/nuvlaedge/shared'
 network_timeout: int = 10
 refresh_interval: int = 30
+
+
+def log_threads_stackstraces():
+    import sys
+    import threading
+    import traceback
+    import faulthandler
+    print_args = dict(file=sys.stderr, flush=True)
+    print("\nfaulthandler.dump_traceback()", **print_args)
+    faulthandler.dump_traceback()
+    print("\nthreading.enumerate()", **print_args)
+    for th in threading.enumerate():
+        print(th, **print_args)
+        traceback.print_stack(sys._current_frames()[th.ident])
+    print(**print_args)
+
+
+def signal_usr1(signum, frame):
+    log_threads_stackstraces()
 
 
 def parse_arguments() -> ArgumentParser:
@@ -143,8 +163,9 @@ def main():
       - Infrastructure
 
     Returns: None
-
     """
+
+    signal.signal(signal.SIGUSR1, signal_usr1)    
 
     socket.setdefaulttimeout(network_timeout)
 
