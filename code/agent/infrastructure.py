@@ -13,11 +13,14 @@ import docker.errors as docker_err
 import json
 import requests
 import time
-from agent.common import NuvlaBoxCommon
-from agent.telemetry import Telemetry
 from datetime import datetime
 from os import path, stat, remove
 from threading import Thread
+
+from agent.common import NuvlaBoxCommon, util
+from agent.telemetry import Telemetry
+from agent.schemas.worker_config import WorkerConfig
+
 
 
 class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
@@ -42,8 +45,13 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = 'compute-api'
-        self.compute_api_port = '5000'
+
+        # Gather compute-api data
+        self.compute_api_config: WorkerConfig = \
+            util.gather_config_from_component('compute_api.json')
+        self.compute_api = self.compute_api_config.container_name
+        self.compute_api_port = self.compute_api_config.ports.get('5000/tcp').host_port
+
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -329,9 +337,9 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
 
         api_endpoint = None
         if vpn_ip:
-            api_endpoint = f"https://{vpn_ip}:{container_api_port}"
+            api_endpoint = f"https://{vpn_ip}:{self.compute_api_port}"
         elif container_api_ip and container_api_port:
-            api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+            api_endpoint = f"https://{container_api_ip}:{self.compute_api_port}"
 
         return api_endpoint, container_api_port
 
@@ -449,6 +457,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
                 old_commission_payload,
                 self.container_runtime.join_token_manager_keyname,
                 minimum_commission_payload)
+
             self.commissioning_attr_has_changed(
                 commission_payload,
                 old_commission_payload,

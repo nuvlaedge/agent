@@ -5,6 +5,7 @@ Also controls the execution flow and provides utilities to the children dependen
 import logging
 import os
 import threading
+import time
 from threading import Event, Thread
 from typing import Union, NoReturn, List, Dict
 from copy import copy
@@ -168,6 +169,9 @@ class Agent:
                              f'{", ".join(del_attr)}')
 
         try:
+            if not status.get('components') and len(status) > 1 and 'components' in \
+                    status.keys():
+                status.pop('components')
             resource: CimiResource = self.nuvlaedge_common.api().edit(
                 self.nuvlaedge_status_id,
                 data=status,

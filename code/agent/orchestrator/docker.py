@@ -1,15 +1,15 @@
 import base64
-import json
 import logging
 import os
-
 import socket
 import yaml
-
 from subprocess import run, PIPE, TimeoutExpired
 
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
 import docker
+
+from agent.common import util
+from agent.schemas.worker_config import WorkerConfig
+from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
 
 
 class InferIPError(Exception):
@@ -31,6 +31,15 @@ class DockerClient(ContainerRuntimeClient):
         self.join_token_manager_keyname = 'swarm-token-manager'
         self.join_token_worker_keyname = 'swarm-token-worker'
         self.data_gateway_name = "data-gateway"
+
+        self.compute_api_conf: WorkerConfig = \
+            util.gather_config_from_component('compute_api.json')
+        self.compute_api_dns: str = self.compute_api_conf.container_name
+        self.compute_api_port: str = self.compute_api_conf.ports.get('5000/tcp').host_port
+
+        self.vpn_client_conf: WorkerConfig = \
+            util.gather_config_from_component('vpn_client.json')
+        self.vpn_client_dns: str = self.vpn_client_conf.container_name
 
     def get_client_version(self) -> str:
         return self.client.version()['Version']
@@ -145,8 +154,7 @@ class DockerClient(ContainerRuntimeClient):
         return self.cast_dict_to_list(node_labels)
 
     def is_vpn_client_running(self):
-        vpn_client_running = True if self.client.containers.get("vpn-client").status == 'running' else False
-        return vpn_client_running
+        return self.client.containers.get(self.vpn_client_dns).status == 'running'
 
     def install_ssh_key(self, ssh_pub_key, ssh_folder):
         cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'

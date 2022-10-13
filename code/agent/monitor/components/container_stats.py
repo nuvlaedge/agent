@@ -22,7 +22,7 @@ class ContainerStatsMonitor(Monitor):
 
     """
     def __init__(self, name: str, telemetry, enable_monitor: bool):
-        super().__init__(name, DeploymentData, enable_monitor)
+        super().__init__(name, DeploymentData, enable_monitor, thread_period=5)
         self.is_thread = True
         self.client_runtime: NuvlaBoxCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
@@ -142,6 +142,7 @@ class ContainerStatsMonitor(Monitor):
         return None
 
     def update_data(self):
+        t = time.time()
         self.refresh_container_info()
         version: str = self.client_runtime.get_client_version()
 
@@ -169,7 +170,8 @@ class ContainerStatsMonitor(Monitor):
             nuvla_report['kubelet-version'] = self.data.kubelet_version
 
         if self.data.cluster_data:
-            nuvla_report.update(self.data.cluster_data.dict(by_alias=True, exclude_none=True))
+            nuvla_report.update(self.data.cluster_data.dict(by_alias=True,
+                                                            exclude_none=True))
 
         if self.data.containers:
             nuvla_report['components'] = \

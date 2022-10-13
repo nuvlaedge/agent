@@ -53,7 +53,7 @@ def configure_root_logger(logger: logging.Logger, debug: bool):
     if debug:
         logger.setLevel(logging.DEBUG)
     else:
-        env_level: str = os.environ.get('NUVLABOX_LOG_LEVEL', '')
+        env_level: str = os.environ.get('NUVLAEDGE_LOG_LEVEL', '')
         if env_level:
             logger.setLevel(logging.getLevelName(env_level))
         else:

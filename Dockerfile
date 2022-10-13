@@ -45,4 +45,6 @@ VOLUME /srv/nuvlabox/shared
 
 ONBUILD RUN ./license.sh
 
+RUN chmod +x /opt/nuvlabox/agent_main.py
+
 ENTRYPOINT ["./agent_main.py"]

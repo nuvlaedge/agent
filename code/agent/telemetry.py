@@ -295,6 +295,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
         # Retrieve monitoring data
         for it_monitor in self.monitor_list.values():
             try:
+                # print(f'Mon name {it_monitor.name} --- Updated: {it_monitor.updated} '
+                #       f'--- Thread {it_monitor.is_thread}')
                 if it_monitor.updated:
                     it_monitor.populate_nb_report(status_dict)
                 else:

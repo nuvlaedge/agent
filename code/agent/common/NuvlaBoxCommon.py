@@ -230,7 +230,7 @@ class NuvlaBoxCommon:
 
         :return: clean nuvlabox ID as a str
         """
-        new_nuvlabox_id = os.getenv('NUVLABOX_UUID')
+        new_nuvlabox_id = os.getenv('NUVLAEDGE_UUID')
 
         if os.path.exists("{}/{}".format(self.data_volume, self.context)):
             try:
@@ -396,6 +396,7 @@ class NuvlaBoxCommon:
 
 dev ${vpn_interface_name}
 dev-type tun
+nobind
 
 # Certificate Configuration
 # CA certificate
