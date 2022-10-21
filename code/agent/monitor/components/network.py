@@ -119,7 +119,6 @@ class NetworkMonitor(Monitor):
             it_route: bytes = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
-                auto_remove=True,
                 remove=True,
                 network="host")
 
