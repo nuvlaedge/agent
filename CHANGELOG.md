@@ -6,6 +6,8 @@
 ### Changed
  - Fix bug where installation-parameters working-dir and config-files were not set (backport)
  - Fix late start of monitor threads
+ - Captured exception caused by late start of the compute-api in the Agent
+ - Added flag auto-remove to force the ip reader container to be removed after execution
 ## [2.8.2] - 2022-09-22
 ### Added 
  - add code lost during refactor (cherry-pick)
