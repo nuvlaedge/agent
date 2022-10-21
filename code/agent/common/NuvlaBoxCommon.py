@@ -396,6 +396,7 @@ class NuvlaBoxCommon:
 
 dev ${vpn_interface_name}
 dev-type tun
+nobind
 
 # Certificate Configuration
 # CA certificate
