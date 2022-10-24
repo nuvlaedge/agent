@@ -42,7 +42,7 @@ class ContainerStatsMonitor(Monitor):
             local data variable
         """
         it_containers: List = self.client_runtime.collect_container_metrics()
-
+        self.data.containers = {}
         for i in it_containers:
             it_cont: ContainerStatsData = ContainerStatsData.parse_obj(i)
             self.data.containers[it_cont.id] = it_cont
