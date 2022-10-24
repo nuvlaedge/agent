@@ -105,7 +105,10 @@ class TestNetworkMonitor(unittest.TestCase):
 
         it_1 = Mock()
         # Decode test
-        it_1.container_runtime.client.containers.run.return_value = b'{}'
+        mock_gather = Mock()
+        mock_gather.name = 'MyName'
+        mock_gather.logs.return_value = b'{}'
+        it_1.container_runtime.client.containers.run.return_value = mock_gather
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", it_1, True)
         self.assertIsInstance(test_ip_monitor.gather_host_ip_route(), str)
@@ -137,7 +140,10 @@ class TestNetworkMonitor(unittest.TestCase):
         status.iface_data = None
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", Mock(), status)
-        test_ip_monitor.runtime_client.client.containers.run.return_value = b"{[]}"
+        mock_gather = Mock()
+        mock_gather.name = 'MyName'
+        mock_gather.logs.return_value = b''
+        test_ip_monitor.runtime_client.client.containers.run.return_value = mock_gather
         test_ip_monitor.set_local_data()
         self.assertFalse(test_ip_monitor.data.local)
 

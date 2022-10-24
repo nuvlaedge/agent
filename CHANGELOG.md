@@ -7,7 +7,7 @@
  - Fix bug where installation-parameters working-dir and config-files were not set (backport)
  - Fix late start of monitor threads
  - Captured exception caused by late start of the compute-api in the Agent
-
+ - Change IP route container to detach mode and manually deleted after retrieving the logs
 ## [2.8.2] - 2022-09-22
 ### Added 
  - add code lost during refactor (cherry-pick)

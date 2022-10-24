@@ -13,6 +13,7 @@ from typing import List, NoReturn, Dict, Union
 
 import requests
 from docker import errors as docker_err
+from docker.models.containers import Container
 
 from agent.common import NuvlaBoxCommon
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface
@@ -116,19 +117,37 @@ class NetworkMonitor(Monitor):
             str if succeeds. None otherwise
         """
         try:
-            it_route: bytes = self.runtime_client.client.containers.run(
+            # This command should return a Container object when detach flag is set to
+            # true
+            it_route: Container = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
-                remove=True,
+                detach=True,
                 network="host")
 
-            return it_route.decode("utf-8")
+            timer: float = time.time()
+            while (self.runtime_client.client.containers.get(it_route.name).status
+                   != 'exited'):
+                time.sleep(0.5)
+                if time.time() - timer > 3:
+                    self.logger.warning(f'IP Container did not finish in time')
+                    break
+
+            try:
+                logs: str = it_route.logs().decode("utf-8")
+                it_route.remove()
+            except docker_err.ContainerError:
+                self.logger.warning(f'Could not remove auxiliary IP container '
+                                    f'{it_route.image}--{it_route.name}')
+                return None
+
+            return logs
 
         except (docker_err.ImageNotFound,
                 docker_err.ContainerError,
                 docker_err.APIError) as ex:
             self.logger.error(f'Local interface data auxiliary container '
-                                f'not run: {ex.explanation}')
+                              f'not run: {ex.explanation}')
             return None
 
     def read_traffic_data(self) -> List:
