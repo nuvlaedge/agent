@@ -109,8 +109,7 @@ class TestNetworkMonitor(unittest.TestCase):
         it_1 = Mock()
         # Decode test
         mock_gather = Mock()
-        mock_gather.name = 'MyName'
-        mock_gather.logs.return_value = b'{}'
+        mock_gather = b'{}'
         it_1.container_runtime.client.containers.run.return_value = mock_gather
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", it_1, True)
@@ -152,8 +151,7 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", it_1, status)
         mock_gather = Mock()
-        mock_gather.name = 'MyName'
-        mock_gather.logs.return_value = b''
+        mock_gather = b''
         test_ip_monitor.runtime_client.client.containers.run.return_value = mock_gather
         test_ip_monitor.set_local_data()
         self.assertFalse(test_ip_monitor.data.local)
