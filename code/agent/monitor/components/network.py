@@ -147,7 +147,7 @@ class NetworkMonitor(Monitor):
             # TODO: unify nuvlaedge microservice constants
 
             self.deployed_name = f'{self.engine_project_name}_iproute'
-            it_route: Container = self.runtime_client.client.containers.run(
+            it_route = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
                 name=self.deployed_name,
