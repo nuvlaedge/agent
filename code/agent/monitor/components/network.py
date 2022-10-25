@@ -154,7 +154,7 @@ class NetworkMonitor(Monitor):
                 remove=True,
                 network="host")
 
-            return it_route.logs().decode("utf-8")
+            return it_route.decode("utf-8")
 
         except (docker_err.ImageNotFound,
                 docker_err.ContainerError,
