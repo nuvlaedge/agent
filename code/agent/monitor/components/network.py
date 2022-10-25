@@ -50,7 +50,9 @@ class NetworkMonitor(Monitor):
         self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
-        self.engine_project_name: str = ''
+        self.engine_project_name: str = self.get_engine_project_name()
+        self.logger.info(f'Running network monitor for project '
+                         f'{self.engine_project_name}')
         self.deployed_name: str = ''
 
         self.last_public_ip: float = 0.0
@@ -59,14 +61,16 @@ class NetworkMonitor(Monitor):
         if not telemetry.edge_status.iface_data:
             telemetry.edge_status.iface_data = self.data
 
-    def get_engine_project_name(self):
+    def get_engine_project_name(self) -> str:
         try:
             container_list: List[Container] = self.runtime_client.client.containers.list()
             for container in container_list:
                 if self._PROJECT_NAME_LABEL_KEY in container.labels.keys():
-                    self.deployed_name = container.labels.get(self._PROJECT_NAME_LABEL_KEY)
+                    return container.labels.get(self._PROJECT_NAME_LABEL_KEY)
         except TypeError:
-            pass
+            self.logger.warning(f'Project name not found')
+
+        return ''
 
     def set_public_data(self) -> NoReturn:
         """
@@ -141,8 +145,6 @@ class NetworkMonitor(Monitor):
             # This command should return a Container object when detach flag is set to
             # true
             # TODO: unify nuvlaedge microservice constants
-            if not self.deployed_name:
-                self.get_engine_project_name()
 
             self.deployed_name = f'{self.engine_project_name}_iproute'
             it_route: Container = self.runtime_client.client.containers.run(
