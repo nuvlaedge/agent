@@ -30,6 +30,7 @@ class NetworkMonitor(Monitor):
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
+    _PROJECT_NAME_LABEL_KEY: str = 'com.docker.compose.project'
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
@@ -49,11 +50,23 @@ class NetworkMonitor(Monitor):
         self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
+        self.engine_project_name: str = ''
+        self.deployed_name: str = ''
+
         self.last_public_ip: float = 0.0
 
         # Initialize the corresponding data on the EdgeStatus class
         if not telemetry.edge_status.iface_data:
             telemetry.edge_status.iface_data = self.data
+
+    def get_engine_project_name(self):
+        try:
+            container_list: List[Container] = self.runtime_client.client.containers.list()
+            for container in container_list:
+                if self._PROJECT_NAME_LABEL_KEY in container.labels.keys():
+                    self.deployed_name = container.labels.get(self._PROJECT_NAME_LABEL_KEY)
+        except TypeError:
+            pass
 
     def set_public_data(self) -> NoReturn:
         """
@@ -117,31 +130,29 @@ class NetworkMonitor(Monitor):
             str if succeeds. None otherwise
         """
         try:
+            old_cont: Container = \
+                self.runtime_client.client.containers.get(self.deployed_name)
+            old_cont.remove()
+        except (docker_err.NotFound, TypeError):
+            self.logger.info(f'Previous container {self.deployed_name} not running, '
+                             f'continue...')
+
+        try:
             # This command should return a Container object when detach flag is set to
             # true
+            # TODO: unify nuvlaedge microservice constants
+            if not self.deployed_name:
+                self.get_engine_project_name()
+
+            self.deployed_name = f'{self.engine_project_name}_iproute'
             it_route: Container = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
-                detach=True,
+                name=self.deployed_name,
+                remove=True,
                 network="host")
 
-            timer: float = time.time()
-            while (self.runtime_client.client.containers.get(it_route.name).status
-                   != 'exited'):
-                time.sleep(0.5)
-                if time.time() - timer > 3:
-                    self.logger.warning(f'IP Container did not finish in time')
-                    break
-
-            try:
-                logs: str = it_route.logs().decode("utf-8")
-                it_route.remove()
-            except docker_err.ContainerError:
-                self.logger.warning(f'Could not remove auxiliary IP container '
-                                    f'{it_route.image}--{it_route.name}')
-                return None
-
-            return logs
+            return it_route.logs().decode("utf-8")
 
         except (docker_err.ImageNotFound,
                 docker_err.ContainerError,

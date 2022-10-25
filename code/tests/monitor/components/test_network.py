@@ -97,6 +97,7 @@ class TestNetworkMonitor(unittest.TestCase):
     def test_gather_host_route(self):
         # Test Raise exception
         it_1 = Mock()
+        it_1.container_runtime.client.containers.list.return_value = []
         it_1.container_runtime.client.containers.run.side_effect = \
             docker_err.APIError("Message")
         test_ip_monitor: monitor.NetworkMonitor = \
@@ -119,8 +120,14 @@ class TestNetworkMonitor(unittest.TestCase):
 
     def test_set_local_data(self):
         # Test no available route IP's
+        runtime_mock = Mock()
+        cont_mock = Mock()
+        cont_mock.labels = {'com.docker.compose.project': 'nuvlaedge_test'}
+        runtime_mock.client.containers.list.return_value = [cont_mock]
+        tel_mock = Mock()
+        tel_mock.container_runtime = runtime_mock
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", Mock(), Mock())
+            monitor.NetworkMonitor("", tel_mock, Mock())
         with patch('agent.monitor.components.network.NetworkMonitor.'
                    'gather_host_ip_route') as test_gather:
             test_gather.return_value = None
