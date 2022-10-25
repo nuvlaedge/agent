@@ -79,8 +79,10 @@ class TestNetworkMonitor(unittest.TestCase):
         }
         status = Mock()
         status.iface_data = None
+        it_1 = Mock()
+        it_1.container_runtime.client.containers.list.return_value = []
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("file", Mock(), status)
+            monitor.NetworkMonitor("file", it_1, status)
         expected_result: NetworkInterface = \
             NetworkInterface(iface_name="eth0", ip=it_ip)
         self.assertEqual(test_ip_monitor.parse_host_ip_json(test_attribute),
@@ -145,8 +147,10 @@ class TestNetworkMonitor(unittest.TestCase):
 
         status = Mock()
         status.iface_data = None
+        it_1 = Mock()
+        it_1.container_runtime.client.containers.list.return_value = []
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", Mock(), status)
+            monitor.NetworkMonitor("", it_1, status)
         mock_gather = Mock()
         mock_gather.name = 'MyName'
         mock_gather.logs.return_value = b''
@@ -155,8 +159,10 @@ class TestNetworkMonitor(unittest.TestCase):
         self.assertFalse(test_ip_monitor.data.local)
 
         # Test readable route
+        it_1 = Mock()
+        it_1.container_runtime.client.containers.list.return_value = []
         test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", Mock(), True)
+            monitor.NetworkMonitor("", it_1, True)
         test_ip_monitor.is_skip_route = Mock(return_value=True)
         test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
         test_ip_monitor.set_local_data()

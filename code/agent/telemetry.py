@@ -284,8 +284,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                         it_monitor.update_data()
                         it_monitor.updated = True
                     except Exception as ex:
-                        self.logger.warning(f'Something went wrong updating monitor '
-                                            f'{monitor_name}. Error: {ex}')
+                        self.logger.exception(f'Something went wrong updating monitor '
+                                              f'{monitor_name}. Error: {ex}', ex)
 
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
