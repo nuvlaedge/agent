@@ -138,7 +138,7 @@ class NetworkMonitor(Monitor):
         """
         try:
             old_cont: Container = \
-                self.runtime_client.client.containers.get(self.deployed_name)
+                self.runtime_client.client.containers.get(self.iproute_container_name)
             old_cont.remove()
         except (docker_err.NotFound,
                 TypeError,
