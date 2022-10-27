@@ -145,11 +145,13 @@ class NetworkMonitor(Monitor):
                 old_cont.stop()
             old_cont.remove()
 
-        except (docker_err.NotFound,
-                docker_err.NullResource,
-                docker_err.APIError,
-                TypeError):
-            self.logger.debug(f'IPRoute container does not exist.')
+        except docker_err.NotFound:
+            pass
+
+        except Exception as ex:
+            self.logger.warning('Failed to cleanup iproute container.',
+                                ex,
+                                exc_info=True)
 
         try:
             it_route = self.runtime_client.client.containers.run(
