@@ -40,9 +40,9 @@ class TestContainerStatsMonitor(unittest.TestCase):
 
             with self.assertRaises(InterruptedError):
                 test_monitor.run()
-            self.assertFalse(test_monitor.data.containers)
-            mock_update.assert_called_once()
-            mock_refresh.assert_called_once()
+                self.assertFalse(test_monitor.data.containers)
+                mock_update.assert_called_once()
+                mock_refresh.assert_called_once()
 
     def test_get_cluster_manager_attrs(self):
         test_monitor: ContainerStatsMonitor = self.get_base_monitor()
@@ -165,10 +165,12 @@ class TestContainerStatsMonitor(unittest.TestCase):
                          'Unable to get Swarm node certificate expiration date')
 
     @patch('agent.monitor.components.container_stats.ContainerStatsMonitor.'
+           'refresh_container_info')
+    @patch('agent.monitor.components.container_stats.ContainerStatsMonitor.'
            'update_cluster_data')
     @patch('agent.monitor.components.container_stats.ContainerStatsMonitor.'
            'get_swarm_certificate_expiration_date')
-    def test_update_data(self, mock_cert, mock_update):
+    def test_update_data(self, mock_cert, mock_update, refresh_container):
         test_monitor: ContainerStatsMonitor = self.get_base_monitor()
         mock_update.return_value = None
         mock_cert.return_value = None
@@ -176,6 +178,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_client_version.return_value = '1.0'
         with patch('agent.monitor.components.container_stats.NuvlaBoxCommon') as \
                 mock_nb_common:
+            refresh_container.return_value = None
             mock_nb_common.ORCHESTRATOR = 'docker'
             test_monitor.update_data()
 

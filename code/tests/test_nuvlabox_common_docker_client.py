@@ -361,18 +361,19 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     def test_collect_container_metrics_cpu(self):
         cpu_stat = {
             "cpu_stats": {
+                "online_cpus": 2,
                 "cpu_usage": {
                     "total_usage": "30"
                 },
                 "system_cpu_usage": "300",
             },
             "precpu_stats": {
+                "online_cpus": 2,
                 "cpu_usage": {
                     "total_usage": "10"
                 },
                 "system_cpu_usage": "100",
             },
-            "online_cpus": 2,
         }
 
         # if all is well, we should expect a float value bigger than 0
@@ -384,7 +385,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                              "The provided default should return a CPU usage of 20%, but that was not the case")
 
         # if online_cpus is not reported, then we get 'nan' usage
-        cpu_stat.pop('online_cpus')
+        cpu_stat['cpu_stats'].pop('online_cpus')
         self.assertTrue(math.isnan(self.obj.collect_container_metrics_cpu(cpu_stat)),
                         "Expecting 'nan' CPU usage due to lack of details, but got something else")
 

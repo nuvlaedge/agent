@@ -41,15 +41,18 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             self.user_info = self.read_json_file(self.activation_flag)
 
-            self.activate_logger.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
-            self.activate_logger.info("NuvlaBox credential: {}".format(self.user_info["api-key"]))
+            self.activate_logger.warning("{} already exists. Re-activation is not"
+                                         " possible!".format(self.activation_flag))
+            self.activate_logger.info("NuvlaBox credential: "
+                                      "{}".format(self.user_info["api-key"]))
             return False, self.user_info
         except FileNotFoundError:
             # file doesn't exist yet,
             # But maybe the API was provided via env?
             api_key, api_secret = self.get_api_keys()
             if api_key and api_secret:
-                self.activate_logger.info(f'Found API key set in environment, with key value {api_key}')
+                self.activate_logger.info(f'Found API key set in environment, with key'
+                                          f' value {api_key}')
                 self.user_info = {
                     "api-key": api_key,
                     "secret-key": api_secret
@@ -94,7 +97,8 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         try:
             current_context = self.read_json_file(context_file)
         except (ValueError, FileNotFoundError):
-            self.activate_logger.warning("Writing {} for the first time".format(context_file))
+            self.activate_logger.warning("Writing {} for the first "
+                                         "time".format(context_file))
             current_context = {}
 
         self.write_json_to_file(context_file, nuvlabox_resource)
@@ -128,7 +132,8 @@ class Activate(NuvlaBoxCommon.NuvlaBoxCommon):
         :return: current and old NuvlaBox resources
         """
 
-        self.authenticate(self.api(), self.user_info["api-key"], self.user_info["secret-key"])
+        self.authenticate(self.api(), self.user_info["api-key"],
+                          self.user_info["secret-key"])
         nuvlabox_resource = self.get_nuvlabox_info()
 
         old_nuvlabox_resource = self.create_nb_document_file(nuvlabox_resource)

@@ -13,6 +13,7 @@ from typing import List, NoReturn, Dict, Union
 
 import requests
 from docker import errors as docker_err
+from docker.models.containers import Container
 
 from agent.common import NuvlaBoxCommon
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface
@@ -29,6 +30,9 @@ class NetworkMonitor(Monitor):
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
+    _PROJECT_NAME_LABEL_KEY: str = 'com.docker.compose.project'
+    DEFAULT_PROJECT_NAME: str = 'nuvlaedge'
+    _NUVLAEDGE_COMPONENT_LABEL_KEY: str = 'nuvlaedge.component=True'
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
@@ -48,11 +52,30 @@ class NetworkMonitor(Monitor):
         self.runtime_client: NuvlaBoxCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
+        self.engine_project_name: str = self.get_engine_project_name()
+        self.logger.info(f'Running network monitor for project '
+                         f'{self.engine_project_name}')
+        self.iproute_container_name: str = f'{self.engine_project_name}_iproute'
+
         self.last_public_ip: float = 0.0
 
         # Initialize the corresponding data on the EdgeStatus class
         if not telemetry.edge_status.iface_data:
             telemetry.edge_status.iface_data = self.data
+
+    def get_engine_project_name(self) -> str:
+        project_name = None
+        filters = {'label': [self._PROJECT_NAME_LABEL_KEY,
+                             self._NUVLAEDGE_COMPONENT_LABEL_KEY]}
+        try:
+            container_list: List[Container] = \
+                self.runtime_client.client.containers.list(filters=filters)
+            project_name = container_list[0].labels.get(
+                self._PROJECT_NAME_LABEL_KEY)
+        except (TypeError, IndexError):
+            self.logger.warning(f'Project name not found')
+
+        return project_name if project_name else self.DEFAULT_PROJECT_NAME
 
     def set_public_data(self) -> NoReturn:
         """
@@ -116,9 +139,25 @@ class NetworkMonitor(Monitor):
             str if succeeds. None otherwise
         """
         try:
-            it_route: bytes = self.runtime_client.client.containers.run(
+            old_cont: Container = \
+                self.runtime_client.client.containers.get(self.iproute_container_name)
+            if old_cont.status == 'running':
+                old_cont.stop()
+            old_cont.remove()
+
+        except docker_err.NotFound:
+            pass
+
+        except Exception as ex:
+            self.logger.warning('Failed to cleanup iproute container.',
+                                ex,
+                                exc_info=True)
+
+        try:
+            it_route = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
+                name=self.iproute_container_name,
                 remove=True,
                 network="host")
 
@@ -128,7 +167,7 @@ class NetworkMonitor(Monitor):
                 docker_err.ContainerError,
                 docker_err.APIError) as ex:
             self.logger.error(f'Local interface data auxiliary container '
-                                f'not run: {ex.explanation}')
+                              f'not run: {ex.explanation}')
             return None
 
     def read_traffic_data(self) -> List:
