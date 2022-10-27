@@ -31,6 +31,8 @@ class NetworkMonitor(Monitor):
     _IP_COMMAND: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
     _PROJECT_NAME_LABEL_KEY: str = 'com.docker.compose.project'
+    DEFAULT_PROJECT_NAME: str = 'nuvlaedge'
+    _NUVLAEDGE_COMPONENT_LABEL_KEY: str = 'nuvlaedge.component=True'
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
@@ -53,8 +55,7 @@ class NetworkMonitor(Monitor):
         self.engine_project_name: str = self.get_engine_project_name()
         self.logger.info(f'Running network monitor for project '
                          f'{self.engine_project_name}')
-        self.iproute_container_name: str = \
-            'iproute_{}'.format(self.engine_project_name)
+        self.iproute_container_name: str = f'{self.engine_project_name}_iproute'
 
         self.last_public_ip: float = 0.0
 
@@ -63,17 +64,18 @@ class NetworkMonitor(Monitor):
             telemetry.edge_status.iface_data = self.data
 
     def get_engine_project_name(self) -> str:
+        project_name = None
+        filters = {'label': [self._PROJECT_NAME_LABEL_KEY,
+                             self._NUVLAEDGE_COMPONENT_LABEL_KEY]}
         try:
             container_list: List[Container] = \
-                self.runtime_client.client.containers.list(
-                    filters={'label': self._PROJECT_NAME_LABEL_KEY})
-            for container in container_list:
-                return container.labels.get(self._PROJECT_NAME_LABEL_KEY)
-
-        except TypeError:
+                self.runtime_client.client.containers.list(filters=filters)
+            project_name = container_list[0].labels.get(
+                self._PROJECT_NAME_LABEL_KEY)
+        except (TypeError, IndexError):
             self.logger.warning(f'Project name not found')
 
-        return ''
+        return project_name if project_name else self.DEFAULT_PROJECT_NAME
 
     def set_public_data(self) -> NoReturn:
         """
@@ -139,11 +141,14 @@ class NetworkMonitor(Monitor):
         try:
             old_cont: Container = \
                 self.runtime_client.client.containers.get(self.iproute_container_name)
+            if old_cont.status == 'running':
+                old_cont.stop()
             old_cont.remove()
+
         except (docker_err.NotFound,
-                TypeError,
                 docker_err.NullResource,
-                docker_err.APIError):
+                docker_err.APIError,
+                TypeError):
             self.logger.debug(f'IPRoute container does not exist.')
 
         try:
