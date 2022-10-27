@@ -53,7 +53,8 @@ class NetworkMonitor(Monitor):
         self.engine_project_name: str = self.get_engine_project_name()
         self.logger.info(f'Running network monitor for project '
                          f'{self.engine_project_name}')
-        self.deployed_name: str = 'generic_name'
+        self.iproute_container_name: str = \
+            'iproute_{}'.format(self.engine_project_name)
 
         self.last_public_ip: float = 0.0
 
@@ -63,10 +64,12 @@ class NetworkMonitor(Monitor):
 
     def get_engine_project_name(self) -> str:
         try:
-            container_list: List[Container] = self.runtime_client.client.containers.list()
+            container_list: List[Container] = \
+                self.runtime_client.client.containers.list(
+                    filters={'label': self._PROJECT_NAME_LABEL_KEY})
             for container in container_list:
-                if self._PROJECT_NAME_LABEL_KEY in container.labels.keys():
-                    return container.labels.get(self._PROJECT_NAME_LABEL_KEY)
+                return container.labels.get(self._PROJECT_NAME_LABEL_KEY)
+
         except TypeError:
             self.logger.warning(f'Project name not found')
 
@@ -137,20 +140,17 @@ class NetworkMonitor(Monitor):
             old_cont: Container = \
                 self.runtime_client.client.containers.get(self.deployed_name)
             old_cont.remove()
-        except (docker_err.NotFound, TypeError, docker_err.NullResource):
-            self.logger.info(f'Previous container {self.deployed_name} not running, '
-                             f'continue...')
+        except (docker_err.NotFound,
+                TypeError,
+                docker_err.NullResource,
+                docker_err.APIError):
+            self.logger.debug(f'IPRoute container does not exist.')
 
         try:
-            # This command should return a Container object when detach flag is set to
-            # true
-            # TODO: unify nuvlaedge microservice constants
-
-            self.deployed_name = f'{self.engine_project_name}_iproute'
             it_route = self.runtime_client.client.containers.run(
                 self._AUXILIARY_DOCKER_IMAGE,
                 command=self._IP_COMMAND,
-                name=self.deployed_name,
+                name=self.iproute_container_name,
                 remove=True,
                 network="host")
 

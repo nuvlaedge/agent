@@ -301,8 +301,8 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                     self.logger.info(f'Data not updated yet in monitor '
                                      f'{it_monitor.name}')
             except Exception as ex:
-                self.logger.warning(f'Error retrieving data from monitor '
-                                    f'{it_monitor.name}. Error: {ex}')
+                self.logger.exception(f'Error retrieving data from monitor '
+                                      f'{it_monitor.name}.', ex)
 
     def get_status(self):
         """ Gets several types of information to populate the NuvlaBox status """
@@ -339,8 +339,9 @@ class Telemetry(NuvlaBoxCommon.NuvlaBoxCommon):
                 "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
                 "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
             })
-        except AttributeError:
+        except AttributeError as ex:
             self.logger.warning(f'Resources information not ready yet. ')
+            self.logger.debug(ex, exc_info=True)
 
         return status_for_nuvla, all_status
 
