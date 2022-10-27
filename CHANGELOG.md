@@ -1,49 +1,52 @@
 # Changelog
-## [2.8.3] - 2022-09-24
+
+## [2.8.4] - 2022-10-27
 ### Added
  - Added support for all threaded monitors
  - Added all monitors to thread as default. Added env_variable return them to normal exec
 ### Changed
- - Fix bug where installation-parameters working-dir and config-files were not set (backport)
  - Fix late start of monitor threads
  - Captured exception caused by late start of the compute-api in the Agent
  - Change IP route container to detach mode and manually deleted after retrieving the logs
+
+## [2.8.3] - 2022-09-24
+### Changed
+ - Fix bug where installation-parameters working-dir and config-files were not set (backport)
+ 
 ## [2.8.2] - 2022-09-22
 ### Added 
  - add code lost during refactor (cherry-pick)
 ### Changed
  - container_stats.py: fixed possible None value
  - fix tests
+ 
 ## [2.8.1] - 2022-09-07
 ### Added 
  - Add missing dependency lsblk 
  - Add timeout to requests to geolocation services
 ### Changed
  - Set missing default socket timeout
+ 
 ## [2.8.0] - 2022-07-18
 ### Added
+ - Added new Pydantic BaseModel to validate data from Nuvla.
+ - Added a modular monitor structure in which every monitor can be included or excluded. 
+   (Some are compulsory)
+ - Added data structure for each monitor to allow data validation 
+ - New future data structure provided to IP interfaces. Still need to adapt
+   server-side to enable it in Agent.
+ - Added host device network interfaces reading. Using an auxiliary Docker
+   container connected to host network.
+ - Added public IP(v4&v6) reading via ping to external server.
 ### Changed
  - Use common base image for all NE components
-
-## Unreleased
-### Added
-- Added new Pydantic BaseModel to validate data from Nuvla.
-- Added a modular monitor structure in which every monitor can be included or excluded. 
-  (Some are compulsory)
-- Added data structure for each monitor to allow data validation 
-- New future data structure provided to IP interfaces. Still need to adapt
-  server-side to enable it in Agent.
-- Added host device network interfaces reading. Using an auxiliary Docker
-  container connected to host network.
-- Added public IP(v4&v6) reading via ping to external server.
-### Changed
-- Telemetry class now is a watchdog of monitors. It keeps them running and starts them 
-  over if needed
-- Whole telemetry class has been refactored
-- Logging formatting modified and unified
-- Logging main configuration parsed from config file
-- Change Dockerfile to match common python3.8-alpine3.12 NE engine versions
-- Removed Wiring Pi from docker. TODO: remove GPIO monitor too, maybe to be provided as a peripheral
+ - Telemetry class now is a watchdog of monitors. It keeps them running and starts them 
+   over if needed
+ - Whole telemetry class has been refactored
+ - Logging formatting modified and unified
+ - Logging main configuration parsed from config file
+ - Change Dockerfile to match common python3.8-alpine3.12 NE engine versions
+ - Removed Wiring Pi from docker. TODO: remove GPIO monitor too, maybe to be provided as a peripheral
 
 ## [2.7.2] - 2022-04-18
 ### Added
