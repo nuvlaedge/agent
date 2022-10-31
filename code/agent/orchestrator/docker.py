@@ -261,7 +261,7 @@ class DockerClient(ContainerRuntimeClient):
             system_delta = float(cs["cpu_stats"]["system_cpu_usage"]) - \
                            float(cs["precpu_stats"]["system_cpu_usage"])
             online_cpus_alt = len(cs["cpu_stats"]["cpu_usage"].get("percpu_usage", []))
-            online_cpus = cs.get('online_cpus', online_cpus_alt)
+            online_cpus = cs["cpu_stats"].get('online_cpus', online_cpus_alt)
 
             if system_delta > 0.0 and online_cpus > 0:
                 cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0

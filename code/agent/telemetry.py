@@ -271,22 +271,38 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
                                         f'Re-initializing...')
                     self.monitor_list[monitor_name] = \
                         get_monitor(monitor_name)(monitor_name, self, True)
-                else:
-                    self.logger.info(f'Starting monitor {it_monitor.name} '
-                                      f'thread for first time')
-                    it_monitor.start()
+
+                self.logger.info(f'Starting monitor {it_monitor.name} '
+                                 f'thread for first time')
+                it_monitor.start()
+
             else:
                 if not it_monitor.is_alive():
                     init_time: float = time.time()
 
-                    it_monitor.update_data()
+                    try:
+                        it_monitor.update_data()
+                        it_monitor.updated = True
+                    except Exception as ex:
+                        self.logger.exception(f'Something went wrong updating monitor '
+                                              f'{monitor_name}. Error: {ex}', ex)
+
                     monitor_process_time[it_monitor.name] = time.time() - init_time
 
         self.logger.debug(f'Monitors processing time '
                           f'{json.dumps(monitor_process_time, indent=4)}')
 
+        # Retrieve monitoring data
         for it_monitor in self.monitor_list.values():
-            it_monitor.populate_nb_report(status_dict)
+            try:
+                if it_monitor.updated:
+                    it_monitor.populate_nb_report(status_dict)
+                else:
+                    self.logger.info(f'Data not updated yet in monitor '
+                                     f'{it_monitor.name}')
+            except Exception as ex:
+                self.logger.exception(f'Error retrieving data from monitor '
+                                      f'{it_monitor.name}.', ex)
 
     def get_status(self):
         """ Gets several types of information to populate the NuvlaEdge status """
@@ -304,23 +320,28 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
             datetime.datetime.utcnow().isoformat().split('.')[0] + 'Z'
 
         # Publish the telemetry into the Data Gateway
-        self.send_mqtt(
-            status_for_nuvla,
-            status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
-            status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
-            status_for_nuvla.get('resources', {}).get('disks', []))
-
-        # get all status for internal monitoring
         all_status = status_for_nuvla.copy()
-        all_status.update({
-            "cpu-usage": psutil.cpu_percent(),
-            "cpu-load": status_for_nuvla.get('resources', {}).get('cpu', {}).get('load'),
-            "disk-usage": psutil.disk_usage("/")[3],
-            "memory-usage": psutil.virtual_memory()[2],
-            "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
-            "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
-            "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
-        })
+        try:
+            # Try to retrieve data if available
+            self.send_mqtt(
+                status_for_nuvla,
+                status_for_nuvla.get('resources', {}).get('cpu', {}).get('raw-sample'),
+                status_for_nuvla.get('resources', {}).get('ram', {}).get('raw-sample'),
+                status_for_nuvla.get('resources', {}).get('disks', []))
+
+            # get all status for internal monitoring
+            all_status.update({
+                "cpu-usage": psutil.cpu_percent(),
+                "cpu-load": status_for_nuvla.get('resources', {}).get('cpu', {}).get('load'),
+                "disk-usage": psutil.disk_usage("/")[3],
+                "memory-usage": psutil.virtual_memory()[2],
+                "cpus": status_for_nuvla.get('resources', {}).get('cpu', {}).get('capacity'),
+                "memory": status_for_nuvla.get('resources', {}).get('ram', {}).get('capacity'),
+                "disk": int(psutil.disk_usage('/')[0] / 1024 / 1024 / 1024)
+            })
+        except AttributeError as ex:
+            self.logger.warning(f'Resources information not ready yet. ')
+            self.logger.debug(ex, exc_info=True)
 
         return status_for_nuvla, all_status
 

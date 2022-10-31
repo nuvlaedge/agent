@@ -104,11 +104,6 @@ class GeoLocationMonitor(Monitor):
 
         return inferred_location
 
-    def run(self) -> None:
-        while True:
-            self.update_data()
-            time.sleep(self.thread_period)
-
     def update_data(self):
         if not self.is_thread:
             if time.time() - self.last_update < self.thread_period:
