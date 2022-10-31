@@ -4,6 +4,13 @@
 ### Added
 ### Changed
 
+## [2.9.4] - 2022-10-31
+### Added
+ - Print threads stacktraces on SIGUSR1 [27961e8]
+### Changed
+ - Vpn client: do not open port [83f8e5d]
+ - Port of: 2.8 telemetry fixes (#126) [56765ff]
+
 ## [2.9.3] - 2022-09-26
 ### Added
 ### Changed
