@@ -8,6 +8,20 @@ from agent.monitor.edge_status import EdgeStatus
 
 class TestNuvlaEdgeInfoMonitor(unittest.TestCase):
 
+    get_installation_parameters_result = {
+        'project-name': 'nuvlaedge',
+        'working-dir': '/opt/nuvlaedge',
+        'config-files': [
+            'docker-compose.yml',
+            'docker-compose.usb.yml'
+        ],
+        'environment': [
+            'NUVLABOX_ENGINE_VERSION=1.2.3',
+            'NUVLABOX_DATA_GATEWAY_IMAGE=eclipse-mosquitto:1.6.12',
+            'SECURITY_SCAN_INTERVAL=1800'
+        ]
+    }
+
     @staticmethod
     def get_base_monitor() -> NuvlaEdgeInfoMonitor:
         mock_telemetry = Mock()
@@ -34,7 +48,7 @@ class TestNuvlaEdgeInfoMonitor(unittest.TestCase):
         mock_boot.return_value = time.time()
         test_monitor.data.installation_parameters = None
         test_monitor.runtime_client.get_installation_parameters.return_value = \
-            {'path': '/path'}
+            self.get_installation_parameters_result
         test_monitor.runtime_client.get_all_nuvlabox_components.return_value = \
             ['component_1']
         test_monitor.update_data()
@@ -54,9 +68,11 @@ class TestNuvlaEdgeInfoMonitor(unittest.TestCase):
         mock_boot.return_value = time.time()
         test_monitor.data.installation_parameters = None
         test_monitor.runtime_client.get_installation_parameters.return_value = \
-            {'path': '/path'}
+            self.get_installation_parameters_result
         test_monitor.runtime_client.get_all_nuvlabox_components.return_value = \
             ['component_1']
         test_monitor.update_data()
         test_monitor.populate_nb_report(test_nb_report)
         self.assertTrue(test_nb_report)
+        self.assertEqual(test_nb_report.get('installation-parameters', {}),
+                         self.get_installation_parameters_result)

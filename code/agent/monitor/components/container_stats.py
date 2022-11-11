@@ -31,6 +31,8 @@ class ContainerStatsMonitor(Monitor):
         self.swarm_node_cert_path: str = telemetry.swarm_node_cert
         self.nuvla_timestamp_format: str = telemetry.nuvla_timestamp_format
 
+        self.data.containers = {}
+
         if not telemetry.edge_status.container_stats:
             telemetry.edge_status.container_stats = self.data
 
@@ -40,20 +42,10 @@ class ContainerStatsMonitor(Monitor):
             local data variable
         """
         it_containers: List = self.client_runtime.collect_container_metrics()
-
         self.data.containers = {}
         for i in it_containers:
             it_cont: ContainerStatsData = ContainerStatsData.parse_obj(i)
             self.data.containers[it_cont.id] = it_cont
-
-    def run(self) -> None:
-        if not self.data.containers:
-            self.data.containers = {}
-
-        while True:
-            self.refresh_container_info()
-            self.update_data()
-            time.sleep(self.thread_period)
 
     def get_cluster_manager_attrs(self, managers: list, node_id: str) -> tuple:
         """
@@ -150,6 +142,7 @@ class ContainerStatsMonitor(Monitor):
         return None
 
     def update_data(self):
+        self.refresh_container_info()
         version: str = self.client_runtime.get_client_version()
 
         if NuvlaBoxCommon.ORCHESTRATOR == 'docker':

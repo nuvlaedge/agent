@@ -1,32 +1,52 @@
 # Changelog
-## Unreleased
+
+## [2.8.4] - 2022-10-27
 ### Added
-- Added network field to nuvlabox-status report.
-- Added new data structure to contain the main IP addresses
-- Added default-gw interface to network report
-### Changed 
-- Adapted network monitor unittests
+ - Added support for all threaded monitors
+ - Added all monitors to thread as default. Added env_variable return them to normal exec
+### Changed
+ - Fix late start of monitor threads
+ - Captured exception caused by late start of the compute-api in the Agent
+ - Change IP route container to detach mode and manually deleted after retrieving the logs
+
+## [2.8.3] - 2022-09-24
+### Changed
+ - Fix bug where installation-parameters working-dir and config-files were not set (backport)
+
+## [2.8.2] - 2022-09-22
+### Added
+ - add code lost during refactor (cherry-pick)
+### Changed
+ - container_stats.py: fixed possible None value
+ - fix tests
+
+## [2.8.1] - 2022-09-07
+### Added
+ - Add missing dependency lsblk
+ - Add timeout to requests to geolocation services
+### Changed
+ - Set missing default socket timeout
 
 ## [2.8.0] - 2022-07-18
 ### Added
-- Added new Pydantic BaseModel to validate data from Nuvla.
-- Added a modular monitor structure in which every monitor can be included or excluded. 
-  (Some are compulsory)
-- Added data structure for each monitor to allow data validation 
-- New future data structure provided to IP interfaces. Still need to adapt
-  server-side to enable it in Agent.
-- Added host device network interfaces reading. Using an auxiliary Docker
-  container connected to host network.
-- Added public IP(v4&v6) reading via ping to external server.
+ - Added new Pydantic BaseModel to validate data from Nuvla.
+ - Added a modular monitor structure in which every monitor can be included or excluded.
+   (Some are compulsory)
+ - Added data structure for each monitor to allow data validation
+ - New future data structure provided to IP interfaces. Still need to adapt
+   server-side to enable it in Agent.
+ - Added host device network interfaces reading. Using an auxiliary Docker
+   container connected to host network.
+ - Added public IP(v4&v6) reading via ping to external server.
 ### Changed
-- Use common base image for all NE components
-- Telemetry class now is a watchdog of monitors. It keeps them running and starts them 
-  over if needed
-- Whole telemetry class has been refactored
-- Logging formatting modified and unified
-- Logging main configuration parsed from config file
-- Change Dockerfile to match common python3.8-alpine3.12 NE engine versions
-- Removed Wiring Pi from docker. TODO: remove GPIO monitor too, maybe to be provided as a peripheral
+ - Use common base image for all NE components
+ - Telemetry class now is a watchdog of monitors. It keeps them running and starts them
+   over if needed
+ - Whole telemetry class has been refactored
+ - Logging formatting modified and unified
+ - Logging main configuration parsed from config file
+ - Change Dockerfile to match common python3.8-alpine3.12 NE engine versions
+ - Removed Wiring Pi from docker. TODO: remove GPIO monitor too, maybe to be provided as a peripheral
 
 ## [2.7.2] - 2022-04-18
 ### Added
@@ -34,24 +54,24 @@
  - Do not fail if some installation parameters are not found
  - Removed version pinning for Flask
 ## [2.7.1] - 2022-04-12
-### Added 
+### Added
  - requirements.txt: added itsdangerous==2.0.1
 ### Changed
 ## [2.7.0] - 2022-04-11
-### Added 
+### Added
  - New env var for vpn extra config
 ### Changed
 
 ## [2.6.0] - 2022-03-24
-### Added 
- - Add org.opencontainers labels 
+### Added
+ - Add org.opencontainers labels
  - Make logging level configurable
 ### Changed
  - Check if provided UUID is different from old one - avoid overwriting
  - NuvlaBox log: add components to telemetry
  - Only take the config files from the last update
 ## [2.5.0] - 2021-12-16
-### Added 
+### Added
  - Enable compression when sending data to api-server
 ### Changed
  - Code refactor and bugfixes
@@ -61,14 +81,14 @@
  - Improved telemetry to send all changes to Nuvla and reduce the chance of a "split brain" like scenario
  - Delete ignored files
 ## [2.4.0] - 2021-11-03
-### Added 
+### Added
  - Kubernetes infrastructure discovery for kubeadm, k0s and k3s installations
 ### Changed
  - Improved parallelization of telemetry and heartbeat cycles
  - Fixed IP-based geolocation retrieval
  - General fixes and code refactoring
 ## [2.3.4] - 2021-10-19
-### Added 
+### Added
  - force update of nuvlabox-cluster through worker-based commissioning
 ### Changed
 ## [2.3.3] - 2021-10-08
@@ -322,9 +342,3 @@
 ### Added
   - added state api, schema fixes and coordination with system manager
 ### Changed
-
-
-
-
-
-
