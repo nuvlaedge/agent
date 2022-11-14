@@ -371,11 +371,11 @@ class NetworkMonitor(Monitor):
                         }
                     interfaces: {
                         iface_name: {
-                            "ip": [{
+                            "ips": [{
                                 "address": "ip_Add"
                             }]
                         }
-
+                    }
                 }
                 """
         # Until server is adapted, we only return a single IP address as
@@ -391,7 +391,7 @@ class NetworkMonitor(Monitor):
                             for _, x in self.data.interfaces.items()]
 
         it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
-        it_report['interfaces'] = {name: {'ip': [{'address': obj.ip}]}
+        it_report['interfaces'] = {name: {'ips': [{'address': obj.ip}]}
                                    for name, obj in self.data.interfaces.items()}
 
         nuvla_report['network'] = it_report
