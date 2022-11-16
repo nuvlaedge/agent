@@ -1,4 +1,9 @@
 # Changelog
+## [2.8.5] - 2022-11-16
+### Added 
+ - Telemetry: report all detected IPs and IPs of all network interfaces 
+ - Telemetry: report default gateway interface
+### Changed
 
 ## [2.8.4] - 2022-10-27
 ### Added
