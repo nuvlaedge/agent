@@ -12,7 +12,7 @@ from docker import errors as docker_err
 from mock import Mock, mock_open, patch, MagicMock
 
 from agent.monitor.components import network as monitor
-from agent.monitor.data.network_data import NetworkInterface, NetworkingData
+from agent.monitor.data.network_data import NetworkInterface, NetworkingData, IP
 from agent.monitor.edge_status import EdgeStatus
 
 
@@ -84,7 +84,7 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("file", it_1, status)
         expected_result: NetworkInterface = \
-            NetworkInterface(iface_name="eth0", ip=it_ip)
+            NetworkInterface(iface_name="eth0", ips=[IP(address=it_ip)])
         self.assertEqual(test_ip_monitor.parse_host_ip_json(test_attribute),
                          expected_result)
 
@@ -491,7 +491,7 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor.data.interfaces = {
             'test_1': NetworkInterface(iface_name='test_1',
                                        default_gw=True,
-                                       ip=it_rand_ip)}
+                                       ips=[IP(address=it_rand_ip)])}
         test_ip_monitor.data.ips.local = it_rand_ip
         self.assertEqual(it_rand_ip, test_ip_monitor.populate_nb_report(test_body))
         self.assertEqual(test_body['ip'], it_rand_ip)

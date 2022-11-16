@@ -4,11 +4,21 @@
 
 Gathers all the requirements for status reporting
 """
-from typing import Union, Dict, Optional
+from typing import Union, Dict, List, Optional
 
 from pydantic import Field
 
 from agent.monitor import BaseDataStructure
+
+
+class IP(BaseDataStructure, allow_mutation=False):
+    """
+    address: IP addresses
+    """
+    address: str = ''
+
+    def __hash__(self):
+        return hash(self.address)
 
 
 class NetworkInterface(BaseDataStructure):
@@ -16,13 +26,13 @@ class NetworkInterface(BaseDataStructure):
     Pydantic BaseModel definition for Network interfaces. This includes public,
     vpn, and swarm addresses.
         iface_name: network interface name
-        ip: IPv4 address
+        ips: List of IP addresses
         default_gw: flag indicating whether the interface is the default for the host
         device or not
     """
 
     iface_name: Union[str, None] = Field(alias='interface')
-    ip: Union[str, None]
+    ips: List[IP] = Field([])
     default_gw: bool = Field(False, alias='default-gw')
 
     # Interface data traffic control

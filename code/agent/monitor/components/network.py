@@ -16,7 +16,7 @@ from docker import errors as docker_err
 from docker.models.containers import Container
 
 from agent.common import NuvlaBoxCommon
-from agent.monitor.data.network_data import NetworkingData, NetworkInterface
+from agent.monitor.data.network_data import NetworkingData, NetworkInterface, IP
 from agent.monitor import Monitor
 from ..components import monitor
 
@@ -105,15 +105,18 @@ class NetworkMonitor(Monitor):
         @return: NetworkInterface class
         """
         try:
-
             is_default_gw = iface_data.get('dst', '') == 'default'
             return NetworkInterface(iface_name=iface_data['dev'],
-                                    ip=iface_data['prefsrc'],
+                                    ips=[IP(address=iface_data['prefsrc'])],
                                     default_gw=is_default_gw)
-
         except KeyError as err:
             self.logger.warning(f'Interface key not found {err}')
             return None
+
+    def is_already_registered(self, it_route: Dict) -> bool:
+        it_name = it_route.get('dev', '')
+        return it_name in self.data.interfaces.keys() \
+               and self.data.interfaces[it_name]
 
     def is_skip_route(self, it_route: Dict) -> bool:
         """
@@ -127,10 +130,10 @@ class NetworkMonitor(Monitor):
             True if the route is to be skipped
         """
         is_loop: bool = it_route.get('dst', '127.').startswith('127.')
-        already_registered: bool = it_route.get('dev', '') in self.data.interfaces.keys()
+        is_already_registered: bool = self.is_already_registered(it_route)
         not_complete: bool = 'prefsrc' not in it_route
 
-        return is_loop or already_registered or not_complete
+        return is_loop or is_already_registered or not_complete
 
     def gather_host_ip_route(self) -> Union[str, None]:
         """
@@ -306,16 +309,21 @@ class NetworkMonitor(Monitor):
 
                 if self.is_skip_route(route):
                     continue
+
                 # Create new interface data structure
                 it_iface: NetworkInterface = self.parse_host_ip_json(route)
                 if it_iface:
-                    if it_iface.iface_name == self.data.default_gw:
+                    ip = route['prefsrc']
+                    name = it_iface.iface_name
+                    self.data.interfaces[name] = it_iface
+                    if name == self.data.default_gw:
                         it_iface.default_gw = True
 
-                        if self.data.ips.local != it_iface.ip:
-                            self.data.ips.local = it_iface.ip
-
-                    self.data.interfaces[it_iface.iface_name] = it_iface
+                        if self.data.ips.local != ip:
+                            self.data.ips.local = ip
+                    ip_address = IP(address=ip)
+                    if ip_address not in self.data.interfaces[name].ips:
+                        self.data.interfaces[name].ips.append(ip_address)
 
         # Update traffic data
         it_traffic: List = self.read_traffic_data()
@@ -387,11 +395,11 @@ class NetworkMonitor(Monitor):
         if not nuvla_report.get('resources'):
             nuvla_report['resources'] = {}
 
-        it_traffic: List = [x.dict(by_alias=True, exclude={'ip', 'default_gw'})
+        it_traffic: List = [x.dict(by_alias=True, exclude={'ips', 'default_gw'})
                             for _, x in self.data.interfaces.items()]
 
         it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
-        it_report['interfaces'] = {name: {'ips': [{'address': obj.ip}]}
+        it_report['interfaces'] = {name: {'ips': [ip.dict() for ip in obj.ips]}
                                    for name, obj in self.data.interfaces.items()}
 
         nuvla_report['network'] = it_report
