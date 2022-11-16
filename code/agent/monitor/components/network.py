@@ -115,8 +115,9 @@ class NetworkMonitor(Monitor):
 
     def is_already_registered(self, it_route: Dict) -> bool:
         it_name = it_route.get('dev', '')
+        it_ip = IP(address=it_route.get('prefsrc', ''))
         return it_name in self.data.interfaces.keys() \
-               and self.data.interfaces[it_name]
+               and it_ip in self.data.interfaces[it_name].ips
 
     def is_skip_route(self, it_route: Dict) -> bool:
         """
@@ -303,27 +304,34 @@ class NetworkMonitor(Monitor):
 
         if readable_route:
             for route in readable_route:
+                it_name = route.get('dev')
+                it_ip = route.get('prefsrc')
+
                 # Handle special cases
                 if route.get('dst', 'not_def') == 'default':
-                    self.data.default_gw = route.get('dev')
+                    self.data.default_gw = it_name
 
                 if self.is_skip_route(route):
                     continue
 
                 # Create new interface data structure
-                it_iface: NetworkInterface = self.parse_host_ip_json(route)
-                if it_iface:
-                    ip = route['prefsrc']
-                    name = it_iface.iface_name
-                    self.data.interfaces[name] = it_iface
-                    if name == self.data.default_gw:
+                it_iface: NetworkInterface
+                if it_name in self.data.interfaces:
+                    it_iface = self.data.interfaces[it_name]
+                else:
+                    it_iface = self.parse_host_ip_json(route)
+                    self.data.interfaces[it_name] = it_iface
+
+                if it_iface and it_name and it_ip:
+                    if it_name == self.data.default_gw:
                         it_iface.default_gw = True
 
-                        if self.data.ips.local != ip:
-                            self.data.ips.local = ip
-                    ip_address = IP(address=ip)
-                    if ip_address not in self.data.interfaces[name].ips:
-                        self.data.interfaces[name].ips.append(ip_address)
+                        if self.data.ips.local != it_ip:
+                            self.data.ips.local = it_ip
+
+                    ip_address = IP(address=it_ip)
+                    if ip_address not in self.data.interfaces[it_name].ips:
+                        self.data.interfaces[it_name].ips.append(ip_address)
 
         # Update traffic data
         it_traffic: List = self.read_traffic_data()

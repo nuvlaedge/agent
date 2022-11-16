@@ -189,6 +189,26 @@ class TestNetworkMonitor(unittest.TestCase):
             test_ip_monitor.set_local_data()
             self.assertFalse(test_ip_monitor.data.ips.local)
 
+        # Test multi routes&ips per interface
+        with patch(self._path_json) as json_dict:
+            test_ip_monitor: monitor.NetworkMonitor = \
+                monitor.NetworkMonitor("", Mock(), True)
+            test_ip_monitor.gather_host_ip_route = Mock(return_value='{}')
+            addr1: str = generate_random_ip_address()
+            addr2: str = generate_random_ip_address()
+            json_dict.return_value = [{'dst': 'default',
+                                       'dev': 'eth0',
+                                       'prefsrc': addr1},
+                                      {'dst': 'default',
+                                       'dev': 'eth0',
+                                       'prefsrc': addr2},
+                                      {'dst': 'default',
+                                       'dev': 'eth0',
+                                       'prefsrc': addr1}]
+            test_ip_monitor.set_local_data()
+            self.assertEqual(test_ip_monitor.data.interfaces['eth0'].ips,
+                             [IP(address=addr1), IP(address=addr2)])
+
     def test_is_skip_route(self):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", Mock(), True)
