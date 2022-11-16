@@ -4,6 +4,11 @@
 ### Added
 ### Changed
 
+## [2.9.5] - 2022-11-16
+### Added 
+ -  Port of 2.8.5: Default gw report (#118) 
+### Changed
+
 ## [2.9.4] - 2022-10-31
 ### Added
  - Print threads stacktraces on SIGUSR1 [27961e8]
@@ -30,6 +35,12 @@
 ### Added
 ### Changed
  - Migration to NuvlaEdge
+
+## [2.8.5] - 2022-11-16
+### Added 
+ - Telemetry: report all detected IPs and IPs of all network interfaces 
+ - Telemetry: report default gateway interface
+### Changed
 
 ##[2.8.4] - 2022-10-27
 ### Added
