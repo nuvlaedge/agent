@@ -1,4 +1,8 @@
 # Changelog
+## [2.8.6] - 2022-12-05
+### Added
+### Changed
+ - Telemetry: update network/interfaces to a list of dict
 ## [2.8.5] - 2022-11-16
 ### Added 
  - Telemetry: report all detected IPs and IPs of all network interfaces 
