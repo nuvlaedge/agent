@@ -385,13 +385,14 @@ class NetworkMonitor(Monitor):
                         swarm: str,
                         vpn: str
                         }
-                    interfaces: {
-                        iface_name: {
+                    interfaces: [
+                        {
+                            "interface": iface_name
                             "ips": [{
                                 "address": "ip_Add"
                             }]
                         }
-                    }
+                    ]
                 }
                 """
         # Until server is adapted, we only return a single IP address as
@@ -407,8 +408,9 @@ class NetworkMonitor(Monitor):
                             for _, x in self.data.interfaces.items()]
 
         it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
-        it_report['interfaces'] = {name: {'ips': [ip.dict() for ip in obj.ips]}
-                                   for name, obj in self.data.interfaces.items()}
+        it_report['interfaces'] = [{'interface': name,
+                                    'ips': [ip.dict() for ip in obj.ips]}
+                                   for name, obj in self.data.interfaces.items()]
 
         nuvla_report['network'] = it_report
 

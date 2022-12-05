@@ -503,18 +503,23 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", runtime_mock, status)
         test_body: dict = {}
+        it_name = 'test_1'
         it_rand_ip = generate_random_ip_address()
 
         test_ip_monitor.data.interfaces = {}
         self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
 
         test_ip_monitor.data.interfaces = {
-            'test_1': NetworkInterface(iface_name='test_1',
+            'test_1': NetworkInterface(iface_name=it_name,
                                        default_gw=True,
                                        ips=[IP(address=it_rand_ip)])}
         test_ip_monitor.data.ips.local = it_rand_ip
         self.assertEqual(it_rand_ip, test_ip_monitor.populate_nb_report(test_body))
         self.assertEqual(test_body['ip'], it_rand_ip)
+        self.assertEqual(len(test_body['network']['interfaces']), 1)
+        self.assertEqual(len(test_body['network']['interfaces'][0]['ips']), 1)
+        self.assertEqual(test_body['network']['interfaces'][0]['interface'], it_name)
+        self.assertEqual(test_body['network']['interfaces'][0]['ips'][0]['address'], it_rand_ip)
 
         test_ip_monitor.data.ips.local = ''
         self.assertIsNone(test_ip_monitor.populate_nb_report(test_body))
