@@ -15,7 +15,6 @@ from typing import Dict, NoReturn, List
 from os import path, stat
 import socket
 import time
-import sys
 
 import psutil
 import paho.mqtt.client as mqtt
@@ -102,6 +101,7 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
             'swarm-node-cert-expiry-date': None,
             'host-user-home': None,
             'orchestrator': None,
+            'network': None,
             'cluster-join-address': None,
             'temperatures': None,
             'container-plugins': None,
