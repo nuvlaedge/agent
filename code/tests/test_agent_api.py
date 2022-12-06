@@ -20,6 +20,7 @@ with mock.patch.object(agent.common.NuvlaEdgeCommon, 'NuvlaEdgeCommon') as mock_
 class AgentApiTestCase(unittest.TestCase):
 
     agent_api_open = 'agent.agent_api.open'
+    atomic_write = 'agent.common.util.atomic_write'
 
     def setUp(self):
         self.peripheral_filepath = 'mock/peripheral/path'
@@ -367,7 +368,8 @@ class AgentApiTestCase(unittest.TestCase):
 
         # otherwise, it writes the file and returns nothing
         mock_open.reset_mock(side_effect=True)
-        with mock.patch(self.agent_api_open, mock.mock_open(), create=True):
+        with mock.patch(self.agent_api_open, mock.mock_open(), create=True), \
+             mock.patch(self.atomic_write):
             self.assertIs(AgentApi.save_vpn_ip('1.1.1.1'), None,
                           'Failed to write VPN IP into file')
 
@@ -379,6 +381,7 @@ class AgentApiTestCase(unittest.TestCase):
 
         # otherwise, it writes the file and returns nothing
         mock_open.reset_mock(side_effect=True)
-        with mock.patch(self.agent_api_open, mock.mock_open(), create=True):
+        with mock.patch(self.agent_api_open, mock.mock_open(), create=True), \
+             mock.patch(self.atomic_write):
             self.assertIs(AgentApi.save_vulnerabilities({}), None,
                           'Failed to write vulnerabilities into file')

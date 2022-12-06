@@ -22,6 +22,9 @@ def generate_random_ip_address():
     return ".".join(it_str)
 
 
+atomic_write: str = 'agent.common.util.atomic_write'
+
+
 class TestNetworkMonitor(unittest.TestCase):
     built_open: str = "builtins.open"
     _path_json: str = 'json.loads'
@@ -267,7 +270,8 @@ class TestNetworkMonitor(unittest.TestCase):
         self.assertEqual(vpn.call_count, 1)
         self.assertEqual(swarm.call_count, 1)
 
-    def test_read_traffic_data(self):
+    @patch(atomic_write)
+    def test_read_traffic_data(self, atomic_write_mock):
 
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", Mock(), True)
