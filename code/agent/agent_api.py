@@ -12,7 +12,7 @@ import os
 import glob
 import nuvla.api
 
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaBoxCommon, util
 
 nuvla_resource = "nuvlabox-peripheral"
 NB = NuvlaBoxCommon.NuvlaBoxCommon()
@@ -313,8 +313,7 @@ def save_vpn_ip(ip):
     :param ip: string
     :return:
     """
-    with open(NB.vpn_ip_file, 'w') as vpn_ip:
-        vpn_ip.write(str(ip))
+    util.atomic_write(NB.vpn_ip_file, str(ip))
 
 
 def save_vulnerabilities(vulnerabilities):
@@ -324,5 +323,4 @@ def save_vulnerabilities(vulnerabilities):
     :param vulnerabilities: as JSON
     :return:
     """
-    with open(NB.vulnerabilities_file, 'w') as file:
-        file.write(json.dumps(vulnerabilities))
+    util.atomic_write(NB.vulnerabilities_file, json.dumps(vulnerabilities))

@@ -13,7 +13,7 @@ import docker.errors as docker_err
 import json
 import requests
 import time
-from agent.common import NuvlaBoxCommon
+from agent.common import NuvlaBoxCommon, util
 from agent.telemetry import Telemetry
 from datetime import datetime
 from os import path, stat, remove
@@ -37,7 +37,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         Thread.__init__(self, daemon=True)
 
         self.infra_logger: logging.Logger = logging.getLogger(__name__)
-        
+
         if telemetry:
             self.telemetry_instance = telemetry
         else:
@@ -59,8 +59,7 @@ class Infrastructure(NuvlaBoxCommon.NuvlaBoxCommon, Thread):
         if is_json:
             content = json.dumps(content)
 
-        with open(file, 'w') as f:
-            f.write(content)
+        util.atomic_write(file, content)
 
     def swarm_token_diff(self, current_manager_token, current_worker_token):
         """ Checks if the Swarm tokens have changed
