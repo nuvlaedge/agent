@@ -19,7 +19,7 @@ import time
 import psutil
 import paho.mqtt.client as mqtt
 
-from agent.common import NuvlaEdgeCommon
+from agent.common import NuvlaEdgeCommon, util
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
@@ -370,8 +370,8 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
 
         # write all status into the shared volume for the other
         # components to re-use if necessary
-        with open(self.nuvlaedge_status_file, 'w', encoding='UTF-8') as ne_status_file:
-            ne_status_file.write(json.dumps(all_status))
+        util.atomic_write(self.nuvlaedge_status_file, json.dumps(all_status),
+                          encoding='UTF-8')
 
         self.status.update(new_status)
 

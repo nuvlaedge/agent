@@ -15,6 +15,7 @@ from agent.telemetry import Telemetry
 class TelemetryTestCase(unittest.TestCase):
 
     agent_telemetry_open = 'agent.telemetry.open'
+    atomic_write = 'agent.common.util.atomic_write'
 
     @mock.patch('agent.telemetry.Telemetry.initialize_monitors')
     def setUp(self, mock_monitor_initializer):
@@ -214,7 +215,8 @@ class TelemetryTestCase(unittest.TestCase):
         mock_diff.return_value = ({'new-value': 'fake-value'}, set())
 
         # make sure the right status is updated and saved
-        with mock.patch(self.agent_telemetry_open) as mock_open:
+        with mock.patch(self.agent_telemetry_open) as mock_open, \
+             mock.patch(self.atomic_write): # TODO: Patch not needed but file cleanup is required
             mock_open.return_value.write.return_value = None
             self.assertIsNone(self.obj.update_status(),
                               'Failed to update status')

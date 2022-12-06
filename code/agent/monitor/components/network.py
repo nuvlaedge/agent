@@ -15,7 +15,7 @@ import requests
 from docker import errors as docker_err
 from docker.models.containers import Container
 
-from agent.common import NuvlaEdgeCommon
+from agent.common import NuvlaEdgeCommon, util
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface, IP
 from agent.monitor import Monitor
 from ..components import monitor
@@ -279,8 +279,8 @@ class NetworkMonitor(Monitor):
                 "bytes-received": rx_bytes_report
             })
 
-        with open(self.previous_net_stats_file, 'w', encoding='UTF-8') as pns:
-            pns.write(json.dumps(previous_net_stats))
+        util.atomic_write(self.previous_net_stats_file,
+                          json.dumps(previous_net_stats), encoding='UTF-8')
 
         return net_stats
 

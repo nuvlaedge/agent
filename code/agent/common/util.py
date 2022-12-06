@@ -1,8 +1,12 @@
 """
 This file gathers general utilities demanded by most of the classes such as a command executor
 """
-import logging
 
+import os
+import logging
+import tempfile
+
+from contextlib import contextmanager
 from typing import List, Union, Dict
 from subprocess import (Popen, run, PIPE, TimeoutExpired,
                         SubprocessError, STDOUT, CompletedProcess)
@@ -40,3 +44,31 @@ def execute_cmd(command: List[str], method_flag: bool = True) \
         logging.error(f"Exception not identified: {ex}")
 
     return None
+
+
+@contextmanager
+def atomic_writer(file, **kwargs):
+    """ Context manager to write to a file atomically
+
+    :param file: path of file
+    :param kwargs: kwargs passed to tempfile.NamedTemporaryFile()
+    """
+    path, prefix = os.path.split(file)
+    kwargs_ = dict(mode='w+', dir=path, prefix=f'tmp_{prefix}_')
+    kwargs_.update(kwargs)
+
+    with tempfile.NamedTemporaryFile(delete=False, **kwargs_) as tmpfile:
+        yield tmpfile
+    os.replace(tmpfile.name, file)
+
+
+def atomic_write(file, data, **kwargs):
+    """ Write data to a file atomically
+
+    :param file: path of file
+    :param data: data to write to the file
+    :param kwargs: kwargs passed to tempfile.NamedTemporaryFile
+    """
+    with atomic_writer(file, **kwargs) as f:
+        return f.write(data)
+

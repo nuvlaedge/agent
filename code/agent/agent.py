@@ -11,6 +11,7 @@ from copy import copy
 
 from nuvla.api.models import CimiResource
 
+from agent.common import util
 from agent.infrastructure import Infrastructure
 from agent.job import Job
 from agent.telemetry import Telemetry
@@ -95,9 +96,9 @@ class Agent:
             self.logger.warning('Host user home directory not defined.'
                                 'This might impact future SSH management actions')
         else:
-            with open(self.infrastructure.host_user_home_file, 'w',
-                      encoding='UTF-8') as user_home:
-                user_home.write(self.infrastructure.installation_home)
+            util.atomic_write(self.infrastructure.host_user_home_file,
+                              self.infrastructure.installation_home,
+                              encoding='UTF-8')
             self.infrastructure.set_immutable_ssh_key()
 
     def initialize_telemetry(self) -> NoReturn:

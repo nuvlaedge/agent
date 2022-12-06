@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from subprocess import PIPE, Popen
 from nuvla.api import Api
 
+from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
 from agent.orchestrator.docker import DockerClient
 from agent.orchestrator.kubernetes import KubernetesClient
@@ -134,8 +135,7 @@ class NuvlaEdgeCommon:
         if extra_config is not None:
             extra_config = extra_config.replace(r'\n', '\n')
             try:
-                with open(extra_config_file, 'w') as f:
-                    f.write(extra_config)
+                util.atomic_write(extra_config_file, extra_config)
             except OSError:
                 self.logger.exception('Failed to write VPN extra config file')
             return extra_config
@@ -205,8 +205,7 @@ class NuvlaEdgeCommon:
     @staticmethod
     def save_nuvla_configuration(file_path, content):
         if not os.path.exists(file_path):
-            with open(file_path, 'w') as f:
-                f.write(content)
+            util.atomic_write(file_path, content)
 
     def set_runtime_client_details(self) -> ContainerRuntimeClient:
         """
@@ -312,8 +311,7 @@ class NuvlaEdgeCommon:
         :return: True if file was written with success. False otherwise
         """
         try:
-            with open(file_path, mode) as f:
-                f.write(json.dumps(content))
+            util.atomic_write(file_path, json.dumps(content), mode=mode)
         except Exception as e:
             self.logger.exception(f'Exception in write_json_to_file: {e}')
             return False
@@ -382,9 +380,8 @@ class NuvlaEdgeCommon:
 
         :param operational_status: status of the NuvlaEdge
         """
-
-        with open("{}/{}".format(self.data_volume, self.status_file), 'w') as s:
-            s.write(operational_status)
+        file_path = "{}/{}".format(self.data_volume, self.status_file)
+        util.atomic_write(file_path, operational_status)
 
     def write_vpn_conf(self, values):
         """ Write VPN configuration into a file
@@ -439,8 +436,7 @@ ${vpn_endpoints_mapped}
 ${vpn_extra_config}
 """)
 
-        with open(self.vpn_client_conf_file, 'w') as vpnf:
-            vpnf.write(tpl.substitute(values))
+        util.atomic_write(self.vpn_client_conf_file, tpl.substitute(values))
 
     def prepare_vpn_certificates(self):
         nuvlaedge_vpn_key = f'{self.vpn_folder}/nuvlaedge-vpn.key'

@@ -15,6 +15,7 @@ from threading import Thread
 class InfrastructureTestCase(unittest.TestCase):
 
     agent_infrastructure_open = 'agent.infrastructure.open'
+    atomic_write = 'agent.common.util.atomic_write'
 
     def setUp(self):
         Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread),)
@@ -60,14 +61,16 @@ class InfrastructureTestCase(unittest.TestCase):
         content = {'foo': 'bar'}
         mock_json_dumps.return_value = ''
 
-        with mock.patch("agent.infrastructure.open") as mock_open:
+        with mock.patch("agent.infrastructure.open") as mock_open, \
+             mock.patch(self.atomic_write):
             mock_open.return_value.write.return_value = None
             self.assertEqual(self.obj.write_file('mock-file', 'something'), None,
                              'Unable to write raw string to file')
 
         mock_json_dumps.assert_not_called()
         # is JSON, then json.dumps must be called
-        with mock.patch("agent.infrastructure.open") as mock_open:
+        with mock.patch("agent.infrastructure.open") as mock_open, \
+             mock.patch(self.atomic_write):
             mock_open.return_value.write.return_value = None
             self.assertEqual(self.obj.write_file('mock-file', content, is_json=True), None,
                              'Unable to write JSON to file')
