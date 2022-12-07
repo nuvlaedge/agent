@@ -1,4 +1,10 @@
 # Changelog
+## [2.9.6] - 2022-12-07
+### Added
+### Changed
+ - Telemetry: update network/interfaces to a list of dict
+ - (re)write files in an atomic way
+ - NuvlaEdgeCommon: refactor set_nuvlaedge_id() and use credential alternatively
 
 ## Unreleased
 ### Added
