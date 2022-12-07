@@ -16,6 +16,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
 
     agent_nuvlaedge_common_open = 'agent.common.NuvlaEdgeCommon.open'
     atomic_write = 'agent.common.util.atomic_write'
+    get_ne_id_api = 'agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon._get_nuvlaedge_id_from_api_session'
 
     @mock.patch('os.path.isdir')
     @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_vpn_config_extra')
@@ -206,6 +207,15 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
         os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id-3'
         self.assertEqual(self.obj.set_nuvlaedge_id(), 'nuvlabox/fake-id-3',
                          'Unable to correctly get NuvlaEdge ID from env')
+
+        # if the file exists and is empty but id can be found from the credential (api session)
+        mock_exists.return_value = True
+        del os.environ['NUVLAEDGE_UUID']
+        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='')), \
+                mock.patch(self.get_ne_id_api) as session_nuvlaedge_id:
+            session_nuvlaedge_id.return_value = 'nuvlabox/fake-id-4'
+            self.assertEqual(self.obj.set_nuvlaedge_id(), 'nuvlabox/fake-id-4',
+                             'Failed to check that NuvlaEdge ID from session is used in case of an empty context file')
 
     def test_get_api_keys(self):
         # if there are no keys in env, return None,None
