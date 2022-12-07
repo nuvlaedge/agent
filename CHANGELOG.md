@@ -1,4 +1,9 @@
 # Changelog
+## [2.8.7] - 2022-12-07
+### Added
+### Changed
+ - (re)write files in an atomic way
+ - NuvlaBoxCommon: refactor set_nuvlabox_id() and use credential alternatively
 ## [2.8.6] - 2022-12-05
 ### Added
 ### Changed
