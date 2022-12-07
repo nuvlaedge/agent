@@ -223,34 +223,91 @@ class NuvlaBoxCommon:
                 raise OrchestratorException(f'Orchestrator is "{ORCHESTRATOR}", but file '
                                             f'{self.docker_socket_file} is not present')
 
+    def _get_nuvlaedge_id_from_environment(self):
+        nuvlaedge_id = os.getenv('NUVLAEDGE_UUID', os.getenv('NUVLABOX_UUID'))
+        if not nuvlaedge_id:
+            self.logger.info('NuvlaEdge uuid not available as environment variable')
+        else:
+            self.logger.info('NuvlaEdge uuid found in environment variables')
+        return nuvlaedge_id
+
+    def _get_nuvlaedge_id_from_api_session(self):
+        nuvlaedge_id = None
+        error_msg = 'Failed to get NuvlaEdge uuid from api session'
+        try:
+            api = self.api()
+            nuvlaedge_id = api.get(api.current_session()).data['identifier']
+        except Exception as e:
+            self.logger.error(f'{error_msg}: {e}')
+        else:
+            if nuvlaedge_id:
+                self.logger.info('NuvlaEdge uuid found in api session')
+            else:
+                self.logger.error(error_msg)
+        return nuvlaedge_id
+
+    def _get_nuvlaedge_id_from_context_file(self):
+        nuvlaedge_id = None
+        try:
+            with open("{}/{}".format(self.data_volume, self.context)) as f:
+                nuvlaedge_id = json.load(f)['id']
+        except Exception as e:
+            self.logger.error(f'Failed to read NUVLABOX_UUID from context file '
+                              f'{self.data_volume}/{self.context}: {str(e)}')
+        else:
+            if nuvlaedge_id:
+                self.logger.info('NuvlaEdge uuid found in context file')
+            else:
+                self.logger.error('Failed to get NuvlaEdge uuid from context file')
+        return nuvlaedge_id
+
     def set_nuvlabox_id(self) -> str:
         """
-        Discovers the NuvlaBox ID either from env or from a previous run
+        Discovers the NuvlaEdge ID either from a previous run or from env or alternatively from the API session
 
         :return: clean nuvlabox ID as a str
         """
-        new_nuvlabox_id = os.getenv('NUVLABOX_UUID')
 
-        if os.path.exists("{}/{}".format(self.data_volume, self.context)):
-            try:
-                nuvlabox_id = json.loads(open("{}/{}".format(self.data_volume, self.context)).read())['id']
-                if new_nuvlabox_id and new_nuvlabox_id.split('/')[-1] != nuvlabox_id.split('/')[-1]:
-                    raise RuntimeError(f'You are trying to install a new NuvlaBox {new_nuvlabox_id} even though a '
-                                       f'previous NuvlaBox installation ({nuvlabox_id}) still exists in the system! '
-                                       f'You can either delete the previous installation (removing all data volumes) or '
-                                       f'fix the NUVLABOX_UUID environment variable to match the old {nuvlabox_id}')
-            except json.decoder.JSONDecodeError as e:
-                raise Exception(f'NUVLABOX_UUID not provided and cannot read previous context from '
-                                f'{self.data_volume}/{self.context}: {str(e)}')
-        elif new_nuvlabox_id:
-            nuvlabox_id = new_nuvlabox_id
+        def get_uuid(href):
+            return href.split('/')[-1] if href else href
+
+        env_nuvlaedge_id = self._get_nuvlaedge_id_from_environment()
+        session_nuvlaedge_id = self._get_nuvlaedge_id_from_api_session()
+        context_nuvlaedge_id = self._get_nuvlaedge_id_from_context_file()
+
+        if (context_nuvlaedge_id and env_nuvlaedge_id
+                and get_uuid(context_nuvlaedge_id) != get_uuid(env_nuvlaedge_id)):
+            raise RuntimeError(f'You are trying to install a new NuvlaEdge {env_nuvlaedge_id} even though a '
+                               f'previous NuvlaEdge installation ({context_nuvlaedge_id}) still exists in the system! '
+                               f'You can either delete the previous installation (removing all data volumes) or '
+                               f'fix the NUVLABOX_UUID environment variable to match the old {context_nuvlaedge_id}')
+
+        if (context_nuvlaedge_id and session_nuvlaedge_id
+                and get_uuid(context_nuvlaedge_id) != get_uuid(session_nuvlaedge_id)):
+            self.logger.warning(f'NuvlaEdge from context file ({context_nuvlaedge_id}) '
+                                f'do not match session identifier ({session_nuvlaedge_id})')
+
+        if (env_nuvlaedge_id and session_nuvlaedge_id
+                and get_uuid(env_nuvlaedge_id) != get_uuid(session_nuvlaedge_id)):
+            self.logger.warning(f'NuvlaEdge from environment variable ({env_nuvlaedge_id}) '
+                                f'do not match session identifier ({session_nuvlaedge_id})')
+
+        if context_nuvlaedge_id:
+            self.logger.info(f'Using NuvlaEdge uuid from context file: {context_nuvlaedge_id}')
+            nuvlaedge_id = context_nuvlaedge_id
+        elif env_nuvlaedge_id:
+            self.logger.info(f'Using NuvlaEdge uuid from environment variable: {env_nuvlaedge_id}')
+            nuvlaedge_id = env_nuvlaedge_id
+        elif session_nuvlaedge_id:
+            self.logger.info(f'Using NuvlaEdge uuid from api session: {session_nuvlaedge_id}')
+            nuvlaedge_id = session_nuvlaedge_id
         else:
-            raise Exception(f'NUVLABOX_UUID not provided')
+            raise RuntimeError(f'NUVLABOX_UUID not provided')
 
-        if not nuvlabox_id.startswith("nuvlabox/"):
-            nuvlabox_id = 'nuvlabox/{}'.format(nuvlabox_id)
+        if not nuvlaedge_id.startswith("nuvlaedge/") and not nuvlaedge_id.startswith("nuvlabox/"):
+            nuvlaedge_id = 'nuvlabox/{}'.format(nuvlaedge_id)
 
-        return nuvlabox_id
+        return nuvlaedge_id
 
     @staticmethod
     def get_api_keys():
