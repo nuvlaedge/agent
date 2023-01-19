@@ -47,7 +47,6 @@ jobs:
         run: |
           mkdir -p results/temp/xml results/temp/json
 
-      # FUTURE: Store results somewhere else?
       - name: Clear previous results
         run: |
           rm results/temp/xml/*.xml || true
