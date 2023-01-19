@@ -1,8 +1,8 @@
-name: "Agent validation workflow"
+name: VALIDATION
 
 on:
   workflow_run:
-    workflows: ["NuvlaEdge Component Build"]
+    workflows: [BUILD, Simple]
     types:
       - completed
   workflow_dispatch:
