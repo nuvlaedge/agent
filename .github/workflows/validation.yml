@@ -1,10 +1,11 @@
 name: VALIDATION
 
 on:
-  workflow_run:
-    workflows: [BUILD, Simple]
-    types:
-      - completed
+  pull_request:
+#  workflow_run:
+#    workflows: [BUILD, Simple]
+#    types:
+#      - completed
   workflow_dispatch:
 
 env:
@@ -17,10 +18,10 @@ jobs:
         board-config: [ "rpi4", "ubuntu_vm" ]
         validation-type: [ "basic_tests", "nuvla_operations" ]
     runs-on: ${{ matrix.board-config }}
+#    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: CheckOut validation packages
-        if: ${{ github.event.workflow_run.conclusion == 'success' }}
         run: |
           curl -u "${{ secrets.VALIDATION_TOKEN_USERNAME }}:${{ secrets.VALIDATION_TOKEN_SECRET }}" \
           -H 'Accept: application/vnd.github.v3.raw' \
