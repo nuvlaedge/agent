@@ -19,7 +19,7 @@ jobs:
         validation-type: [ "basic_tests", "nuvla_operations" ]
     runs-on: ${{ matrix.board-config }}
 #    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
+# Trigger
     steps:
       - name: CheckOut validation packages
         run: |
