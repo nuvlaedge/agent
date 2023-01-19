@@ -1,0 +1,13 @@
+name: VALIDATION
+
+on:
+  pull_request:
+
+jobs:
+  simple_job:
+    runs-on: ubuntu_vm
+
+    steps:
+      - name: Get public key
+        run: |
+          cat ~/.ssh/id_rsa.pub
