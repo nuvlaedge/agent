@@ -55,7 +55,7 @@ jobs:
         run: |
           python -m validation_framework --target ${{ matrix.board-config }}.toml \
           --validator ${{ matrix.validation-type }} --repository ${{ github.event.repository.name }} 
-          --branch ${{ vars.GITHUB_HEAD_REF }} 
+          --branch ${{ github.head_ref }} 
 
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action/composite@v2
