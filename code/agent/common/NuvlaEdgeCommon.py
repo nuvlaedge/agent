@@ -405,8 +405,8 @@ class NuvlaEdgeCommon:
         """ Retrieves the operational status of the NuvlaEdge from the .status file """
 
         try:
-            operational_status = open("{}/{}".format(self.data_volume,
-                                                     self.status_file)).readlines()[0].replace('\n', '').upper()
+            with open("{}/{}".format(self.data_volume, self.status_file)) as file:
+                operational_status = file.readlines()[0].replace('\n', '').upper()
         except FileNotFoundError:
             self.logger.warning("Operational status could not be found")
             operational_status = "UNKNOWN"

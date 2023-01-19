@@ -1,7 +1,7 @@
 name: VALIDATION
 
 on:
-  pull_request:
+#  pull_request:
 #  workflow_run:
 #    workflows: [BUILD, Simple]
 #    types:
