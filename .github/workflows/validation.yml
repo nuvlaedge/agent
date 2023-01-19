@@ -28,7 +28,6 @@ jobs:
           -H 'Accept: application/vnd.github.v3.raw' \
           -O --create-dirs --output-dir conf/targets/ \
           -L "https://api.github.com/repos/nuvlaedge/validation/contents/conf/targets/${{ matrix.board-config }}.toml" \
-          
 
       - name: Gather System configuration
         run: |
