@@ -3,7 +3,6 @@ name: "Agent validation workflow"
 on:
   workflow_run:
     workflows: ["NuvlaEdge Component Build"]
-    pull_request:
     types:
       - completed
   workflow_dispatch:
