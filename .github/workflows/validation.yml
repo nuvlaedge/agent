@@ -55,7 +55,8 @@ jobs:
       - name: Run Validation on board ${{ matrix.board-config }}
         run: |
           python -m validation_framework --target ${{ matrix.board-config }}.toml \
-          --validator ${{ matrix.validation-type }} --microservice ${{ github.event.repository.name }}
+          --validator ${{ matrix.validation-type }} --repository ${{ github.event.repository.name }} 
+          --branch ${{ vars.GITHUB_HEAD_REF }} 
 
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action/composite@v2
