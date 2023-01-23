@@ -61,9 +61,9 @@ class GeoLocationMonitor(Monitor):
         try:
             self.logger.debug(f"Inferring geolocation with 3rd party service {service}")
             return requests.get(service, allow_redirects=False, timeout=5).json()
-        except requests.RequestException:
+        except requests.RequestException as e:
             self.logger.error(f"Could not infer IP-based geolocation from "
-                              f"service {service}")
+                              f"service {service}: {e}")
             return None
 
     def parse_geolocation(self, service_name: str, service_info: dict,

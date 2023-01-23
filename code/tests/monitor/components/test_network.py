@@ -60,8 +60,8 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("file", Mock(), Mock())
         test_ip_monitor._REMOTE_IPV4_API = "empty"
-        with self.assertRaises(requests.exceptions.MissingSchema):
-            test_ip_monitor.set_public_data()
+        test_ip_monitor.set_public_data()
+        self.assertFalse(test_ip_monitor.data.ips.public)
 
     def test_set_public_data_should_raise_timeout(self):
         # Test timeout

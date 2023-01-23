@@ -4,15 +4,15 @@ Main entrypoint script for the agent component in the NuvlaEdge engine
 Controls all the functionalities of the Agent
 """
 
-from argparse import ArgumentParser
-import os
 import logging
-from logging import config as log_config_mod
+import logging.config
+import os
 import signal
 import socket
 import time
-from typing import Union, Dict
+from argparse import ArgumentParser
 from threading import Event, Thread
+from typing import Union, Dict
 
 import requests
 
@@ -20,12 +20,8 @@ import agent.api_endpoint as endpoint
 from agent import Agent, Activate, Infrastructure
 from agent.common import NuvlaBoxCommon
 
-# Logging globals
-log_format: str = '[%(asctime)s - %(name)s/%(funcName)s - %(levelname)s]: %(message)s'
-default_log_filename: str = 'agent.log'
 
 # Nuvlaedge globals
-data_volume: str = '/srv/nuvlabox/shared'
 network_timeout: int = 10
 refresh_interval: int = 30
 
@@ -214,7 +210,7 @@ def main():
 
 if __name__ == '__main__':
     # Global logging configuration
-    log_config_mod.fileConfig('agent/config/agent_logger_config.conf')
+    logging.config.fileConfig('agent/config/agent_logger_config.conf')
 
     agent_parser: ArgumentParser = parse_arguments()
 
