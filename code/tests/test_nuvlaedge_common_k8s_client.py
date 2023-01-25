@@ -27,6 +27,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
+        os.environ['COMPOSE_PROJECT'] = 'tests'
         os.environ.setdefault('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
         with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
             with mock.patch('kubernetes.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
@@ -51,7 +52,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                              'Unable to set Kubernetes client for apps')
 
         # the base class should also have been set
-        self.assertEqual(self.obj.job_engine_lite_component, "nuvlaedge-job-engine-lite",
+        self.assertEqual(self.obj.job_engine_lite_component, f"{os.getenv('COMPOSE_PROJECT')}-job-engine-lite-1",
                          'Base class of the ContainerRuntime was not properly initialized')
 
     def test_get_node_info(self, ):

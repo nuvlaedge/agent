@@ -180,7 +180,6 @@ def main():
 
     # Setup Endpoint API
     api_thread: Thread = configure_endpoint_api(main_agent)
-
     while agent_exit_flag:
         # Time Start
         start_cycle: float = time.time()
@@ -198,7 +197,6 @@ def main():
                                            ,),
                                      daemon=True)
             watchdog_thread.start()
-
         main_agent.run_single_cycle()
 
         # -------------------------------------------------------------------------------
@@ -215,7 +213,6 @@ def main():
 if __name__ == '__main__':
     # Global logging configuration
     log_config_mod.fileConfig('agent/config/agent_logger_config.conf')
-
     agent_parser: ArgumentParser = parse_arguments()
 
     # Logger for the root script

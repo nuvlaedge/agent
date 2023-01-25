@@ -318,17 +318,19 @@ class InfrastructureTestCase(unittest.TestCase):
     def test_get_compute_endpoint(self):
         self.obj.container_runtime.get_api_ip_port.return_value = (None, None)
         # if all we have are None values, then we also get None
-        self.assertEqual(self.obj.get_compute_endpoint(''), (None, None),
+        self.assertEqual(self.obj.get_compute_endpoint(''), (None, 5000),
                          'Returned a compute endpoint even though there is not enough information to infer it')
 
         # if VPN IP is given, use it
         self.obj.container_runtime.get_api_ip_port.return_value = (None, 5000)
+        self.obj.compute_api_port = 5000
         self.assertEqual(self.obj.get_compute_endpoint('1.1.1.1'), ('https://1.1.1.1:5000', 5000),
                          'Unable to get compute endpoint when there is a VPN IP')
 
         # otherwise, infer it
+        self.obj.compute_api_port = 5555
         self.obj.container_runtime.get_api_ip_port.return_value = ('2.2.2.2', 5555)
-        self.assertEqual(self.obj.get_compute_endpoint(''), ('https://2.2.2.2:5555', 5555),
+        self.assertEqual(self.obj.get_compute_endpoint(''), ('https://2.2.2.2:5000', 5000),
                          'Unable to infer compute endpoint and port')
 
     @mock.patch.object(Infrastructure, 'get_node_role_from_status')
@@ -433,7 +435,7 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_read_commission.return_value = {}
         self.obj.telemetry_instance.get_vpn_ip.return_value = '1.1.1.1'
         mock_get_comp_endpoint.return_value = ('https://1.1.1.1:5000', 5000)
-        self.obj.container_runtime.get_node_labels.return_value = None
+        self.obj.container_runtime.get_node_labels.return_value = []
         mock_attr_changed.return_value = None
 
         mock_get_tls_keys.return_value = ('ca', 'cert', 'key')

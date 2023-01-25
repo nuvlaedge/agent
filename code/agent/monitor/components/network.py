@@ -52,7 +52,7 @@ class NetworkMonitor(Monitor):
         self.runtime_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
-        self.engine_project_name: str = self.get_engine_project_name()
+        self.engine_project_name: str = os.getenv('COMPOSE_PROJECT')
         self.logger.info(f'Running network monitor for project '
                          f'{self.engine_project_name}')
         self.iproute_container_name: str = f'{self.engine_project_name}_iproute'

@@ -382,5 +382,5 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
             with open(self.vpn_ip_file, encoding='UTF-8') as vpn_file:
                 return vpn_file.read().splitlines()[0]
         else:
-            logging.warning("Cannot infer the NuvlaEdge VPN IP!")
+            self.logger.warning("Cannot infer the NuvlaEdge VPN IP!")
             return None

@@ -5,6 +5,7 @@ import base64
 import contextlib
 import datetime
 import json
+import os
 import subprocess
 import docker
 import logging
@@ -24,6 +25,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
+        os.environ['COMPOSE_PROJECT'] = 'tests'
         self.obj = DockerClient(self.hostfs, self.host_home)
         self.local_docker_client = docker.from_env()
         self.fake_swarm_tokens = {
@@ -48,7 +50,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                       'Unable to retrieve Docker info')
 
         # the base class should also have been set
-        self.assertEqual(self.obj.job_engine_lite_component, "nuvlaedge-job-engine-lite",
+        self.assertEqual(self.obj.job_engine_lite_component, f"{os.getenv('COMPOSE_PROJECT')}-job-engine-lite-1",
                          'Base class of the ContainerRuntime was not properly initialized')
 
     def test_get_node_info(self):

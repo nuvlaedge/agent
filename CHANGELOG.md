@@ -1,4 +1,9 @@
 # Changelog
+## Unreleased
+### Added
+Added support for isolation via port configurability
+### Changed
+
 ## [2.9.6] - 2022-12-07
 ### Added
 ### Changed

@@ -6,7 +6,7 @@
 It takes care of updating the NuvlaEdge infrastructure services
 and respective credentials in Nuvla
 """
-
+import os
 import logging
 import docker
 import docker.errors as docker_err
@@ -25,7 +25,6 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
     properties necessary update the infrastructure services
     and respective credentials in Nuvla, whenever the local
     configurations change
-
     """
 
     def __init__(self, data_volume, telemetry: Telemetry = None, refresh_period=15):
@@ -42,8 +41,8 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = 'compute-api'
-        self.compute_api_port = '5000'
+        self.compute_api = os.getenv('COMPOSE_PROJECT') + '-compute-api-1'
+        self.compute_api_port = os.getenv('COMPUTE_API_PORT')
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -223,15 +222,13 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         :return: True or False
         """
-
         if NuvlaEdgeCommon.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
         if not container_api_port:
             container_api_port = self.compute_api_port
 
-        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
-
+        compute_api_url = f'https://{self.compute_api}:{5000}'
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status \
                     != 'running':
@@ -242,10 +239,11 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             # this is expected. It means it is up, we just weren't authorized
             pass
         except (docker_err.NotFound, docker_err.APIError, TimeoutError):
+
             return False
         except requests.exceptions.ConnectionError:
             # Can happen if the Compute API takes longer than normal on start
-            self.logger.info(f'Too many requests... Compute API not ready yet')
+            self.infra_logger.info(f'Too many requests... Compute API not ready yet')
             return False
 
         return True
@@ -331,12 +329,15 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         container_api_ip, container_api_port = self.container_runtime.get_api_ip_port()
 
         api_endpoint = None
+        ret_port = 5000
         if vpn_ip:
-            api_endpoint = f"https://{vpn_ip}:{container_api_port}"
+            api_endpoint = f"https://{vpn_ip}:{self.compute_api_port}"
+            ret_port = self.compute_api_port
         elif container_api_ip and container_api_port:
-            api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+            api_endpoint = f"https://{container_api_ip}:{5000}"
 
-        return api_endpoint, container_api_port
+        self.infra_logger.debug(f'Compute API endpoint detected in: {api_endpoint}')
+        return api_endpoint, ret_port
 
     def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict,
                                    old_payload: dict):
@@ -406,13 +407,22 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         # initialize the commissioning payload
         commission_payload = cluster_info.copy()
+
         old_commission_payload = self.read_commissioning_file()
         minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() else cluster_info.copy()
 
         my_vpn_ip = self.telemetry_instance.get_vpn_ip()
         api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
-        commission_payload["tags"] = self.container_runtime.get_node_labels()
+        current_data = self.api().get(self.nuvlaedge_id)
+        if current_data.data.get('tags'):
+            temp_list: set = set(current_data.data.get('tags', []))
+            for i in self.container_runtime.get_node_labels():
+                temp_list.add(i)
+
+            commission_payload["tags"] = list(temp_list)
+        else:
+            commission_payload["tags"] = list(self.container_runtime.get_node_labels())
         self.commissioning_attr_has_changed(
             commission_payload,
             old_commission_payload,
@@ -647,7 +657,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
             self.write_file(self.ssh_flag, self.ssh_pub_key)
 
-    def run(self):
+    def run(self) -> None:
         """
         Threads the commissioning cycles, so that they don't interfere with the main
         telemetry cycle

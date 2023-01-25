@@ -145,8 +145,9 @@ class DockerClient(ContainerRuntimeClient):
         return self.cast_dict_to_list(node_labels)
 
     def is_vpn_client_running(self):
-        vpn_client_running = True if self.client.containers.get("vpn-client").status == 'running' else False
-        return vpn_client_running
+        self.logger.error(f'\n\n\nGetme some {self.vpn_client_component} info '
+                          f'{self.client.containers.get(self.vpn_client_component).id} \n\n\n')
+        return self.client.containers.get(self.vpn_client_component).status == 'running'
 
     def install_ssh_key(self, ssh_pub_key, ssh_folder):
         cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
@@ -203,7 +204,7 @@ class DockerClient(ContainerRuntimeClient):
                    docker_image=None):
         # Get the compute-api network
         try:
-            compute_api = self.client.containers.get('compute-api')
+            compute_api = self.client.containers.get(os.getenv('COMPOSE_PROJECT') + '_compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
                 TimeoutError):
