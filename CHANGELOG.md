@@ -1,4 +1,8 @@
 # Changelog
+## [2.8.8] - 2023-01-25
+### Added
+### Changed
+ - Ensure every requests calls have a timeout
 ## [2.8.7] - 2022-12-07
 ### Added
 ### Changed
