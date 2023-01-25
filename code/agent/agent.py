@@ -5,18 +5,18 @@ Also controls the execution flow and provides utilities to the children dependen
 import logging
 import os
 import threading
+from copy import copy
 from threading import Event, Thread
 from typing import Union, NoReturn, List, Dict
-from copy import copy
 
 from nuvla.api.models import CimiResource
 
+from agent.activate import Activate
 from agent.common import util
+from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
 from agent.job import Job
 from agent.telemetry import Telemetry
-from agent.activate import Activate
-from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
 
 
 class Agent:

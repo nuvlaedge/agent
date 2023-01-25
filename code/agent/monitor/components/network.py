@@ -85,7 +85,7 @@ class NetworkMonitor(Monitor):
             return
         try:
             it_v4_response: requests.Response = requests.get(
-                self._REMOTE_IPV4_API)
+                self._REMOTE_IPV4_API, timeout=5)
 
             if it_v4_response.status_code == 200:
                 self.data.ips.public = \
@@ -95,6 +95,8 @@ class NetworkMonitor(Monitor):
         except requests.Timeout as ex:
             reason: str = f'Connection to server timed out: {ex}'
             self.logger.error(f'Cannot retrieve public IP. {reason}')
+        except Exception as e:
+            self.logger.error(f'Cannot retrieve public IP: {e}')
 
     def parse_host_ip_json(self, iface_data: Dict) -> Union[NetworkInterface, None]:
         """

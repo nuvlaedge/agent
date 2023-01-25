@@ -251,7 +251,7 @@ class NuvlaEdgeCommon:
             with open("{}/{}".format(self.data_volume, self.context)) as f:
                 nuvlaedge_id = json.load(f)['id']
         except Exception as e:
-            self.logger.error(f'Failed to read NUVLAEDGE_UUID from context file '
+            self.logger.error(f'Failed to read NuvlaEdge uuid from context file '
                               f'{self.data_volume}/{self.context}: {str(e)}')
         else:
             if nuvlaedge_id:
@@ -548,7 +548,8 @@ ${vpn_extra_config}
             vpn_conf_fields: requests.Response = \
                 requests.post(
                     "http://localhost/api/commission",
-                    json={"vpn-csr": vpn_csr})
+                    json={"vpn-csr": vpn_csr},
+                    timeout=(3, 20))
 
             vpn_conf_fields = vpn_conf_fields.json()
 
