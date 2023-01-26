@@ -30,6 +30,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
         self.ssh_pub_key = 'fakeSSHPubKey'
         os.environ['NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY'] = self.ssh_pub_key
         os.environ['NUVLAEDGE_ENGINE_VERSION'] = '2.3.1'
+        os.environ['COMPOSE_PROJECT'] = 'tests'
         self.installation_home = '/home/fake'
         mock_set_install_home.return_value = self.installation_home
         mock_set_nuvla_endpoint.return_value = ('fake.nuvla.io', True)

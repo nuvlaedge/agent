@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 
 import docker
 import json
@@ -19,6 +20,7 @@ class InfrastructureTestCase(unittest.TestCase):
 
     def setUp(self):
         Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread),)
+        os.environ['COMPOSE_PROJECT'] = 'tests'
         with mock.patch('agent.infrastructure.Telemetry') as mock_telemetry:
             mock_telemetry.return_value = mock.MagicMock()
             self.shared_volume = "mock/path"

@@ -1,10 +1,8 @@
-import threading
+import os
 
-import agent.infrastructure
 from agent import Agent
 from mock import Mock, patch
 from unittest import TestCase
-import sys
 
 
 class TestAgent(TestCase):
@@ -14,6 +12,7 @@ class TestAgent(TestCase):
     @patch('agent.agent.NuvlaEdgeCommon')
     @patch('agent.agent.Activate')
     def setUp(self, nb_mock, activate_mock) -> None:
+        os.environ['COMPOSE_PROJECT'] = 'tests'
         self.test_agent: Agent = Agent(True)
 
     @patch('threading.Event.wait')
