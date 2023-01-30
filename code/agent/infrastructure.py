@@ -110,7 +110,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if not payload:
             self.infra_logger.debug("Tried commissioning with empty payload. Nothing "
                                     "to do")
-            return
+            return False
 
         self.infra_logger.info("Commissioning the NuvlaEdge...{}".format(payload))
         try:
