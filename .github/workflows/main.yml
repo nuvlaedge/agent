@@ -1,4 +1,4 @@
-name: "NuvlaEdge Component Build"
+name: "BUILD"
 
 on:
   push:
