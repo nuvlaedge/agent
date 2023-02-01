@@ -51,7 +51,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                       'Unable to retrieve Docker info')
 
         # the base class should also have been set
-        self.assertEqual(self.obj.job_engine_lite_component, f"{os.getenv('COMPOSE_PROJECT')}-job-engine-lite-1",
+        self.assertEqual(self.obj.job_engine_lite_component, f"{os.getenv('COMPOSE_PROJECT')}_job-engine-lite_1",
                          'Base class of the ContainerRuntime was not properly initialized')
 
     def test_get_node_info(self):
