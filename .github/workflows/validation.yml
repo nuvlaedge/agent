@@ -12,12 +12,27 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name || vars.GITHUB_REF_NAME }}
 
 jobs:
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      boards: ${{ steps.set-boards.outputs.boards }}
+      tests: ${{ steps.set-tests.outputs.tests }}
+    steps:
+      - id: set-boards
+        run: |
+          echo "boards=${{ vars.TESTBED_BOARDS }}" >> $GITHUB_OUTPUT
+
+      - id: set-tests
+        run: |
+          echo "tests=${{ vars.VALIDATION_TESTS }}" >> $GITHUB_OUTPUT
+
   validate-release:
     strategy:
       matrix:
-        board-config: [ "rpi4", "ubuntu_vm" ]
-        validation-type: [ "basic_tests", "nuvla_operations" ]
+        board-config: ${{ fromJSON(needs.setup-matrix.outputs.boards) }}
+        validation-type: ${{ fromJSON(needs.setup-matrix.outputs.tests) }}
     runs-on: ${{ matrix.board-config }}
+
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
