@@ -204,7 +204,7 @@ class DockerClient(ContainerRuntimeClient):
                    docker_image=None):
         # Get the compute-api network
         try:
-            compute_api = self.client.containers.get(os.getenv('COMPOSE_PROJECT') + '_compute-api')
+            compute_api = self.client.containers.get(os.getenv('COMPOSE_PROJECT') + '_compute-api_1')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
                 TimeoutError):

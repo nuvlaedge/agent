@@ -23,9 +23,9 @@ class ContainerRuntimeClient(ABC):
     def __init__(self, host_rootfs, host_home):
         self.client = None
         self.hostfs = host_rootfs
-        self.job_engine_lite_component = os.getenv('COMPOSE_PROJECT') + "-job-engine-lite-1"
+        self.job_engine_lite_component = os.getenv('COMPOSE_PROJECT') + "_job-engine-lite_1"
         self.job_engine_lite_image = None
-        self.vpn_client_component = os.getenv('COMPOSE_PROJECT') + '-vpn-client-1'
+        self.vpn_client_component = os.getenv('COMPOSE_PROJECT') + '_vpn-client_1'
         self.host_home = host_home
         self.ignore_env_variables = ['NUVLAEDGE_API_KEY', 'NUVLAEDGE_API_SECRET']
         self.data_gateway_name = None
