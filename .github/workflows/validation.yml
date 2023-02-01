@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  VALIDATION_PACKAGE_NAME: "validation-latest-py3-none-any.whl"
+  VALIDATION_PACKAGE_NAME: ${{ vars.VALIDATION_PACKAGE_NAME }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name || vars.GITHUB_REF_NAME }}
 
 jobs:
@@ -27,6 +27,7 @@ jobs:
           echo "tests=${{ vars.VALIDATION_TESTS }}" >> $GITHUB_OUTPUT
 
   validate-release:
+    needs: setup-matrix
     strategy:
       matrix:
         board-config: ${{ fromJSON(needs.setup-matrix.outputs.boards) }}
