@@ -41,7 +41,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = os.getenv('COMPOSE_PROJECT') + '-compute-api-1'
+        self.compute_api = os.getenv('COMPOSE_PROJECT') + '-compute-api_1'
         self.compute_api_port = os.getenv('COMPUTE_API_PORT')
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
@@ -329,15 +329,12 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         container_api_ip, container_api_port = self.container_runtime.get_api_ip_port()
 
         api_endpoint = None
-        ret_port = 5000
         if vpn_ip:
-            api_endpoint = f"https://{vpn_ip}:{self.compute_api_port}"
-            ret_port = self.compute_api_port
+            api_endpoint = f"https://{vpn_ip}:{container_api_port}"
         elif container_api_ip and container_api_port:
-            api_endpoint = f"https://{container_api_ip}:{5000}"
+            api_endpoint = f"https://{container_api_ip}:{container_api_port}"
 
-        self.infra_logger.debug(f'Compute API endpoint detected in: {api_endpoint}')
-        return api_endpoint, ret_port
+        return api_endpoint, container_api_port
 
     def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict,
                                    old_payload: dict):

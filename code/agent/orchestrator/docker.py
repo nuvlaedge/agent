@@ -111,9 +111,9 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, 5000
+                    return None, int(os.getenv('COMPUTE_API_PORT'))
 
-        return ip, 5000
+        return ip, int(os.getenv('COMPUTE_API_PORT'))
 
     def has_pull_job_capability(self):
         try:

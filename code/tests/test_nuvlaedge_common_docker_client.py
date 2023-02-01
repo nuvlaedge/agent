@@ -26,6 +26,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         os.environ['COMPOSE_PROJECT'] = 'tests'
+        os.environ['COMPUTE_API_PORT'] = '5000'
         self.obj = DockerClient(self.hostfs, self.host_home)
         self.local_docker_client = docker.from_env()
         self.fake_swarm_tokens = {
