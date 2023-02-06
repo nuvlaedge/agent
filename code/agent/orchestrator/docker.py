@@ -111,9 +111,9 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, 5000
+                    return None, os.getenv('COMPUTE_API_PORT', 5000)
 
-        return ip, 5000
+        return ip, os.getenv('COMPUTE_API_PORT', 5000)
 
     def has_pull_job_capability(self):
         try:
@@ -145,7 +145,8 @@ class DockerClient(ContainerRuntimeClient):
         return self.cast_dict_to_list(node_labels)
 
     def is_vpn_client_running(self):
-        vpn_client_running = True if self.client.containers.get("vpn-client").status == 'running' else False
+        it_vpn_container = self.client.containers.get(os.getenv('COMPOSE_PROJECT', 'nuvlaedge') + "-vpn-client")
+        vpn_client_running = it_vpn_container.status == 'running'
         return vpn_client_running
 
     def install_ssh_key(self, ssh_pub_key, ssh_folder):
@@ -203,7 +204,7 @@ class DockerClient(ContainerRuntimeClient):
                    docker_image=None):
         # Get the compute-api network
         try:
-            compute_api = self.client.containers.get('compute-api')
+            compute_api = self.client.containers.get(os.getenv("COMPOSE_PROJECT", "nuvlaedge") + '-compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
                 TimeoutError):
