@@ -17,9 +17,7 @@ env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name || vars.GITHUB_REF_NAME }}
 
 jobs:
-  if: |
-    ${{ github.event.workflow_run.conclusion == 'success' }} ||
-    ${{ github.event.action == 'workflow_run' }}
+  if: ${{ github.event.workflow_run.conclusion == 'success' }} || ${{ github.event.action == 'workflow_run' }}
 
   setup-matrix:
     runs-on: ubuntu-latest
