@@ -1,11 +1,13 @@
 name: "Validation"
 
 on:
-  workflow_run:
-    workflows: [BUILD]
-    types:
-      - completed
+  push:
+    - 'main'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
 
 env:
   VALIDATION_PACKAGE_NAME: "validation-latest-py3-none-any.whl"
