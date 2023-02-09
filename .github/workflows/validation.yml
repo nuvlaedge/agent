@@ -38,6 +38,7 @@ jobs:
       matrix:
         board-config: ${{ fromJSON(needs.setup-matrix.outputs.boards) }}
         validation-type: ${{ fromJSON(needs.setup-matrix.outputs.tests) }}
+      fail-fast: false
     runs-on: ${{ matrix.board-config }}
 
     steps:
