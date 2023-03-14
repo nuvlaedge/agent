@@ -448,10 +448,10 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_get_partial_decommission_attributes(self):
         # NOT IMPLEMENTED
-        self.assertEqual(self.obj.get_partial_decommission_attributes(), [],
+        self.assertEqual(self.obj.get_partial_decommission_attributes(), None,
                          'Received partial decommissioning attrs for K8s even though method is not implemented')
 
     def test_infer_if_additional_coe_exists(self):
         # NOT IMPLEMENTED
-        self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
+        self.assertEqual(self.obj.infer_if_additional_coe_exists(), None,
                          'Received additional COE even though method is not implemented for K8s')
