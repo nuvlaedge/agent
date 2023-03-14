@@ -424,7 +424,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_get_container_plugins(self):
         # NOT IMPLEMENTED
-        self.assertEqual(self.obj.get_container_plugins(), [],
+        self.assertEqual(self.obj.get_container_plugins(), None,
                          'Received plugins for K8s even though method is not implemented')
 
     def test_define_nuvla_infra_service(self):
