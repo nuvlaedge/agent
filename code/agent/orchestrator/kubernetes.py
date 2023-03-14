@@ -377,7 +377,7 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_container_plugins(self):
         # TODO
         # doesn't seem to be available from the API
-        return []
+        return None
 
     def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
         if api_endpoint:
@@ -396,13 +396,13 @@ class KubernetesClient(ContainerRuntimeClient):
 
     def get_partial_decommission_attributes(self) -> list:
         # TODO for k8s
-        return []
+        return None
 
     def infer_if_additional_coe_exists(self, fallback_address: str=None) -> dict:
         # For k8s installations, we might want to see if there's also Docker running alongside
         # TODO
-        return {}
+        return None
 
     def get_all_nuvlaedge_components(self) -> list:
         # TODO
-        return []
+        return None
