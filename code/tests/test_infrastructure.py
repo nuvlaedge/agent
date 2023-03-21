@@ -39,6 +39,8 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.nuvlaedge_status_file = '.status'
         self.obj.container_runtime.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.obj.vpn_credential = 'vpn'
+        self.obj.nuvlaedge_vpn_key_file = 'nuvlaedge-vpn.key'
+        self.obj.nuvlaedge_vpn_csr_file = 'nuvlaedge-vpn.csr'
         self.obj.vpn_client_conf_file = 'vpn-conf'
         self.obj.ssh_flag = '.ssh'
         self.obj.ssh_pub_key = 'ssh key from env'
@@ -492,21 +494,35 @@ class InfrastructureTestCase(unittest.TestCase):
         local_vpn_content = {
             'updated': 'old'
         }
-        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))):
+
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))), \
+                mock.patch('os.path.exists') as mock_exists, \
+                mock.patch('os.path.getsize') as mock_getsize:
+
             # when the timestamps of both local and online VPN creds are the same, nothing is done
-            self.assertIsNone(self.obj.validate_local_vpn_credential(local_vpn_content),
-                              'Failed to validate local VPN credential')
+            mock_exists.return_value = True
+            mock_getsize.return_value = 123
+            self.obj.validate_local_vpn_credential(local_vpn_content)
             mock_commission_vpn.assert_not_called()
             mock_remove.assert_not_called()
+            mock_commission_vpn.reset_mock()
+            mock_remove.reset_mock()
 
-        # if timestamps are different, then a recommission is issued and the local file is removed
-        online_cred = {
-            'updated': 'new'
-        }
-        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))):
+            # when vpn key file doesn't exist or is empty, recommission is done
+            mock_exists.return_value = False
+            mock_getsize.return_value = 0
+            self.obj.validate_local_vpn_credential(local_vpn_content)
+            mock_commission_vpn.assert_called_once()
+            mock_remove.assert_called_once_with(self.obj.vpn_credential)
+            mock_commission_vpn.reset_mock()
+            mock_remove.reset_mock()
+
+            # if timestamps are different, then a recommission is issued and the local file is removed
+            online_cred = {
+                'updated': 'new'
+            }
             # when the timestamps of both local and online VPN creds are the same, nothing is done
-            self.assertIsNone(self.obj.validate_local_vpn_credential(online_cred),
-                              'Failed to validate local VPN credential when local VPN credential is outdated')
+            self.obj.validate_local_vpn_credential(online_cred)
             mock_commission_vpn.assert_called_once()
             mock_remove.assert_called_once_with(self.obj.vpn_credential)
 

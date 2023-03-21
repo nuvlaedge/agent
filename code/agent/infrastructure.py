@@ -506,8 +506,16 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             # Recommission
             self.commission_vpn()
             remove(self.vpn_credential)
-            return None
-            # else, do nothing because nothing has changed
+
+        elif (not path.exists(self.nuvlaedge_vpn_key_file)
+              or path.getsize(self.nuvlaedge_vpn_key_file) == 0):
+            self.infra_logger.warning("VPN credential private key not available. "
+                                      "Recommissioning")
+            # Recommission
+            self.commission_vpn()
+            remove(self.vpn_credential)
+
+        # else, do nothing because nothing has changed
 
     def fix_vpn_credential_mismatch(self, online_vpn_credential: dict):
         """
