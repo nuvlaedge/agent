@@ -529,10 +529,16 @@ class InfrastructureTestCase(unittest.TestCase):
     @mock.patch.object(Infrastructure, 'write_file')
     @mock.patch.object(Infrastructure, 'commission_vpn')
     def test_fix_vpn_credential_mismatch(self, mock_commission_vpn, mock_write_file):
-        # if vpn-client container is not found, commission the VPN
+        # if vpn-client container doesn't exist, nothing is done
         self.obj.container_runtime.is_vpn_client_running.side_effect = docker.errors.NotFound('', requests.Response())
-        self.assertIsNone(self.obj.fix_vpn_credential_mismatch({}),
-                          'Unable to commission VPN when vpn-client is not running')
+        self.obj.fix_vpn_credential_mismatch({})
+        mock_commission_vpn.assert_not_called()
+        mock_write_file.assert_not_called()
+
+        # if vpn-client container is not found, commission the VPN
+        self.obj.container_runtime.is_vpn_client_running.side_effect = None
+        self.obj.container_runtime.is_vpn_client_running.return_value = False
+        self.obj.fix_vpn_credential_mismatch({})
         mock_commission_vpn.assert_called_once()
         mock_write_file.assert_not_called()
 
