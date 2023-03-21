@@ -507,9 +507,8 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.commission_vpn()
             remove(self.vpn_credential)
 
-        elif (not path.exists(self.nuvlaedge_vpn_key_file)
-              or path.getsize(self.nuvlaedge_vpn_key_file) == 0):
-            self.infra_logger.warning("VPN credential private key not available. "
+        elif not util.file_exists_and_not_empty(self.vpn_client_conf_file):
+            self.infra_logger.warning("OpenVPN configuration not available. "
                                       "Recommissioning")
             # Recommission
             self.commission_vpn()
@@ -571,8 +570,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.infra_logger.info("VPN server is set but cannot find VPN credential in "
                                    "Nuvla. Commissioning VPN...")
 
-            if path.exists(self.vpn_credential) and \
-                    stat(self.vpn_credential).st_size != 0:
+            if util.file_exists_and_not_empty(self.vpn_credential):
                 self.infra_logger.warning("NOTE: VPN credential exists locally, so it "
                                           "was removed from Nuvla")
 
@@ -582,9 +580,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
             # IF there is a VPN credential in Nuvla:
             #  - if we also have one locally, BUT is different, then recommission
-            if path.exists(self.vpn_credential) \
-                    and stat(self.vpn_credential).st_size != 0 \
-                    and path.exists(self.vpn_client_conf_file):
+            if util.file_exists_and_not_empty(self.vpn_credential):
                 self.validate_local_vpn_credential(vpn_credential_nuvla)
             else:
                 # - IF we don't have it locally, but there's one in Nuvla, then:
