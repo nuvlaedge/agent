@@ -72,3 +72,7 @@ def atomic_write(file, data, **kwargs):
     with atomic_writer(file, **kwargs) as f:
         return f.write(data)
 
+
+def file_exists_and_not_empty(filename):
+    return (os.path.exists(filename)
+            and os.path.getsize(filename) > 0)
