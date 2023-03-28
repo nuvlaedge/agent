@@ -38,7 +38,9 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.container_runtime = mock.MagicMock()
         self.obj.nuvlaedge_status_file = '.status'
         self.obj.container_runtime.infra_service_endpoint_keyname = 'swarm-endpoint'
-        self.obj.vpn_credential = 'vpn'
+        self.obj.vpn_credential = 'vpn-credential'
+        self.obj.nuvlaedge_vpn_key_file = 'nuvlaedge-vpn.key'
+        self.obj.nuvlaedge_vpn_csr_file = 'nuvlaedge-vpn.csr'
         self.obj.vpn_client_conf_file = 'vpn-conf'
         self.obj.ssh_flag = '.ssh'
         self.obj.ssh_pub_key = 'ssh key from env'
@@ -469,31 +471,51 @@ class InfrastructureTestCase(unittest.TestCase):
         local_vpn_content = {
             'updated': 'old'
         }
-        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))):
+
+        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))), \
+                mock.patch('os.path.exists') as mock_exists, \
+                mock.patch('os.path.getsize') as mock_getsize:
+
             # when the timestamps of both local and online VPN creds are the same, nothing is done
-            self.assertIsNone(self.obj.validate_local_vpn_credential(local_vpn_content),
-                              'Failed to validate local VPN credential')
+            mock_exists.return_value = True
+            mock_getsize.return_value = 123
+            self.obj.validate_local_vpn_credential(local_vpn_content)
             mock_commission_vpn.assert_not_called()
             mock_remove.assert_not_called()
+            mock_commission_vpn.reset_mock()
+            mock_remove.reset_mock()
 
-        # if timestamps are different, then a recommission is issued and the local file is removed
-        online_cred = {
-            'updated': 'new'
-        }
-        with mock.patch(self.agent_infrastructure_open, mock.mock_open(read_data=json.dumps(local_vpn_content))):
+            # when vpn key file doesn't exist or is empty, recommission is done
+            mock_exists.return_value = False
+            mock_getsize.return_value = 0
+            self.obj.validate_local_vpn_credential(local_vpn_content)
+            mock_commission_vpn.assert_called_once()
+            mock_remove.assert_called_once_with(self.obj.vpn_credential)
+            mock_commission_vpn.reset_mock()
+            mock_remove.reset_mock()
+
+            # if timestamps are different, then a recommission is issued and the local file is removed
+            online_cred = {
+                'updated': 'new'
+            }
             # when the timestamps of both local and online VPN creds are the same, nothing is done
-            self.assertIsNone(self.obj.validate_local_vpn_credential(online_cred),
-                              'Failed to validate local VPN credential when local VPN credential is outdated')
+            self.obj.validate_local_vpn_credential(online_cred)
             mock_commission_vpn.assert_called_once()
             mock_remove.assert_called_once_with(self.obj.vpn_credential)
 
     @mock.patch.object(Infrastructure, 'write_file')
     @mock.patch.object(Infrastructure, 'commission_vpn')
     def test_fix_vpn_credential_mismatch(self, mock_commission_vpn, mock_write_file):
-        # if vpn-client container is not found, commission the VPN
+        # if vpn-client container doesn't exist, nothing is done
         self.obj.container_runtime.is_vpn_client_running.side_effect = docker.errors.NotFound('', requests.Response())
-        self.assertIsNone(self.obj.fix_vpn_credential_mismatch({}),
-                          'Unable to commission VPN when vpn-client is not running')
+        self.obj.fix_vpn_credential_mismatch({})
+        mock_commission_vpn.assert_not_called()
+        mock_write_file.assert_not_called()
+
+        # if vpn-client container is not found, commission the VPN
+        self.obj.container_runtime.is_vpn_client_running.side_effect = None
+        self.obj.container_runtime.is_vpn_client_running.return_value = False
+        self.obj.fix_vpn_credential_mismatch({})
         mock_commission_vpn.assert_called_once()
         mock_write_file.assert_not_called()
 
@@ -523,14 +545,14 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_write_file.assert_called_once()
 
     @mock.patch('agent.infrastructure.path.exists')
-    @mock.patch('agent.infrastructure.stat')
+    @mock.patch('agent.infrastructure.path.getsize')
     @mock.patch.object(Infrastructure, 'commission_vpn')
     @mock.patch.object(Infrastructure, 'api')
     @mock.patch.object(Infrastructure, 'validate_local_vpn_credential')
     @mock.patch.object(Infrastructure, 'fix_vpn_credential_mismatch')
     @mock.patch.object(Infrastructure, 'build_vpn_credential_search_filter')
     def test_watch_vpn_credential(self, mock_build_filter, mock_fix_vpn_cred, mock_validate_local_vpn,
-                                  mock_api, mock_commission_vpn, mock_stat, mock_exists):
+                                  mock_api, mock_commission_vpn, mock_getsize, mock_exists):
         # if there's no VPN IS, return None
         self.assertIsNone(self.obj.watch_vpn_credential(''),
                           'Tried to watch VPN credential when there is no VPN server IS')
@@ -540,9 +562,10 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_api.assert_not_called()
         mock_commission_vpn.assert_not_called()
         mock_exists.assert_not_called()
-        mock_stat.assert_not_called()
+        mock_getsize.assert_not_called()
 
         mock_api.return_value = fake.FakeNuvlaApi('')
+        mock_getsize.return_value = 0
 
         # otherwise, search the cred, and if NOT found, ask for it again
         mock_api.side_effect = IndexError
@@ -553,22 +576,22 @@ class InfrastructureTestCase(unittest.TestCase):
 
         # if credential is fetched from Nuvla
         mock_api.reset_mock(side_effect=True)   # reset counters
-        mock_stat.reset_mock()
+        mock_getsize.reset_mock()
         # GET is called
         # if local files exist, then simply validate
         mock_exists.return_value = True
-        mock_stat.return_value.st_size = 1
+        mock_getsize.return_value = 1
         self.assertIsNone(self.obj.watch_vpn_credential('fake-vpn-is'),
                           'Failed to watch VPN credential when VPN credential exists Nuvla')
 
         self.assertEqual(mock_api.call_count, 2,
                          'There should have been one SEARCH and one GET requests to Nuvla, for the VPN credential')
-        mock_stat.assert_called_once_with(self.obj.vpn_credential)
+        mock_getsize.assert_called_once_with(self.obj.vpn_credential)
         mock_exists.assert_called()
         mock_validate_local_vpn.assert_called_once()
 
         # but if local file does not match/exist, then fixing is needed
-        mock_stat.return_value.st_size = 0
+        mock_getsize.return_value = 0
         self.assertIsNone(self.obj.watch_vpn_credential('fake-vpn-is'),
                           'Failed to watch VPN credential when VPN credential exists Nuvla but not locally')
         mock_validate_local_vpn.assert_called_once()

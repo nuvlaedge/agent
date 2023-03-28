@@ -35,9 +35,6 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
 
         :return boolean and user info is available"""
 
-        if self.get_operational_status() == "UNKNOWN":
-            return False, self.user_info
-
         try:
             self.user_info = self.read_json_file(self.activation_flag)
 

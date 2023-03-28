@@ -477,8 +477,25 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             # Recommission
             self.commission_vpn()
             remove(self.vpn_credential)
-            return None
-            # else, do nothing because nothing has changed
+
+        elif not util.file_exists_and_not_empty(self.vpn_client_conf_file):
+            self.infra_logger.warning("OpenVPN configuration not available. "
+                                      "Recommissioning")
+            # Recommission
+            self.commission_vpn()
+            remove(self.vpn_credential)
+
+        # else, do nothing because nothing has changed
+
+    def check_vpn_client_state(self):
+        exists = None
+        running = None
+        try:
+            running = self.container_runtime.is_vpn_client_running()
+            exists = True
+        except docker.errors.NotFound:
+            exists = False
+        return exists, running
 
     def fix_vpn_credential_mismatch(self, online_vpn_credential: dict):
         """
@@ -490,21 +507,17 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
         """
-        try:
-            vpn_client_running = self.container_runtime.is_vpn_client_running()
-        except docker.errors.NotFound:
-            vpn_client_running = False
-            self.infra_logger.info("VPN client is not running")
+        vpn_client_exists, vpn_client_running = self.check_vpn_client_state()
 
         if vpn_client_running and self.telemetry_instance.get_vpn_ip():
             # just save a copy of the VPN credential locally
             self.write_file(self.vpn_credential, online_vpn_credential, is_json=True)
-            self.infra_logger.info(f"VPN client is now running. Saving VPN credential "
+            self.infra_logger.info(f"VPN client is currently running. Saving VPN credential "
                                    f"locally at {self.vpn_credential}")
-        else:
+        elif vpn_client_exists:
             # there is a VPN credential in Nuvla, but not locally, and the VPN client
             # is not running maybe something went wrong, just recommission
-            self.infra_logger.warning("The local VPN client is either not running or "
+            self.infra_logger.warning("VPN client is either not running or "
                                       "missing its configuration. Forcing VPN "
                                       "recommissioning...")
             self.commission_vpn()
@@ -516,7 +529,13 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         """
 
         if not vpn_is_id:
-            return None
+            return
+
+        vpn_client_exists, _ = self.check_vpn_client_state()
+        if not vpn_client_exists:
+            self.infra_logger.info("VPN client container doesn't exist. "
+                                   "Do nothing")
+            return
 
         search_filter = self.build_vpn_credential_search_filter(vpn_is_id)
         self.infra_logger.debug("Watching VPN credential in Nuvla...")
@@ -534,8 +553,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.infra_logger.info("VPN server is set but cannot find VPN credential in "
                                    "Nuvla. Commissioning VPN...")
 
-            if path.exists(self.vpn_credential) and \
-                    stat(self.vpn_credential).st_size != 0:
+            if util.file_exists_and_not_empty(self.vpn_credential):
                 self.infra_logger.warning("NOTE: VPN credential exists locally, so it "
                                           "was removed from Nuvla")
 
@@ -545,9 +563,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
             # IF there is a VPN credential in Nuvla:
             #  - if we also have one locally, BUT is different, then recommission
-            if path.exists(self.vpn_credential) \
-                    and stat(self.vpn_credential).st_size != 0 \
-                    and path.exists(self.vpn_client_conf_file):
+            if util.file_exists_and_not_empty(self.vpn_credential):
                 self.validate_local_vpn_credential(vpn_credential_nuvla)
             else:
                 # - IF we don't have it locally, but there's one in Nuvla, then:
