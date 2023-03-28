@@ -25,7 +25,7 @@ class Job(NuvlaEdgeCommon.NuvlaEdgeCommon):
     def __init__(self, data_volume, job_id, job_engine_lite_image):
         """ Constructs an Job object """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(data_volume=data_volume)
         self.job_id = job_id
         self.job_id_clean = job_id.replace('/', '-')
         self.do_nothing = self.check_job_is_running()

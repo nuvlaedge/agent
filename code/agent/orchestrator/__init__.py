@@ -1,17 +1,11 @@
 """
-Orchestration base class. To be extended and implemented by docker or kubernetes
+Orchestration base class. To be implemented and extended for Docker or Kubernetes.
 """
-import os
 from abc import ABC, abstractmethod
 
 
-KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
-if KUBERNETES_SERVICE_HOST:
-    ORCHESTRATOR = 'kubernetes'
-    ORCHESTRATOR_COE = ORCHESTRATOR
-else:
-    ORCHESTRATOR = 'docker'
-    ORCHESTRATOR_COE = 'swarm'
+class OrchestratorException(Exception):
+    ...
 
 
 class ContainerRuntimeClient(ABC):
@@ -29,6 +23,11 @@ class ContainerRuntimeClient(ABC):
         self.host_home = host_home
         self.ignore_env_variables = ['NUVLAEDGE_API_KEY', 'NUVLAEDGE_API_SECRET']
         self.data_gateway_name = None
+
+        self.infra_service_endpoint_keyname = ''
+
+        self.join_token_manager_keyname = ''
+        self.join_token_worker_keyname = ''
 
     @abstractmethod
     def get_node_info(self):
@@ -49,7 +48,13 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def list_nodes(self, optional_filter={}):
+    def list_nodes(self, optional_filter: dict = None):
+        """
+        List all the nodes in the cluster
+        """
+
+    @abstractmethod
+    def list_containers(self, filters: dict = None, all: bool = False):
         """
         List all the nodes in the cluster
         """
@@ -255,4 +260,27 @@ class ContainerRuntimeClient(ABC):
         Retrieves the version of the operational orchestrator
 
         :returns version of the orchestrator in string
+        """
+
+    @abstractmethod
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              **kwargs) -> str:
+        """
+        Runs `command` with `args` in a container started from `image` and
+        returns output.
+
+        :return: output of running default entrypoint or `command` with
+                 optional `args`.
+        """
+
+    @abstractmethod
+    def container_remove(self, name: str, **kwargs):
+        """
+        Removes "container" by `name`. Notion of the "container" is COE
+        dependent. It is container for Docker and pod (with all the containers
+        in it) for K8s.
+
+        :param name:
         """

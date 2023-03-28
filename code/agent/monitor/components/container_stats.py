@@ -1,6 +1,5 @@
 """ NuvlaEdge container monitor """
 import os
-import time
 import datetime
 from typing import Dict, List, NoReturn, Union
 from subprocess import CompletedProcess

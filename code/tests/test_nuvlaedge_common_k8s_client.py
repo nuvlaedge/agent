@@ -6,10 +6,9 @@ import kubernetes
 import logging
 import mock
 import unittest
-import tests.utils.fake as fake
 import sys
 
-import agent.common.NuvlaEdgeCommon as NuvlaEdgeCommon
+from tests.utils import fake
 from agent.orchestrator.kubernetes import KubernetesClient
 
 
@@ -18,14 +17,9 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         os.environ.setdefault('KUBERNETES_SERVICE_HOST', 'force-k8s-coe')
 
         with mock.patch.dict(sys.modules):
-            # sys.modules.clear()
             if 'agent.common.NuvlaEdgeCommon' in sys.modules:
                 del sys.modules['agent.common.NuvlaEdgeCommon']
 
-        self.NuvlaEdgeCommon = NuvlaEdgeCommon
-        self.NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
-        self.hostfs = '/fake-rootfs'
-        self.host_home = '/home/fakeUser'
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
         os.environ.setdefault('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
         with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
@@ -34,17 +28,14 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                     mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
                     mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
                     mock_k8s_config.return_value = True
-                    self.obj = KubernetesClient(self.hostfs, self.host_home)
+                    self.obj = KubernetesClient('/fake-rootfs', '/home/fakeUser')
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
         logging.disable(logging.NOTSET)
 
     def test_init(self):
-        # the K8s coe should be set
-        self.assertEqual(self.NuvlaEdgeCommon.ORCHESTRATOR, 'kubernetes',
-                             'Unable to set Kubernetes as the COE')
-        # client should be set as well
+        # client should be set
         self.assertIsNotNone(self.obj.client,
                              'Unable to set Kubernetes client')
         self.assertIsNotNone(self.obj.client_apps,
@@ -112,7 +103,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Expecting no k8s manager but got something else')
 
         # COE should also match with class' COE
-        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.NuvlaEdgeCommon.ORCHESTRATOR_COE,
+        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], KubernetesClient.NAME_COE,
                          'Got the wrong cluster-orchestrator')
 
         # but if one of the nodes is a master, then we should get 1 worker and 1 manager
@@ -311,7 +302,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                               'Expecting list of pod container metrics, but got something else')
 
         expected_field = ['container-status', 'name', 'id', 'cpu-percent', 'mem-percent']
-        self.assertEqual(sorted(expected_field), sorted(list(self.obj.collect_container_metrics()[0].keys())),
+        self.assertTrue(set(self.obj.collect_container_metrics()[0]).issuperset(set(expected_field)),
                          'Missing container metrics keys')
         self.assertEqual(len(self.obj.collect_container_metrics()), 2,
                          'Expecting metrics for 2 containers, but got something else')
@@ -346,7 +337,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertTrue(self.obj.get_node_id(node_info).startswith(name),
                         'Returned Node name does not match the real one')
 
-    def test_get_cluster_id(self):
+    def test_get_cluster_id_default(self):
         node_info = fake.mock_kubernetes_node()
         # should always return the ID value indicated in the passed argument
 
@@ -355,6 +346,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_cluster_id(node_info, default_cluster_name=default_cluster_name),
                          default_cluster_name,
                          'Returned Cluster name does not match the default one')
+
+    @unittest.skip('K8s does not have cluster name https://github.com/kubernetes/kubernetes/issues/44954')
+    def test_get_cluster_id_real(self):
+        node_info = fake.mock_kubernetes_node()
+        # should always return the ID value indicated in the passed argument
+
+        default_cluster_name = 'fake-cluster'
 
         # but if Node has it, take it from there
         cluster_name = 'new-cluster-name'

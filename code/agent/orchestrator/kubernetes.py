@@ -1,15 +1,23 @@
 import logging
 import os
+import time
+from typing import Dict, List
 
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
+from agent.orchestrator import ContainerRuntimeClient
+
+log = logging.getLogger(__name__)
 
 
 class KubernetesClient(ContainerRuntimeClient):
     """
     Kubernetes client
     """
+
+    NAME = 'kubernetes'
+    NAME_COE = NAME
 
     def __init__(self, host_rootfs, host_home):
         super().__init__(host_rootfs, host_home)
@@ -29,11 +37,10 @@ class KubernetesClient(ContainerRuntimeClient):
 
     def get_node_info(self):
         if self.host_node_name:
-            this_node = self.client.read_node(self.host_node_name)
             try:
-                return this_node
+                return self.client.read_node(self.host_node_name)
             except AttributeError:
-                logging.warning(f'Cannot infer node information for node "{self.host_node_name}"')
+                log.warning(f'Cannot infer node information for node "{self.host_node_name}"')
 
         return None
 
@@ -49,8 +56,11 @@ class KubernetesClient(ContainerRuntimeClient):
         # it needs to come from the cluster mgmt tool (i.e. k0s, k3s, kubeadm, etc.)
         return ()
 
-    def list_nodes(self, optional_filter={}):
+    def list_nodes(self, optional_filter: dict = None):
         return self.client.list_node().items
+
+    def list_containers(self, filters: dict = None, all: bool = False):
+        return self.client.list_pod_for_all_namespaces().items
 
     def get_cluster_info(self, default_cluster_name=None):
         node_info = self.get_node_info()
@@ -70,24 +80,24 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return {
             'cluster-id': cluster_id,
-            'cluster-orchestrator': ORCHESTRATOR_COE,
+            'cluster-orchestrator': self.NAME_COE,
             'cluster-managers': managers,
             'cluster-workers': workers
         }
 
     def get_api_ip_port(self):
-        all_endpoints = self.client.list_endpoints_for_all_namespaces().items
-
-        ip_port = None
         if self.host_node_ip:
             return self.host_node_ip, 6443
+
+        all_endpoints = self.client.list_endpoints_for_all_namespaces().items
 
         try:
             endpoint = list(filter(lambda x: x.metadata.name.lower() == 'kubernetes', all_endpoints))[0]
         except IndexError:
-            logging.error('There are no "kubernetes" endpoints where to get the API IP and port from')
+            log.error('There are no "kubernetes" endpoints where to get the API IP and port from')
             return None, None
 
+        ip_port = None
         for subset in endpoint.subsets:
             for addr in subset.addresses:
                 if addr.ip:
@@ -138,10 +148,10 @@ class KubernetesClient(ContainerRuntimeClient):
                 raise
         else:
             if existing_pod.status.phase.lower() not in ['succeeded', 'running']:
-                logging.warning(f'Found old {name} with state {existing_pod.status.phase}. Trying to relaunch it...')
+                log.warning(f'Found old {name} with state {existing_pod.status.phase}. Trying to relaunch it...')
                 self.client.delete_namespaced_pod(namespace=self.namespace, name=name)
             else:
-                logging.info(f'SSH key installer "{name}" has already been launched in the past. Skipping this step')
+                log.info(f'SSH key installer "{name}" has already been launched in the past. Skipping this step')
                 return False
 
         cmd = ["sh", "-c", "echo -e \"${SSH_PUB}\" >> %s" % f'{ssh_folder}/authorized_keys']
@@ -193,20 +203,20 @@ class KubernetesClient(ContainerRuntimeClient):
             if e.status == 404:
                 return False
             else:
-                logging.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
+                log.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
                 # assume it is running so we don't mess anything
                 return True
 
         try:
             if job.status.phase.lower() == 'running':
-                logging.info(f'Job {job_id} is already running in pod {job.metadata.name}, with UID {job.metadata.uid}')
+                log.info(f'Job {job_id} is already running in pod {job.metadata.name}, with UID {job.metadata.uid}')
                 return True
             elif job.status.phase.lower() == 'pending':
-                logging.warning(f'Job {job_id} was created and still pending')
+                log.warning(f'Job {job_id} was created and still pending')
                 # TODO: maybe we should run a cleanup for pending jobs after X hours
             else:
                 if job.status.phase.lower() == 'succeeded':
-                    logging.info(f'Job {job_id} has already finished successfully. Deleting the pod...')
+                    log.info(f'Job {job_id} has already finished successfully. Deleting the pod...')
                 # then it is probably UNKNOWN or in an undesired state
                 self.client.delete_namespaced_pod(namespace=self.namespace, name=job_execution_id)
         except AttributeError:
@@ -215,7 +225,7 @@ class KubernetesClient(ContainerRuntimeClient):
         except client.exceptions.ApiException as e:
             # this exception can only happen if we tried to delete the pod and couldn't
             # log it and don't let another job come in
-            logging.error(f'Failed to handle job {job_id} due to pod management error: {str(e)}')
+            log.error(f'Failed to handle job {job_id} due to pod management error: {str(e)}')
             return True
 
         return False
@@ -232,7 +242,7 @@ class KubernetesClient(ContainerRuntimeClient):
             cmd = f'{cmd} --api-insecure'
 
         img = docker_image if docker_image else self.job_engine_lite_image
-        logging.info(f'Starting job {job_id} from {img}, with command: "{cmd}"')
+        log.info(f'Starting job {job_id} from {img}, with command: "{cmd}"')
 
         pod_body = client.V1Pod(
             kind='Pod',
@@ -252,48 +262,79 @@ class KubernetesClient(ContainerRuntimeClient):
 
         self.client.create_namespaced_pod(namespace=self.namespace, body=pod_body)
 
-    def collect_container_metrics(self):
-        pods_here = self.client.list_pod_for_all_namespaces(field_selector=f'spec.nodeName={self.host_node_name}')
-        pods_here_per_name = {f'{p.metadata.namespace}/{p.metadata.name}': p for p in pods_here.items}
+    def collect_container_metrics(self) -> List[Dict]:
+        try:
+            pods_here = self.client\
+                .list_pod_for_all_namespaces(
+                    field_selector=f'spec.nodeName={self.host_node_name}')
+        except ApiException as ex:
+            log.error('Failed listing pods for all namespaces on %s: %s',
+                          self.host_node_name, exc_info=ex)
+            return []
+        pods_here_per_name = {f'{p.metadata.namespace}/{p.metadata.name}': p
+                              for p in pods_here.items}
 
         this_node_capacity = self.get_node_info().status.capacity
         node_cpu_capacity = int(this_node_capacity['cpu'])
-        node_mem_capacity = int(this_node_capacity['memory'].rstrip('Ki'))
+        node_mem_capacity_KiB = int(this_node_capacity['memory'].rstrip('Ki'))
 
         out = []
-        pod_metrics_list = client.CustomObjectsApi().list_cluster_custom_object("metrics.k8s.io", "v1beta1", "pods")
-
-        items = pod_metrics_list.get('items', [])
-        for pod in items:
+        pod_metrics_list = client.CustomObjectsApi()\
+            .list_cluster_custom_object("metrics.k8s.io", "v1beta1", "pods")
+        for pod in pod_metrics_list.get('items', []):
             short_identifier = f"{pod['metadata']['namespace']}/{pod['metadata']['name']}"
             if short_identifier not in pods_here_per_name:
                 continue
 
             for container in pod.get('containers', []):
-                metrics = {
-                    'id': pod['metadata']['selfLink'],
-                    'name': container['name']
-                }
-                container_cpu_usage = int(container['usage']['cpu'].rstrip('n'))
-                # units come in nanocores
-                metrics['cpu-percent'] = "%.2f" % round(container_cpu_usage*100/(node_cpu_capacity*1000000000), 2)
-
-                container_mem_usage = int(container['usage']['memory'].rstrip('Ki'))
-                # units come in Ki
-                metrics['mem-percent'] = "%.2f" % round(container_mem_usage*100/node_mem_capacity, 2)
-
-                for cstat in pods_here_per_name[short_identifier].status.container_statuses:
-                    if cstat.name == container['name']:
-                        for k, v in cstat.state.to_dict().items():
-                            if v:
-                                metrics['container-status'] = k
-                                break
-
-                        container['restart-count'] = int(cstat.restart_count)
-
-                out.append(metrics)
+                try:
+                    metrics = self._container_metrics(pod['metadata']['name'],
+                                                      container,
+                                                      node_cpu_capacity,
+                                                      node_mem_capacity_KiB,
+                                                      pods_here_per_name,
+                                                      short_identifier)
+                    out.append(metrics)
+                except Exception as ex:
+                    log.error('Failed collecting metrics for container %s in pod %s: %s',
+                              container['name'], pod['metadata']['name'], ex)
 
         return out
+
+    def _container_metrics(self, pod_name: str, container: dict,
+                           node_cpu_capacity: int, node_mem_capacity_KiB: int,
+                           pods_here_per_name, short_identifier):
+        metrics = {
+            'id': pod_name,
+            'name': container['name']
+        }
+        container_cpu_usage = int(container['usage']['cpu'].rstrip('n'))
+        # units come in nanocores
+        metrics['cpu-percent'] = "%.2f" % round(
+            container_cpu_usage * 100 / (
+                    node_cpu_capacity * 1000000000), 2)
+        mem_usage_KiB = int(container['usage']['memory'].rstrip('Ki'))
+        # units come in Ki
+        metrics['mem-percent'] = "%.2f" % round(
+            mem_usage_KiB * 100 / node_mem_capacity_KiB, 2)
+        metrics[
+            'mem-usage-limit'] = f"{round(mem_usage_KiB / 1024, 1)}MiB / {round(node_mem_capacity_KiB / 1024, 1)}MiB"
+        # FIXME: implement net and disk metrics collection.
+        net_in, net_out = self.collect_container_metrics_net()
+        blk_in, blk_out = self.collect_container_metrics_block()
+        metrics.update({'net-in-out': "%sMB / %sMB" % (
+        round(net_in, 1), round(net_out, 1)),
+                        'blk-in-out': "%sMB / %sMB" % (
+                        round(blk_in, 1), round(blk_out, 1))})
+        for cstat in pods_here_per_name[short_identifier].status.container_statuses:
+            if cstat.name == container['name']:
+                for k, v in cstat.state.to_dict().items():
+                    if v:
+                        metrics['container-status'] = k
+                        break
+
+                metrics['restart-count'] = int(cstat.restart_count or 0)
+        return metrics
 
     def get_installation_parameters(self, search_label):
         nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
@@ -333,13 +374,12 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_node_id(self, node_info):
         return node_info.metadata.name
 
-    def get_cluster_id(self, node_info, default_cluster_name=None):
-        cluster_id = default_cluster_name
-        cluster_name = node_info.metadata.cluster_name
-        if cluster_name:
-            cluster_id = cluster_name
-
-        return cluster_id
+    def get_cluster_id(self, node_or_cluster_info_not_used,
+                       default_cluster_name=None):
+        # FIXME: https://github.com/kubernetes/kubernetes/issues/44954 It's not
+        #        possible to get K8s cluster name or id.
+        log.warning('Unable to get K8s cluster id. See https://github.com/kubernetes/kubernetes/issues/44954')
+        return default_cluster_name
 
     def get_cluster_managers(self):
         managers = []
@@ -406,3 +446,107 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_all_nuvlaedge_components(self) -> list:
         # TODO
         return None
+
+    def _namespace(self, **kwargs):
+        return kwargs.get('namespace', self.namespace)
+
+    def _wait_pod_in_phase(self, namespace: str, name: str, phase: str, wait_sec=60):
+        ts_stop = time.time() + wait_sec
+        while True:
+            pod: client.V1Pod = self.client.read_namespaced_pod(name, namespace)
+            if phase == pod.status.phase:
+                return
+            log.info(f'Waiting pod {phase}: {namespace}:{name} till {ts_stop}')
+            if ts_stop <= time.time():
+                raise Exception(f'Pod is not {phase} after {wait_sec} sec')
+            time.sleep(2)
+
+    def _wait_pod_deleted(self, namespace: str, name: str, wait_sec=60):
+        ts_stop = time.time() + wait_sec
+        while True:
+            try:
+                self.client.read_namespaced_pod(name, namespace)
+            except ApiException as ex:
+                if ex.reason == 'Not Found':
+                    return
+            log.info(f'Deleting pod: {namespace}:{name} till {ts_stop}')
+            if ts_stop <= time.time():
+                raise Exception(f'Pod is still not deleted after {wait_sec} sec')
+            time.sleep(2)
+
+    @staticmethod
+    def _to_k8s_obj_name(name: str) -> str:
+        return name.replace('_', '-')
+
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              **kwargs) -> str:
+        def parse_cmd_args(cmd, arg):
+            if cmd:
+                cmd = cmd.split()
+            else:
+                cmd = None
+            if arg:
+                arg = arg.split()
+            else:
+                arg = None
+            return cmd, arg
+        name = self._to_k8s_obj_name(name)
+        command, args = parse_cmd_args(command, args)
+        pod = client.V1Pod(
+            metadata=client.V1ObjectMeta(name=name,
+                                         annotations={}),
+            spec=client.V1PodSpec(
+                host_network=(network == 'host'),
+                containers=[
+                    client.V1Container(image=image,
+                                       name=name,
+                                       command=command,
+                                       args=args)
+                ])
+        )
+        log.info(f'Run Pod: {pod.to_str()}')
+        namespace = self._namespace(**kwargs)
+        try:
+            self.client.create_namespaced_pod(namespace, pod)
+        except ApiException as ex:
+            log.error('Failed to create %s:%s: %s', namespace, name, ex,
+                          exc_info=ex)
+            return ''
+        try:
+            self._wait_pod_in_phase(namespace, name, 'Running')
+        except Exception as ex:
+            log.warning(ex)
+            return ''
+        output = self.client.read_namespaced_pod_log(name, namespace)
+        if remove:
+            self.container_remove(name, **kwargs)
+        return output
+
+    def container_remove(self, name: str, **kwargs):
+        """
+        Interprets `name` as the name of the pod and removes it (which
+        effectively removes all the containers in the pod).
+
+        :param name:
+        :param kwargs:
+        :return:
+        """
+        name = self._to_k8s_obj_name(name)
+        namespace = self._namespace(**kwargs)
+        try:
+            log.info(f'Deleting pod {namespace}:{name}')
+            self.client.delete_namespaced_pod(name, namespace)
+            self._wait_pod_deleted(namespace, name)
+        except ApiException as ex:
+            log.warning('Failed removing pod %s in %s: %s', name, namespace,
+                            ex.reason)
+
+    def collect_container_metrics_net(self):
+        # FIXME: implement. Not clear how to get Rx/Tx metrics.
+        return 0, 0
+
+    def collect_container_metrics_block(self):
+        # FIXME: implement. Not clear how to get the block IO.
+        return 0, 0

@@ -6,13 +6,13 @@ Docker Container, and VPN along with their corresponding interface names.
 It also reports and handles the IP geolocation system.
 
 """
+import ast
 import json
 import os
 import time
 from typing import List, NoReturn, Dict, Union
 
 import requests
-from docker import errors as docker_err
 from docker.models.containers import Container
 
 from agent.common import NuvlaEdgeCommon, util
@@ -28,7 +28,7 @@ class NetworkMonitor(Monitor):
     """
     _REMOTE_IPV4_API: str = "https://api.ipify.org?format=json"
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
-    _IP_COMMAND: str = '-j route'
+    _IP_COMMAND_ARGS: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
     _PROJECT_NAME_LABEL_KEY: str = 'com.docker.compose.project'
     DEFAULT_PROJECT_NAME: str = 'nuvlaedge'
@@ -49,7 +49,7 @@ class NetworkMonitor(Monitor):
         self.first_net_stats: Dict = {}
         self.previous_net_stats_file: str = telemetry.previous_net_stats_file
         self.vpn_ip_file: str = telemetry.vpn_ip_file
-        self.runtime_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
+        self.coe_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
         self.engine_project_name: str = self.get_engine_project_name()
@@ -64,18 +64,15 @@ class NetworkMonitor(Monitor):
             telemetry.edge_status.iface_data = self.data
 
     def get_engine_project_name(self) -> str:
-        project_name = None
         filters = {'label': [self._PROJECT_NAME_LABEL_KEY,
                              self._NUVLAEDGE_COMPONENT_LABEL_KEY]}
         try:
             container_list: List[Container] = \
-                self.runtime_client.client.containers.list(filters=filters)
-            project_name = container_list[0].labels.get(
-                self._PROJECT_NAME_LABEL_KEY)
-        except (TypeError, IndexError):
-            self.logger.warning(f'Project name not found')
-
-        return project_name if project_name else self.DEFAULT_PROJECT_NAME
+                self.coe_client.list_containers(filters=filters)
+            return container_list[0].labels.get(self._PROJECT_NAME_LABEL_KEY)
+        except Exception as ex:
+            self.logger.warning('Project name not found: %s', ex)
+        return self.DEFAULT_PROJECT_NAME
 
     def set_public_data(self) -> NoReturn:
         """
@@ -145,37 +142,12 @@ class NetworkMonitor(Monitor):
         Returns:
             str if succeeds. None otherwise
         """
-        try:
-            old_cont: Container = \
-                self.runtime_client.client.containers.get(self.iproute_container_name)
-            if old_cont.status == 'running':
-                old_cont.stop()
-            old_cont.remove()
-
-        except docker_err.NotFound:
-            pass
-
-        except Exception as ex:
-            self.logger.warning('Failed to cleanup iproute container.',
-                                ex,
-                                exc_info=True)
-
-        try:
-            it_route = self.runtime_client.client.containers.run(
-                self._AUXILIARY_DOCKER_IMAGE,
-                command=self._IP_COMMAND,
-                name=self.iproute_container_name,
-                remove=True,
-                network="host")
-
-            return it_route.decode("utf-8")
-
-        except (docker_err.ImageNotFound,
-                docker_err.ContainerError,
-                docker_err.APIError) as ex:
-            self.logger.error(f'Local interface data auxiliary container '
-                              f'not run: {ex.explanation}')
-            return None
+        self.coe_client.container_remove(self.iproute_container_name)
+        return self.coe_client \
+            .container_run_command(self._AUXILIARY_DOCKER_IMAGE,
+                                   self.iproute_container_name,
+                                   args=self._IP_COMMAND_ARGS,
+                                   network='host')
 
     def read_traffic_data(self) -> List:
         """ Gets the list of net ifaces and corresponding rxbytes and txbytes
@@ -188,8 +160,9 @@ class NetworkMonitor(Monitor):
 
         try:
             ifaces = os.listdir(sysfs_net)
-        except FileNotFoundError:
-            self.logger.warning("Cannot find network information for this device")
+        except FileNotFoundError as ex:
+            self.logger\
+                .warning(f'Cannot find network information for {sysfs_net}: {ex}')
             return []
 
         previous_net_stats = {}
@@ -302,7 +275,9 @@ class NetworkMonitor(Monitor):
         try:
             readable_route = json.loads(ip_route)
         except json.decoder.JSONDecodeError as ex:
-            self.logger.warning(f'Failed parsing IP info: {ex}')
+            err_msg = 'Expecting property name enclosed in double quotes'
+            if str(ex).startswith(err_msg):
+                readable_route = ast.literal_eval(ip_route)
 
         if readable_route:
             for route in readable_route:
@@ -310,7 +285,7 @@ class NetworkMonitor(Monitor):
                 it_ip = route.get('prefsrc')
 
                 # Handle special cases
-                if route.get('dst', 'not_def') == 'default':
+                if route.get('dst', '') == 'default':
                     self.data.default_gw = it_name
 
                 if self.is_skip_route(route):
@@ -364,7 +339,7 @@ class NetworkMonitor(Monitor):
 
     def set_swarm_data(self) -> NoReturn:
         """ Discovers the host SWARM IP address """
-        it_ip: str = self.runtime_client.get_api_ip_port()[0]
+        it_ip: str = self.coe_client.get_api_ip_port()[0]
 
         if self.data.ips.swarm != it_ip:
             self.data.ips.swarm = it_ip

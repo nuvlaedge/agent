@@ -726,39 +726,36 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_container_plugins(), [],
                          'Returned container plugins when none are active')
 
-    @mock.patch('agent.orchestrator.docker.DockerClient.infer_if_additional_coe_exists')
-    def test_define_nuvla_infra_service(self, mock_infer_extra_coe):
-        mock_infer_extra_coe.return_value = {}
+    @mock.patch('agent.orchestrator.docker.DockerClient.other_coe_infra_service')
+    def test_define_nuvla_infra_service(self, mock_other_coe_infra_service):
+        mock_other_coe_infra_service.return_value = {}
         # if the api_endpoint is not set, the infra is not set either
-        self.assertEqual(self.obj.define_nuvla_infra_service('', []), {},
+        self.assertEqual({},
+                         self.obj.coe_infra_service_def('', []),
                          'Returned a valid infra service when there is no API endpoint')
 
         # otherwise, destructs the TLS keys and gives back the commissioning payload for the IS
         is_keys = ["swarm-client-ca", "swarm-client-cert", "swarm-client-key", "swarm-endpoint"]
-        self.assertTrue(set(is_keys).issubset(self.obj.define_nuvla_infra_service('valid-api-endpoint',
-                                                                                  ['ca', 'cert', 'key'])),
-                        'Failed to setup Swarm infrastructure service payload for commissioning')
+        self.assertTrue(
+            set(is_keys).issubset(
+                self.obj.coe_infra_service_def('valid-api-endpoint',
+                                               ['ca', 'cert', 'key'])),
+            'Failed to setup Swarm infrastructure service payload for commissioning')
 
         # if there are no TLS keys, they are not included in the IS payload
-        mock_infer_extra_coe.return_value = {}
-        self.assertEqual(self.obj.define_nuvla_infra_service('valid-api-endpoint', []),
-                         {'swarm-endpoint': 'valid-api-endpoint'},
-                         'Returned more IS keys than just the expected API endpoint')
-
-        # the result should not be affected by the inference of the extra COE throwing an exeception
-        mock_infer_extra_coe.side_effect = ConnectionError
-        self.assertEqual(self.obj.define_nuvla_infra_service('valid-api-endpoint', []),
-                         {'swarm-endpoint': 'valid-api-endpoint'},
-                         'Infra service definition was affected by k8s discovery function exception')
+        mock_other_coe_infra_service.return_value = {}
+        self.assertEqual(
+            {'swarm-endpoint': 'valid-api-endpoint'},
+            self.obj.coe_infra_service_def('valid-api-endpoint', []),
+            'Returned more IS keys than just the expected API endpoint')
 
         # and if there's an extra k8s infra, it should be appended to the final infra
-        mock_infer_extra_coe.reset_mock(side_effect=True)
-        mock_infer_extra_coe.return_value = {'k8s-stuff': True}
-        self.assertIn('k8s-stuff', self.obj.define_nuvla_infra_service('valid-api-endpoint', ['ca', 'cert', 'key']),
-                      'Additional COE was not added to infrastructure service payload')
-        self.assertEqual(len(self.obj.define_nuvla_infra_service('valid-api-endpoint', ['ca', 'cert', 'key']).keys()),
-                         5,
-                         'Unexpected number of infrastructure service fields')
+        mock_other_coe_infra_service.return_value = {'k8s-stuff': True}
+        coe_is = self.obj.coe_infra_service_def('valid-api-endpoint', ['ca', 'cert', 'key'])
+        self.assertIn('k8s-stuff', coe_is,
+            'Additional COE was not added to infrastructure service payload')
+        self.assertEqual(5, len(coe_is),
+            'Unexpected number of infrastructure service fields')
 
     def test_get_partial_decommission_attributes(self):
         # returns a constant, so let's just make sure that all return list items start with 'swarm'

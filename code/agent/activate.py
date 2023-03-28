@@ -23,7 +23,7 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
     def __init__(self, data_volume):
         """ Constructs an Activation object """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(data_volume=data_volume)
 
         self.activate_logger: logging.Logger = logging.getLogger(__name__)
         self.user_info = {}

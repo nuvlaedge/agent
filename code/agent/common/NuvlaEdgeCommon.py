@@ -19,18 +19,8 @@ from nuvla.api import Api
 
 from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
-from agent.orchestrator.docker import DockerClient
-from agent.orchestrator.kubernetes import KubernetesClient
-
-KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
-if KUBERNETES_SERVICE_HOST:
-    from kubernetes import client, config
-    ORCHESTRATOR = 'kubernetes'
-    ORCHESTRATOR_COE = ORCHESTRATOR
-else:
-    import docker
-    ORCHESTRATOR = 'docker'
-    ORCHESTRATOR_COE = 'swarm'
+from agent.orchestrator.factory import get_coe_client, ORCHESTRATOR, \
+    ORCHESTRATOR_COE
 
 
 def raise_timeout(signum, frame):
@@ -54,28 +44,25 @@ def timeout(time):
         signal.signal(signal.SIGALRM, signal.SIG_IGN)
 
 
-class OrchestratorException(Exception):
-    ...
-
-
 # --------------------
 class NuvlaEdgeCommon:
     """ Common set of methods and variables for the NuvlaEdge agent
     """
 
-    def __init__(self, shared_data_volume="/srv/nuvlaedge/shared"):
+    def __init__(self, data_volume="/srv/nuvlaedge/shared"):
         """ Constructs an Infrastructure object, with a status placeholder
 
-        :param shared_data_volume: shared volume target path
+        :param data_volume: shared volume target path
         """
         self.logger: logging.Logger = logging.getLogger(__name__)
 
-        self.data_volume = shared_data_volume
-        self.docker_socket_file = '/var/run/docker.sock'
         self.hostfs = "/rootfs"
+
         self.ssh_pub_key = os.environ.get('NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY')
+
+        self.data_volume = data_volume
         self.host_user_home_file = f'{self.data_volume}/.host_user_home'
-        self.installation_home = self.set_installation_home(self.host_user_home_file)
+        self.installation_home = self.get_installation_home(self.host_user_home_file)
         self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
         self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
         self.nuvlaedge_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
@@ -85,7 +72,9 @@ class NuvlaEdgeCommon:
                f"{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
         self.save_nuvla_configuration(self.nuvlaedge_nuvla_configuration, conf)
 
-        self.container_runtime = self.set_runtime_client_details()
+        self.container_runtime: ContainerRuntimeClient = \
+            get_coe_client(self.installation_home, hostfs=self.hostfs)
+
         self.mqtt_broker_host = self.container_runtime.data_gateway_name
         self.activation_flag = "{}/.activated".format(self.data_volume)
         self.swarm_manager_token_file = "swarm-manager-token"
@@ -117,8 +106,7 @@ class NuvlaEdgeCommon:
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
         self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
         self.nuvlaedge_id = self.set_nuvlaedge_id()
-        nbe_version = os.getenv('NUVLAEDGE_ENGINE_VERSION')
-        self.nuvlaedge_engine_version = str(nbe_version) if nbe_version else None
+        self.nuvlaedge_engine_version = os.getenv('NUVLAEDGE_ENGINE_VERSION')
 
         self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
@@ -151,7 +139,7 @@ class NuvlaEdgeCommon:
         return ''
 
     @staticmethod
-    def set_installation_home(host_user_home_file: str) -> str:
+    def get_installation_home(host_user_home_file: str) -> str:
         """
         Finds the path for the HOME dir used during installation
 
@@ -159,8 +147,8 @@ class NuvlaEdgeCommon:
         :return: installation home path
         """
         if os.path.exists(host_user_home_file):
-            with open(host_user_home_file) as userhome:
-                return userhome.read().strip()
+            with open(host_user_home_file) as user_home:
+                return user_home.read().strip()
         else:
             return os.environ.get('HOST_HOME')
 
@@ -206,21 +194,6 @@ class NuvlaEdgeCommon:
     def save_nuvla_configuration(file_path, content):
         if not os.path.exists(file_path):
             util.atomic_write(file_path, content)
-
-    def set_runtime_client_details(self) -> ContainerRuntimeClient:
-        """
-        Sets the right container runtime client based on the underlying orchestrator, and
-        sets the Data Gateway name
-        :return: instance of a ContainerRuntimeClient
-        """
-        if ORCHESTRATOR == 'kubernetes':
-            return KubernetesClient(self.hostfs, self.installation_home)
-        else:
-            if os.path.exists(self.docker_socket_file):
-                return DockerClient(self.hostfs, self.installation_home)
-            else:
-                raise OrchestratorException(f'Orchestrator is "{ORCHESTRATOR}", but file '
-                                            f'{self.docker_socket_file} is not present')
 
     def _get_nuvlaedge_id_from_environment(self):
         nuvlaedge_id = os.getenv('NUVLAEDGE_UUID', os.getenv('NUVLABOX_UUID'))

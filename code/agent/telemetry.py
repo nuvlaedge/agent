@@ -73,7 +73,7 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
     def __init__(self, data_volume, nuvlaedge_status_id, excluded_monitors: str = ''):
         """ Constructs an Telemetry object, with a status placeholder """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(data_volume=data_volume)
         self.logger: logging.Logger = logging.getLogger('Telemetry')
         self.nb_status_id = nuvlaedge_status_id
 
@@ -117,7 +117,11 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
 
         self.edge_status: EdgeStatus = EdgeStatus()
 
-        self.excluded_monitors: List[str] = excluded_monitors.replace("'", "").split(',')
+        if excluded_monitors:
+            self.excluded_monitors: List[str] = \
+                excluded_monitors.replace("'", "").split(',')
+        else:
+            self.excluded_monitors = []
         self.logger.info(f'Excluded monitors received in Telemetry'
                          f' {self.excluded_monitors}')
         self.monitor_list: Dict[str, Monitor] = {}
@@ -127,7 +131,7 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
         """
         Auxiliary function to extract some control from the class initialization
         It gathers the available monitors and initializes them saving the reference into
-        the monitor_list attribute of Telemtry
+        the monitor_list attribute of Telemetry
         """
         for mon in active_monitors:
             if mon.split('_')[0] in self.excluded_monitors:

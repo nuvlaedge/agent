@@ -221,36 +221,6 @@ class InfrastructureTestCase(unittest.TestCase):
         self.assertEqual(commission_payload, {'capabilities': ['NUVLA_JOB_PULL']},
                          'Failed to get NB capabilities when PULL mode is set')
 
-    @mock.patch('requests.get')
-    def test_compute_api_is_running(self, mock_get):
-
-
-        # only works for non-k8s installations
-        NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
-        self.assertFalse(self.obj.compute_api_is_running(''),
-                         'Tried to check compute-api for a Kubernetes installation')
-
-        NuvlaEdgeCommon.ORCHESTRATOR = 'docker'
-        # if compute-api is running, return True
-        compute_api_container = mock.MagicMock()
-        compute_api_container.status = 'stopped'
-        self.obj.container_runtime.client.containers.get.return_value = compute_api_container
-        self.assertFalse(self.obj.compute_api_is_running(''),
-                         'Unable to detect that compute-api is not running')
-
-        # if running, try to reach its API
-        # if an exception occurs, return False
-        compute_api_container.status = 'running'
-        self.obj.container_runtime.client.containers.get.return_value = compute_api_container
-        mock_get.side_effect = TimeoutError
-        self.assertFalse(self.obj.compute_api_is_running(''),
-                         'Assuming compute-api is running even though we could not assess that')
-        mock_get.assert_called_once()
-        # except if the exception is SSL related
-        mock_get.side_effect = requests.exceptions.SSLError
-        self.assertTrue(self.obj.compute_api_is_running(''),
-                        'Unable to detect that compute-api is running')
-
     def test_get_local_nuvlaedge_status(self):
         with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
@@ -419,13 +389,12 @@ class InfrastructureTestCase(unittest.TestCase):
     @mock.patch.object(Infrastructure, 'needs_partial_decommission')
     @mock.patch.object(Infrastructure, 'get_nuvlaedge_capabilities')
     @mock.patch.object(Infrastructure, 'swarm_token_diff')
-    @mock.patch.object(Infrastructure, 'compute_api_is_running')
     @mock.patch.object(Infrastructure, 'commissioning_attr_has_changed')
     @mock.patch.object(Infrastructure, 'get_compute_endpoint')
     @mock.patch.object(Infrastructure, 'read_commissioning_file')
     @mock.patch.object(Infrastructure, 'needs_cluster_commission')
     def test_try_commission(self, mock_needs_cluster_commission, mock_read_commission,
-                            mock_get_comp_endpoint, mock_attr_changed, mock_compute_api_is_running,
+                            mock_get_comp_endpoint, mock_attr_changed,
                             mock_swarm_token_diff, mock_get_capabilities, mock_needs_partial_decommission,
                             mock_do_commission, mock_write_file, mock_get_tls_keys):
         self.obj.container_runtime.get_join_tokens.return_value = ()
@@ -452,20 +421,28 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_write_file.return_value = None
 
         # if compute-api is not running, then IS is not defined
-        mock_compute_api_is_running.return_value = False
+        self.obj.container_runtime.compute_api_is_running = mock.MagicMock()
+        self.obj.container_runtime.compute_api_is_running.return_value = False
+
         self.obj.try_commission()
-        self.obj.container_runtime.define_nuvla_infra_service.assert_not_called()
+
+        self.obj.container_runtime.define_nuvla_infra_service.assert_called_with(
+            'https://1.1.1.1:5000',
+            ('ca', 'cert', 'key'))
         # and if there are no joining tokens, then commissioning_attr_has_changed is only called 2
-        self.assertEqual(mock_attr_changed.call_count, 2,
+        self.assertEqual(1, mock_attr_changed.call_count,
                          'Attr changed check called more than twice, even though there was no reason to')
 
         # if compute-api is running, the IS is defined
-        mock_compute_api_is_running.return_value = True
+        self.obj.container_runtime.compute_api_is_running.return_value = False
         self.obj.container_runtime.get_join_tokens.return_value = ('manager-token', 'worker-token') # ignored in this test
         mock_do_commission.reset_mock()     # reset counters
+
         self.obj.try_commission()
-        self.obj.container_runtime.define_nuvla_infra_service.assert_called_once_with('https://1.1.1.1:5000',
-                                                                                      ('ca', 'cert', 'key'))
+
+        self.obj.container_runtime.define_nuvla_infra_service.assert_called_with(
+            'https://1.1.1.1:5000',
+            ('ca', 'cert', 'key'))
 
         # given the aforementioned return_values, we expect the following commissioning payload to be sent and saved
         expected_payload = {

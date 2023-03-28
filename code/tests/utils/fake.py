@@ -132,8 +132,7 @@ def mock_kubernetes_node(uid: str=None, ready: bool=True):
         'metadata': {
             'name': f'{uid} NAME' if uid else random.randint(100, 999),
             'uid': uid if uid else random.randint(100, 999),
-            'labels': [],
-            'cluster_name': None
+            'labels': []
         }
     }
 

@@ -11,7 +11,6 @@ import logging
 import docker
 import docker.errors as docker_err
 import json
-import requests
 import time
 from agent.common import NuvlaEdgeCommon, util
 from agent.telemetry import Telemetry
@@ -22,9 +21,9 @@ from threading import Thread
 
 class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
     """ The Infrastructure class includes all methods and
-    properties necessary update the infrastructure services
+    properties necessary to update the infrastructure services
     and respective credentials in Nuvla, whenever the local
-    configurations change
+    configurations change.
 
     """
 
@@ -33,7 +32,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         :param data_volume: shared volume
         """
-        super(Infrastructure, self).__init__(shared_data_volume=data_volume)
+        super().__init__(data_volume=data_volume)
         Thread.__init__(self, daemon=True)
 
         self.infra_logger: logging.Logger = logging.getLogger(__name__)
@@ -42,8 +41,6 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = 'compute-api'
-        self.compute_api_port = '5000'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -215,41 +212,6 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if self.container_runtime.has_pull_job_capability():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
-    def compute_api_is_running(self, container_api_port) -> bool:
-        """
-        Pokes ate the compute-api endpoint to see if it is up and running
-
-        Only valid for Docker installations
-
-        :return: True or False
-        """
-
-        if NuvlaEdgeCommon.ORCHESTRATOR not in ['docker', 'swarm']:
-            return False
-
-        if not container_api_port:
-            container_api_port = self.compute_api_port
-
-        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
-
-        try:
-            if self.container_runtime.client.containers.get(self.compute_api).status \
-                    != 'running':
-                return False
-
-            requests.get(compute_api_url, timeout=3)
-        except requests.exceptions.SSLError:
-            # this is expected. It means it is up, we just weren't authorized
-            pass
-        except (docker_err.NotFound, docker_err.APIError, TimeoutError):
-            return False
-        except requests.exceptions.ConnectionError:
-            # Can happen if the Compute API takes longer than normal on start
-            self.logger.info(f'Too many requests... Compute API not ready yet')
-            return False
-
-        return True
-
     def get_local_nuvlaedge_status(self) -> dict:
         """
         Reads the local nuvlaedge-status file
@@ -401,16 +363,12 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
-        cluster_join_tokens = self.container_runtime.get_join_tokens()
         cluster_info = self.needs_cluster_commission()
 
         # initialize the commissioning payload
         commission_payload = cluster_info.copy()
         old_commission_payload = self.read_commissioning_file()
         minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() else cluster_info.copy()
-
-        my_vpn_ip = self.telemetry_instance.get_vpn_ip()
-        api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
         commission_payload["tags"] = self.container_runtime.get_node_labels()
         self.commissioning_attr_has_changed(
@@ -419,11 +377,12 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             "tags",
             minimum_commission_payload)
 
-        infra_service = {}
-        if self.compute_api_is_running(container_api_port):
-            infra_service = \
-                self.container_runtime.define_nuvla_infra_service(api_endpoint,
-                                                                  self.get_tls_keys())
+        api_endpoint, _ = \
+            self.get_compute_endpoint(self.telemetry_instance.get_vpn_ip())
+        infra_service = \
+            self.container_runtime.define_nuvla_infra_service(api_endpoint,
+                                                              self.get_tls_keys())
+
         # 1st time commissioning the IS, so we need to also pass the keys, even if they
         # haven't changed
         infra_diff = \
@@ -437,16 +396,48 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         commission_payload.update(infra_service)
 
-        # atm, it isn't clear whether these will make sense for k8s
-        # if they do, then this block should be moved to an abstractmethod of the
-        # ContainerRuntime
-        if len(cluster_join_tokens) > 1:
-            self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
-            commission_payload.update({
-                self.container_runtime.join_token_manager_keyname: cluster_join_tokens[0],
-                self.container_runtime.join_token_worker_keyname: cluster_join_tokens[1]
-            })
+        self.set_join_tokens_on_commission_payload(commission_payload,
+                                                   minimum_commission_payload,
+                                                   old_commission_payload)
 
+        self.get_nuvlaedge_capabilities(commission_payload)
+        # capabilities should always be commissioned when infra is also being commissioned
+        if any(k in minimum_commission_payload for k in infra_service):
+            minimum_commission_payload['capabilities'] = \
+                commission_payload.get('capabilities', [])
+        else:
+            self.commissioning_attr_has_changed(
+                commission_payload,
+                old_commission_payload,
+                "capabilities",
+                minimum_commission_payload,
+                compare_with_nb_resource=True)
+
+        # if this node is a worker, then we must force remove some assets
+        self.needs_partial_decommission(minimum_commission_payload, commission_payload,
+                                        old_commission_payload)
+
+        if self.do_commission(minimum_commission_payload):
+            self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
+                            commission_payload,
+                            is_json=True)
+
+    def set_join_tokens_on_commission_payload(self, commission_payload,
+                                              minimum_commission_payload,
+                                              old_commission_payload):
+        cluster_join_tokens = self.container_runtime.get_join_tokens()
+        if len(cluster_join_tokens) > 1:
+            # FIXME: This is an old implementation handling only Docker. Define
+            #  interface via abstract class. Push this to DockerClient and
+            #  implement for KubernetesClient.
+            self.swarm_token_diff(cluster_join_tokens[0],
+                                  cluster_join_tokens[1])
+            commission_payload.update({
+                self.container_runtime.join_token_manager_keyname:
+                    cluster_join_tokens[0],
+                self.container_runtime.join_token_worker_keyname:
+                    cluster_join_tokens[1]
+            })
             self.commissioning_attr_has_changed(
                 commission_payload,
                 old_commission_payload,
@@ -457,26 +448,6 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
                 old_commission_payload,
                 self.container_runtime.join_token_worker_keyname,
                 minimum_commission_payload)
-
-        self.get_nuvlaedge_capabilities(commission_payload)
-        # capabilities should always be commissioned when infra is also being commissioned
-        if any(k in minimum_commission_payload for k in infra_service):
-            minimum_commission_payload['capabilities'] = \
-                commission_payload.get('capabilities', [])
-        else:
-            self.commissioning_attr_has_changed(
-                commission_payload, old_commission_payload,
-                "capabilities", minimum_commission_payload,
-                compare_with_nb_resource=True)
-
-        # if this node is a worker, them we must force remove some assets
-        self.needs_partial_decommission(minimum_commission_payload, commission_payload,
-                                        old_commission_payload)
-
-        if self.do_commission(minimum_commission_payload):
-            self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
-                            commission_payload,
-                            is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
         """ Simply build the API query for searching this NuvlaEdge's VPN credential

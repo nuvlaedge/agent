@@ -1,15 +1,19 @@
 import base64
-import json
 import logging
 import os
+import requests
 
 import socket
 import yaml
 
 from subprocess import run, PIPE, TimeoutExpired
 
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
 import docker
+from docker.context.config import get_context_host
+from docker import errors as docker_err
+from docker.models.containers import Container
+
+from agent.orchestrator import ContainerRuntimeClient, OrchestratorException
 
 
 class InferIPError(Exception):
@@ -21,16 +25,44 @@ class DockerClient(ContainerRuntimeClient):
     Docker client
     """
 
-    def __init__(self, host_rootfs, host_home):
+    NAME = 'docker'
+    NAME_COE = 'swarm'
+
+    def __init__(self, host_rootfs, host_home, docker_host=None,
+                 check_docker_host=True):
+        """
+        Public constructor.
+
+        :param host_rootfs: path to hosts' root file system
+        :param host_home:
+        :param docker_host: corresponds to DOCKER_HOST env var for bootstrapping
+                            Docker client.
+        """
         super().__init__(host_rootfs, host_home)
         self.logger: logging.Logger = logging.getLogger(__name__)
         self.CLIENT_NAME: str = 'Docker'
-        self.client = docker.from_env()
+        if check_docker_host:
+            self.check_docker_host(docker_host)
+        self.client: docker.DockerClient = \
+            docker.from_env(
+                environment={
+                    'DOCKER_HOST': docker_host or get_context_host()})
         self.lost_quorum_hint = 'possible that too few managers are online'
         self.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.join_token_manager_keyname = 'swarm-token-manager'
         self.join_token_worker_keyname = 'swarm-token-worker'
         self.data_gateway_name = "data-gateway"
+
+        self.compute_api = 'compute-api'
+        self.compute_api_port = 5000
+
+    @classmethod
+    def check_docker_host(cls, docker_socket_file):
+        # FIXME: check for tcp://...
+        if docker_socket_file and not os.path.exists(docker_socket_file):
+            raise OrchestratorException(f'Orchestrator is "{cls.NAME}", but file '
+                                        f'{docker_socket_file} is not present')
+
 
     def get_client_version(self) -> str:
         return self.client.version()['Version']
@@ -55,7 +87,7 @@ class DockerClient(ContainerRuntimeClient):
 
         return ()
 
-    def list_nodes(self, optional_filter={}):
+    def list_nodes(self, optional_filter: dict = None):
         return self.client.nodes.list(filters=optional_filter)
 
     def get_cluster_info(self, default_cluster_name=None):
@@ -76,7 +108,7 @@ class DockerClient(ContainerRuntimeClient):
 
             return {
                 'cluster-id': cluster_id,
-                'cluster-orchestrator': ORCHESTRATOR_COE,
+                'cluster-orchestrator': self.NAME_COE,
                 'cluster-managers': managers,
                 'cluster-workers': workers
             }
@@ -111,9 +143,9 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, 5000
+                    return None, self.compute_api_port
 
-        return ip, 5000
+        return ip, self.compute_api_port
 
     def has_pull_job_capability(self):
         try:
@@ -344,7 +376,7 @@ class DockerClient(ContainerRuntimeClient):
 
         return blk_out, blk_in
 
-    def list_containers(self, *args, **kwargs):
+    def list_containers(self, filters: dict = None, all: bool = False):
         """
         Bug: Sometime the Docker Python API fails to get the list of containers with the exception:
         'requests.exceptions.HTTPError: 404 Client Error: Not Found'
@@ -357,7 +389,7 @@ class DockerClient(ContainerRuntimeClient):
 
         while True:
             try:
-                return self.client.containers.list(*args, **kwargs)
+                return self.client.containers.list(filters=filters, all=all)
             except requests.exceptions.HTTPError:
                 tries += 1
                 logging.warning(f'Failed to list containers. Try {tries}/{max_tries}.')
@@ -506,22 +538,33 @@ class DockerClient(ContainerRuntimeClient):
         return enabled_plugins
 
     def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
-        try:
-            infra_service = self.infer_if_additional_coe_exists(
-                fallback_address=api_endpoint.replace('https://', '').split(':')[0])
-        except (IndexError, ConnectionError):
-            # this is a non-critical step, so we should never fail because of it
-            infra_service = {}
+        if not self.compute_api_is_running(self.compute_api_port):
+            return {}
+        return self.coe_infra_service_def(api_endpoint, tls_keys)
+
+    def coe_infra_service_def(self, api_endpoint, tls_keys) -> dict:
+        main_coe_is = self.main_coe_infra_service(api_endpoint, tls_keys)
+        other_coe_is = self.other_coe_infra_service(api_endpoint)
+        return {**other_coe_is, **main_coe_is}
+
+    @staticmethod
+    def main_coe_infra_service(api_endpoint: str, tls_keys: list) -> dict:
+        infra_service = {}
         if api_endpoint:
             infra_service["swarm-endpoint"] = api_endpoint
-
             if tls_keys:
                 infra_service["swarm-client-ca"] = tls_keys[0]
                 infra_service["swarm-client-cert"] = tls_keys[1]
                 infra_service["swarm-client-key"] = tls_keys[2]
+        return infra_service
 
-            return infra_service
-
+    def other_coe_infra_service(self, api_endpoint):
+        try:
+            infra_service = self.infer_if_additional_coe_exists(
+                fallback_address=api_endpoint.replace('https://', '').split(':')[0])
+        except Exception as ex:
+            self.logger.warning('Failed discovering additional COE: %s', ex)
+            infra_service = {}
         return infra_service
 
     def get_partial_decommission_attributes(self) -> list:
@@ -539,18 +582,20 @@ class DockerClient(ContainerRuntimeClient):
         :param k3s_address: endpoint address for the kubernetes API
         :return: commissioning-ready kubernetes infra
         """
-        k3s_cluster_info = {}
-        k3s_conf = f'{self.hostfs}/etc/rancher/k3s/k3s.yaml'
-        if not os.path.isfile(k3s_conf) or not k3s_address:
-            return k3s_cluster_info
+        if not k3s_address:
+            return {}
 
+        k3s_conf = f'{self.hostfs}/etc/rancher/k3s/k3s.yaml'
+        if not os.path.isfile(k3s_conf):
+            return {}
         with open(k3s_conf) as kubeconfig:
             try:
                 k3s = yaml.safe_load(kubeconfig)
             except yaml.YAMLError:
-                return k3s_cluster_info
+                return {}
 
         k3s_port = k3s['clusters'][0]['cluster']['server'].split(':')[-1]
+        k3s_cluster_info = dict()
         k3s_cluster_info['kubernetes-endpoint'] = f'https://{k3s_address}:{k3s_port}'
         try:
             ca = k3s["clusters"][0]["cluster"]["certificate-authority-data"]
@@ -642,3 +687,66 @@ class DockerClient(ContainerRuntimeClient):
                                                     all=True)
 
         return list(map(lambda y: y.name, nuvlaedge_containers))
+
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              **kwargs) -> str:
+        if not command:
+            command = args
+        try:
+            output: bytes = self.client.containers.run(
+                image,
+                command=command,
+                name=name,
+                remove=remove,
+                network=network)
+            return output.decode('utf-8')
+        except (docker_err.ImageNotFound,
+                docker_err.ContainerError,
+                docker_err.APIError) as ex:
+            self.logger.error("Failed running container '%s' from '%s': %s",
+                              name, image, ex.explanation)
+
+    def container_remove(self, name: str, **kwargs):
+        try:
+            cont: Container = self.client.containers.get(name)
+            if cont.status == 'running':
+                cont.stop()
+            cont.remove()
+        except docker_err.NotFound:
+            pass
+        except Exception as ex:
+            self.logger.warning('Failed removing %s container.', exc_info=ex)
+
+    def compute_api_is_running(self, container_api_port) -> bool:
+        """
+        Pokes at the compute-api endpoint to see if it is up and running
+
+        Only valid for Docker installations
+
+        :return: True or False
+        """
+
+        if not container_api_port:
+            container_api_port = self.compute_api_port
+
+        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
+
+        try:
+            if self.client.containers.get(self.compute_api).status \
+                    != 'running':
+                return False
+
+            requests.get(compute_api_url, timeout=3)
+        except requests.exceptions.SSLError:
+            # this is expected. It means it is up, we just weren't authorized
+            pass
+        except (docker_err.NotFound, docker_err.APIError, TimeoutError):
+            return False
+        except requests.exceptions.ConnectionError:
+            # Can happen if the Compute API takes longer than normal on start
+            self.logger.info(f'Too many requests... Compute API not ready yet')
+            return False
+
+        return True

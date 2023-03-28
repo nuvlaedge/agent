@@ -100,27 +100,13 @@ class TestNetworkMonitor(unittest.TestCase):
         self.assertIsNone(test_ip_monitor.parse_host_ip_json(test_attribute))
 
     def test_gather_host_route(self):
-        # Test Raise exception
         it_1 = Mock()
-        it_1.container_runtime.client.containers.list.return_value = []
-        it_1.container_runtime.client.containers.run.side_effect = \
-            docker_err.APIError("Message")
+        m = Mock()
+        m.return_value = ''
+        it_1.container_runtime.container_run_command = m
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", it_1, True)
-        self.assertIsNone(test_ip_monitor.gather_host_ip_route())
-
-        it_1 = Mock()
-        # Decode test
-        mock_gather = Mock()
-        mock_gather = b'{}'
-        it_1.container_runtime.client.containers.run.return_value = mock_gather
-        test_ip_monitor: monitor.NetworkMonitor = \
-            monitor.NetworkMonitor("", it_1, True)
-        self.assertIsInstance(test_ip_monitor.gather_host_ip_route(), str)
-
-        it_1.container_runtime.client.containers.run.return_value = "{}"
-        with self.assertRaises(AttributeError):
-            test_ip_monitor.gather_host_ip_route()
+        self.assertEqual('', test_ip_monitor.gather_host_ip_route())
 
     def test_set_local_data(self):
         # Test no available route IP's
@@ -154,8 +140,8 @@ class TestNetworkMonitor(unittest.TestCase):
         test_ip_monitor: monitor.NetworkMonitor = \
             monitor.NetworkMonitor("", it_1, status)
         mock_gather = Mock()
-        mock_gather = b''
-        test_ip_monitor.runtime_client.client.containers.run.return_value = mock_gather
+        mock_gather.return_value = b''
+        test_ip_monitor.coe_client.container_run_command = mock_gather
         test_ip_monitor.set_local_data()
         self.assertFalse(test_ip_monitor.data.ips.local)
 
