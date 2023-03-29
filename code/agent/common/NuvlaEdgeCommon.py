@@ -108,6 +108,8 @@ class NuvlaEdgeCommon:
 
         self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
         self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
+        self.nuvlaedge_vpn_key_file = f'{self.vpn_folder}/nuvlaedge-vpn.key'
+        self.nuvlaedge_vpn_csr_file = f'{self.vpn_folder}/nuvlaedge-vpn.csr'
         self.vpn_client_conf_file = "{}/nuvlaedge.conf".format(self.vpn_folder)
         self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
         self.vpn_config_extra = self.set_vpn_config_extra()
@@ -251,7 +253,7 @@ class NuvlaEdgeCommon:
             with open("{}/{}".format(self.data_volume, self.context)) as f:
                 nuvlaedge_id = json.load(f)['id']
         except Exception as e:
-            self.logger.error(f'Failed to read NUVLAEDGE_UUID from context file '
+            self.logger.error(f'Failed to read NuvlaEdge uuid from context file '
                               f'{self.data_volume}/{self.context}: {str(e)}')
         else:
             if nuvlaedge_id:
@@ -496,12 +498,12 @@ ${vpn_extra_config}
         util.atomic_write(self.vpn_client_conf_file, tpl.substitute(values))
 
     def prepare_vpn_certificates(self):
-        nuvlaedge_vpn_key = f'{self.vpn_folder}/nuvlaedge-vpn.key'
-        nuvlaedge_vpn_csr = f'{self.vpn_folder}/nuvlaedge-vpn.csr'
 
         cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt',
-               'ec_paramgen_curve:secp521r1', '-keyout', nuvlaedge_vpn_key, '-out',
-               nuvlaedge_vpn_csr, '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
+               'ec_paramgen_curve:secp521r1',
+               '-keyout', self.nuvlaedge_vpn_key_file,
+               '-out', self.nuvlaedge_vpn_csr_file,
+               '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
 
         r = self.shell_execute(cmd)
 
@@ -512,22 +514,22 @@ ${vpn_extra_config}
 
         try:
             wait = 0
-            while not os.path.exists(nuvlaedge_vpn_csr) and \
-                  not os.path.exists(nuvlaedge_vpn_key):
+            while not os.path.exists(self.nuvlaedge_vpn_csr_file) and \
+                  not os.path.exists(self.nuvlaedge_vpn_key_file):
                 if wait > 25:
                     # appr 5 sec
                     raise TimeoutError
                 wait += 1
                 time.sleep(0.2)
 
-            with open(nuvlaedge_vpn_csr) as csr:
+            with open(self.nuvlaedge_vpn_csr_file) as csr:
                 vpn_csr = csr.read()
 
-            with open(nuvlaedge_vpn_key) as key:
+            with open(self.nuvlaedge_vpn_key_file) as key:
                 vpn_key = key.read()
         except TimeoutError:
-            self.logger.error(f'Unable to lookup {nuvlaedge_vpn_key} and '
-                              f'{nuvlaedge_vpn_csr}')
+            self.logger.error(f'Unable to lookup {self.nuvlaedge_vpn_key_file} and '
+                              f'{self.nuvlaedge_vpn_csr_file}')
             return None, None
 
         return vpn_csr, vpn_key
@@ -548,7 +550,8 @@ ${vpn_extra_config}
             vpn_conf_fields: requests.Response = \
                 requests.post(
                     "http://localhost/api/commission",
-                    json={"vpn-csr": vpn_csr})
+                    json={"vpn-csr": vpn_csr},
+                    timeout=(3, 20))
 
             vpn_conf_fields = vpn_conf_fields.json()
 
