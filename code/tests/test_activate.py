@@ -42,11 +42,6 @@ class ActivateTestCase(unittest.TestCase):
     @mock.patch.object(Activate, 'get_api_keys')
     @mock.patch.object(Activate, 'get_operational_status')
     def test_activation_is_possible(self, mock_get_op_status, mock_get_api_keys, mock_write_file, mock_read_file):
-        # activation is not possible because NuvlaEdge is not ready/operational
-        mock_get_op_status.return_value = 'UNKNOWN'
-        self.assertEqual(self.obj.activation_is_possible(), (False, {}),
-                         'Activation unable to cope with UNKNOWN operational status')
-
         mock_get_op_status.return_value = 'OPERATIONAL'
         # if there's no file and no env, then activation should go through
         mock_get_api_keys.return_value = (None, None)

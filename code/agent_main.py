@@ -147,8 +147,9 @@ def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
         activator.vpn_commission_if_needed(nuvlaedge_resource, old_nuvlaedge_resource)
 
     # if there's a mention to the VPN server, then watch the VPN credential
-    if nuvlaedge_resource.get("vpn-server-id"):
-        infra.watch_vpn_credential(nuvlaedge_resource.get("vpn-server-id"))
+    vpn_server_id = nuvlaedge_resource.get("vpn-server-id")
+    if vpn_server_id:
+        infra.watch_vpn_credential(vpn_server_id)
 
 
 def main():
