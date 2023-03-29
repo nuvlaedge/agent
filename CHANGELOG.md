@@ -1,4 +1,9 @@
 # Changelog
+
+## Updates
+### Changes
+ - Fixed: collection of network interfaces when COE is K8s
+
 ## [2.9.6] - 2022-12-07
 ### Added
 ### Changed
