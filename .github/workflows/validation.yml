@@ -1,24 +1,44 @@
 name: "Validation"
 
 on:
-  workflow_run:
-    workflows: [BUILD]
-    types:
-      - completed
+  push:
+    branches:
+      - 'main'
+  pull_request:
+    types: [ready_for_review]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_name }}
+  cancel-in-progress: true
 
 env:
   VALIDATION_PACKAGE_NAME: "validation-latest-py3-none-any.whl"
   BRANCH_NAME: ${{ github.head_ref || github.ref_name || vars.GITHUB_REF_NAME }}
 
 jobs:
-  validate-release:
+
+  setup-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      boards: ${{ steps.set-boards.outputs.boards }}
+      tests: ${{ steps.set-tests.outputs.tests }}
+    steps:
+      - id: set-boards
+        run: |
+          echo "boards=${{ vars.TESTBED_BOARDS }}" >> $GITHUB_OUTPUT
+
+      - id: set-tests
+        run: |
+          echo "tests=${{ vars.VALIDATION_TESTS }}" >> $GITHUB_OUTPUT
+
+  run-validator:
+    needs: setup-matrix
     strategy:
       matrix:
-        board-config: [ "rpi4", "ubuntu_vm" ]
-        validation-type: [ "basic_tests", "nuvla_operations" ]
+        board-config: ${{ fromJSON(needs.setup-matrix.outputs.boards) }}
+        validation-type: ${{ fromJSON(needs.setup-matrix.outputs.tests) }}
     runs-on: ${{ matrix.board-config }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: CheckOut validation packages
@@ -37,7 +57,10 @@ jobs:
       - name: Setup Python environment
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10.8'
+          python-version: '3.10'
+
+      - name: Test New Package
+        run: pip install requests
 
       - name: Install Validation Framework dependency
         run: pip install ${{ env.VALIDATION_PACKAGE_NAME }}  --force-reinstall
