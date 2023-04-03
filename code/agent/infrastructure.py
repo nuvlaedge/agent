@@ -8,6 +8,8 @@ and respective credentials in Nuvla
 """
 
 import logging
+import os
+
 import docker
 import docker.errors as docker_err
 import json
@@ -42,8 +44,8 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = 'compute-api'
-        self.compute_api_port = '5000'
+        self.compute_api = util.compose_project_name + '-compute-api'
+        self.compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -231,7 +233,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             container_api_port = self.compute_api_port
 
         compute_api_url = f'https://{self.compute_api}:{container_api_port}'
-
+        self.infra_logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status \
                     != 'running':
@@ -240,8 +242,10 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             requests.get(compute_api_url, timeout=3)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
+            self.infra_logger.debug("Compute API up and running with security")
             pass
-        except (docker_err.NotFound, docker_err.APIError, TimeoutError):
+        except (docker_err.NotFound, docker_err.APIError, TimeoutError) as ex:
+            self.infra_logger.debug(f"Compute API not found {ex}")
             return False
         except requests.exceptions.ConnectionError:
             # Can happen if the Compute API takes longer than normal on start
