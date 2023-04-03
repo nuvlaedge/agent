@@ -12,7 +12,7 @@ from subprocess import (Popen, run, PIPE, TimeoutExpired,
                         SubprocessError, STDOUT, CompletedProcess)
 
 
-compose_project_name = os.getenv('COMPOSE_PROJECT', os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge'))
+compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
 
 
 def execute_cmd(command: List[str], method_flag: bool = True) \
