@@ -232,7 +232,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if not container_api_port:
             container_api_port = self.compute_api_port
 
-        compute_api_url = f'https://{self.compute_api}:{5000}'
+        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
         self.infra_logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status \

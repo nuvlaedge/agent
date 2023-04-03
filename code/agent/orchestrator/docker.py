@@ -85,6 +85,7 @@ class DockerClient(ContainerRuntimeClient):
 
     def get_api_ip_port(self):
         node_info = self.get_node_info()
+        compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 
         ip = node_info.get("Swarm", {}).get("NodeAddr")
         if not ip:
@@ -111,9 +112,9 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, os.getenv('COMPUTE_API_PORT', 5000)
+                    return None, compute_api_port
 
-        return ip, os.getenv('COMPUTE_API_PORT', 5000)
+        return ip, compute_api_port
 
     def has_pull_job_capability(self):
         try:
