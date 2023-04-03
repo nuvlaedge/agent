@@ -8,6 +8,7 @@ import yaml
 
 from subprocess import run, PIPE, TimeoutExpired
 
+from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
 import docker
 
@@ -146,7 +147,7 @@ class DockerClient(ContainerRuntimeClient):
         return self.cast_dict_to_list(node_labels)
 
     def is_vpn_client_running(self):
-        it_vpn_container = self.client.containers.get(os.getenv('COMPOSE_PROJECT', 'nuvlaedge') + "-vpn-client")
+        it_vpn_container = self.client.containers.get(util.compose_project_name + "-vpn-client")
         vpn_client_running = it_vpn_container.status == 'running'
         return vpn_client_running
 
@@ -205,7 +206,7 @@ class DockerClient(ContainerRuntimeClient):
                    docker_image=None):
         # Get the compute-api network
         try:
-            compute_api = self.client.containers.get(os.getenv("COMPOSE_PROJECT", "nuvlaedge") + '-compute-api')
+            compute_api = self.client.containers.get(util.compose_project_name + '-compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
                 TimeoutError):

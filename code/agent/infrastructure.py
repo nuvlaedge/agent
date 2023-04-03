@@ -44,7 +44,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = os.getenv("COMPOSE_PROJECT", "nuvlaedge") + '-compute-api'
+        self.compute_api = util.compose_project_name + '-compute-api'
         self.compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
