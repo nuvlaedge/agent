@@ -1,4 +1,4 @@
-name: "Validation"
+name: "Agent Validation"
 
 on:
   push:
@@ -77,7 +77,7 @@ jobs:
         run: |
           python -m validation_framework --target ${{ matrix.board-config }}.toml \
           --validator ${{ matrix.validation-type }} --repository ${{ github.event.repository.name }} \
-          --branch ${{ env.BRANCH_NAME }} 
+          --branch ${{ env.BRANCH_NAME }}
 
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action/composite@v2
