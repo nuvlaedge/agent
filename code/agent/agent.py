@@ -193,7 +193,7 @@ class Agent:
         for job_id in job_list:
             job: Job = Job(self._DATA_VOLUME,
                            job_id,
-                           self.infrastructure.container_runtime.job_engine_lite_image,)
+                           self.infrastructure.container_runtime.job_engine_lite_image)
 
             if not job.do_nothing:
 

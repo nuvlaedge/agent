@@ -26,7 +26,6 @@ def get_coe_client(installation_home, hostfs=HOSTSFS):
     """
     if orchestrator_name() == KubernetesClient.NAME:
         return KubernetesClient(hostfs, installation_home)
-    elif orchestrator_name() == DockerClient.NAME:
+    if orchestrator_name() == DockerClient.NAME:
         return DockerClient(hostfs, installation_home)
-    else:
-        raise NotImplementedError(f'COE client of type {ORCHESTRATOR} is not known.')
+    raise NotImplementedError(f'COE client of type {ORCHESTRATOR} is not known.')
