@@ -7,16 +7,18 @@ It takes care of updating the NuvlaEdge infrastructure services
 and respective credentials in Nuvla
 """
 
-import logging
-import docker
-import docker.errors as docker_err
 import json
+import logging
 import time
+
+from datetime import datetime
+from os import path, remove
+from threading import Thread
+
+import docker
+
 from agent.common import NuvlaEdgeCommon, util
 from agent.telemetry import Telemetry
-from datetime import datetime
-from os import path, stat, remove
-from threading import Thread
 
 
 class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):

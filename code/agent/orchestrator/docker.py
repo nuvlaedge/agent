@@ -1,18 +1,18 @@
 import base64
 import logging
 import os
-import requests
-
 import socket
 import yaml
 
 from subprocess import run, PIPE, TimeoutExpired
 
+import requests
 import docker
-from docker.context.config import get_context_host
 from docker import errors as docker_err
+from docker.context.config import get_context_host
 from docker.models.containers import Container
 
+from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient, OrchestratorException
 
 
@@ -117,6 +117,7 @@ class DockerClient(ContainerRuntimeClient):
 
     def get_api_ip_port(self):
         node_info = self.get_node_info()
+        compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 
         ip = node_info.get("Swarm", {}).get("NodeAddr")
         if not ip:
@@ -143,9 +144,9 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, self.compute_api_port
+                    return None, compute_api_port
 
-        return ip, self.compute_api_port
+        return ip, compute_api_port
 
     def has_pull_job_capability(self):
         try:
@@ -177,7 +178,8 @@ class DockerClient(ContainerRuntimeClient):
         return self.cast_dict_to_list(node_labels)
 
     def is_vpn_client_running(self):
-        vpn_client_running = True if self.client.containers.get("vpn-client").status == 'running' else False
+        it_vpn_container = self.client.containers.get(util.compose_project_name + "-vpn-client")
+        vpn_client_running = it_vpn_container.status == 'running'
         return vpn_client_running
 
     def install_ssh_key(self, ssh_pub_key, ssh_folder):
@@ -235,7 +237,7 @@ class DockerClient(ContainerRuntimeClient):
                    docker_image=None):
         # Get the compute-api network
         try:
-            compute_api = self.client.containers.get('compute-api')
+            compute_api = self.client.containers.get(util.compose_project_name + '-compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
                 TimeoutError):

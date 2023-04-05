@@ -154,7 +154,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
             }
         }
 
-        self.assertEqual(self.obj.get_api_ip_port(), (node_addr, 5000),
+        self.assertEqual(self.obj.get_api_ip_port(), (node_addr, '5000'),
                          'Expected default Swarm NodeAddr with port 5000, but got something else instead')
 
         # otherwise, we try to read the machine IP from the disk
@@ -167,7 +167,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
    9: 0100007F:ECA0 0100007F:13D8 06 00000000:00000000 03:00000577 00000000     0        0 0 3 ffffffc0d1887ef0
    '''
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=tcp_file)):
-            self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', 5000),
+            self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', '5000'),
                              'Could not get valid IP from filesystem')
 
         # if there's no valid IP in this file, then we return 127.0.0.1
@@ -176,7 +176,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
    1: 00000000:1388 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 46922 1 ffffffc1c9be1740 100 0 0 10 0
    '''
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=tcp_file)):
-            self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', 5000),
+            self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', '5000'),
                              'Could not get default IP from filesystem')
 
     @mock.patch('docker.models.containers.ContainerCollection.get')

@@ -1,4 +1,4 @@
-name: "Validation"
+name: "Agent Validation"
 
 on:
   push:
@@ -38,6 +38,7 @@ jobs:
       matrix:
         board-config: ${{ fromJSON(needs.setup-matrix.outputs.boards) }}
         validation-type: ${{ fromJSON(needs.setup-matrix.outputs.tests) }}
+      fail-fast: false
     runs-on: ${{ matrix.board-config }}
 
     steps:
@@ -63,7 +64,7 @@ jobs:
         run: pip install requests
 
       - name: Install Validation Framework dependency
-        run: pip install ${{ env.VALIDATION_PACKAGE_NAME }}  --force-reinstall
+        run: python -m pip install ${{ env.VALIDATION_PACKAGE_NAME }}  --force-reinstall
 
       - name: Setup results folder
         run: |
@@ -77,7 +78,7 @@ jobs:
         run: |
           python -m validation_framework --target ${{ matrix.board-config }}.toml \
           --validator ${{ matrix.validation-type }} --repository ${{ github.event.repository.name }} \
-          --branch ${{ env.BRANCH_NAME }} 
+          --branch ${{ env.BRANCH_NAME }}
 
       - name: Publish Unit Test Results
         uses: EnricoMi/publish-unit-test-result-action/composite@v2
