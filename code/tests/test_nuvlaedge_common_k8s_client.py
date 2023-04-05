@@ -24,11 +24,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         os.environ.setdefault('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
         with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
             with mock.patch('kubernetes.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
-                with mock.patch('kubernetes.config.load_incluster_config') as mock_k8s_config:
-                    mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
-                    mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
-                    mock_k8s_config.return_value = True
-                    self.obj = KubernetesClient('/fake-rootfs', '/home/fakeUser')
+                with mock.patch('kubernetes.client.BatchV1Api') as mock_k8s_client_BatchV1Api:
+                    with mock.patch('kubernetes.config.load_incluster_config') as mock_k8s_config:
+                        mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
+                        mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
+                        mock_k8s_client_BatchV1Api = mock.MagicMock()
+                        mock_k8s_config.return_value = True
+                        self.obj = KubernetesClient('/fake-rootfs', '/home/fakeUser')
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -262,11 +264,11 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_launch_job(self):
         # no returns. The only test is to make sure there are no exceptions and that the job pod is launched
-        self.obj.client.create_namespaced_pod.reset_mock()
-        self.obj.client.create_namespaced_pod.return_value = True
+        self.obj.client_batch_api.create_namespaced_job.reset_mock()
+        self.obj.client_batch_api.create_namespaced_job.return_value = True
         self.assertIsNone(self.obj.launch_job('', '', ''),
                           'Unable to launch new job')
-        self.obj.client.create_namespaced_pod.assert_called_once()
+        self.obj.client_batch_api.create_namespaced_job.assert_called_once()
 
     @mock.patch('kubernetes.client.CustomObjectsApi.list_cluster_custom_object')
     @mock.patch('agent.orchestrator.kubernetes.KubernetesClient.get_node_info')

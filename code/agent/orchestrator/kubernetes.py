@@ -8,7 +8,26 @@ from kubernetes.client.exceptions import ApiException
 
 from agent.orchestrator import ContainerRuntimeClient
 
-log = logging.getLogger(__name__)
+
+def init_logger(level=logging.INFO, handler=logging.StreamHandler()) \
+        -> logging.Logger:
+    logger = logging.getLogger('KubernetesClient')
+    logger.setLevel(level)
+    handler.setLevel(level)
+    logger.addHandler(handler)
+    logger.info('Logging initialised.')
+    return logger
+
+
+log = init_logger()
+
+
+JOB_TTL_SECONDS_AFTER_FINISHED = 60 * 2
+JOB_BACKOFF_LIMIT = 0
+
+
+class TimeoutException(Exception):
+    ...
 
 
 class KubernetesClient(ContainerRuntimeClient):
@@ -25,6 +44,7 @@ class KubernetesClient(ContainerRuntimeClient):
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
+        self.client_batch_api = client.BatchV1Api()
         self.namespace = os.getenv('MY_NAMESPACE', 'nuvlaedge')
         self.job_engine_lite_image = os.getenv('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE')
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
@@ -117,8 +137,7 @@ class KubernetesClient(ContainerRuntimeClient):
     def has_pull_job_capability(self):
         if self.job_engine_lite_image:
             return True
-        else:
-            return False
+        return False
 
     def get_node_labels(self):
         node = self.get_node_info()
@@ -202,16 +221,15 @@ class KubernetesClient(ContainerRuntimeClient):
         except client.exceptions.ApiException as e:
             if e.status == 404:
                 return False
-            else:
-                log.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
-                # assume it is running so we don't mess anything
-                return True
+            log.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
+            # assume it is running so we don't mess anything
+            return True
 
         try:
             if job.status.phase.lower() == 'running':
                 log.info(f'Job {job_id} is already running in pod {job.metadata.name}, with UID {job.metadata.uid}')
                 return True
-            elif job.status.phase.lower() == 'pending':
+            if job.status.phase.lower() == 'pending':
                 log.warning(f'Job {job_id} was created and still pending')
                 # TODO: maybe we should run a cleanup for pending jobs after X hours
             else:
@@ -231,36 +249,33 @@ class KubernetesClient(ContainerRuntimeClient):
         return False
 
     def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
-                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None, docker_image=None):
+                   nuvla_endpoint_insecure=False, api_key=None, api_secret=None,
+                   docker_image=None, **kwargs):
 
-        cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
+        cmd = '/app/job_executor.py'
+        args = f'--api-url https://{nuvla_endpoint} ' \
             f'--api-key {api_key} ' \
             f'--api-secret {api_secret} ' \
             f'--job-id {job_id}'
 
         if nuvla_endpoint_insecure:
-            cmd = f'{cmd} --api-insecure'
+            args = f'{args} --api-insecure'
 
-        img = docker_image if docker_image else self.job_engine_lite_image
-        log.info(f'Starting job {job_id} from {img}, with command: "{cmd}"')
+        image = docker_image if docker_image else self.job_engine_lite_image
 
-        pod_body = client.V1Pod(
-            kind='Pod',
-            metadata=client.V1ObjectMeta(name=job_execution_id),
-            spec=client.V1PodSpec(
-                node_name=self.host_node_name,
-                restart_policy='Never',
-                containers=[
-                    client.V1Container(
-                        name=job_execution_id,
-                        image=img,
-                        command=cmd
-                    )
-                ]
-            )
-        )
+        log.info(f'Launch Nuvla job {job_id} using {image} with command: "{cmd}"')
 
-        self.client.create_namespaced_pod(namespace=self.namespace, body=pod_body)
+        job = self._job_def(image, job_execution_id, command=cmd, args=args,
+                            restart_policy='Never')
+
+        namespace = self._namespace(**kwargs)
+        log.debug('Run job %s in namespace %s', job.to_str(), namespace)
+        try:
+            self.client_batch_api.create_namespaced_job(namespace, job)
+        except Exception as ex:
+            log.error('Failed starting job %s in namespace %s', job.to_str(),
+                      namespace, exc_info=ex)
+            raise ex
 
     def collect_container_metrics(self) -> List[Dict]:
         try:
@@ -269,14 +284,14 @@ class KubernetesClient(ContainerRuntimeClient):
                     field_selector=f'spec.nodeName={self.host_node_name}')
         except ApiException as ex:
             log.error('Failed listing pods for all namespaces on %s: %s',
-                          self.host_node_name, exc_info=ex)
+                          self.host_node_name, ex, exc_info=ex)
             return []
         pods_here_per_name = {f'{p.metadata.namespace}/{p.metadata.name}': p
                               for p in pods_here.items}
 
         this_node_capacity = self.get_node_info().status.capacity
         node_cpu_capacity = int(this_node_capacity['cpu'])
-        node_mem_capacity_KiB = int(this_node_capacity['memory'].rstrip('Ki'))
+        node_mem_capacity_kib = int(this_node_capacity['memory'].rstrip('Ki'))
 
         out = []
         pod_metrics_list = client.CustomObjectsApi()\
@@ -291,7 +306,7 @@ class KubernetesClient(ContainerRuntimeClient):
                     metrics = self._container_metrics(pod['metadata']['name'],
                                                       container,
                                                       node_cpu_capacity,
-                                                      node_mem_capacity_KiB,
+                                                      node_mem_capacity_kib,
                                                       pods_here_per_name,
                                                       short_identifier)
                     out.append(metrics)
@@ -302,7 +317,7 @@ class KubernetesClient(ContainerRuntimeClient):
         return out
 
     def _container_metrics(self, pod_name: str, container: dict,
-                           node_cpu_capacity: int, node_mem_capacity_KiB: int,
+                           node_cpu_capacity: int, node_mem_capacity_kib: int,
                            pods_here_per_name, short_identifier):
         metrics = {
             'id': pod_name,
@@ -311,21 +326,18 @@ class KubernetesClient(ContainerRuntimeClient):
         container_cpu_usage = int(container['usage']['cpu'].rstrip('n'))
         # units come in nanocores
         metrics['cpu-percent'] = "%.2f" % round(
-            container_cpu_usage * 100 / (
-                    node_cpu_capacity * 1000000000), 2)
-        mem_usage_KiB = int(container['usage']['memory'].rstrip('Ki'))
+            container_cpu_usage * 100 / (node_cpu_capacity * 1000000000), 2)
+        mem_usage_kib = int(container['usage']['memory'].rstrip('Ki'))
         # units come in Ki
         metrics['mem-percent'] = "%.2f" % round(
-            mem_usage_KiB * 100 / node_mem_capacity_KiB, 2)
-        metrics[
-            'mem-usage-limit'] = f"{round(mem_usage_KiB / 1024, 1)}MiB / {round(node_mem_capacity_KiB / 1024, 1)}MiB"
+            mem_usage_kib * 100 / node_mem_capacity_kib, 2)
+        metrics['mem-usage-limit'] = \
+            f"{round(mem_usage_kib / 1024, 1)}MiB / {round(node_mem_capacity_kib / 1024, 1)}MiB"
         # FIXME: implement net and disk metrics collection.
         net_in, net_out = self.collect_container_metrics_net()
         blk_in, blk_out = self.collect_container_metrics_block()
-        metrics.update({'net-in-out': "%sMB / %sMB" % (
-        round(net_in, 1), round(net_out, 1)),
-                        'blk-in-out': "%sMB / %sMB" % (
-                        round(blk_in, 1), round(blk_out, 1))})
+        metrics.update({'net-in-out': f"{round(net_in, 1)}MB / {round(net_out, 1)}MB",
+                        'blk-in-out': f"{round(blk_in, 1)}MB / {round(blk_out, 1)}MB"})
         for cstat in pods_here_per_name[short_identifier].status.container_statuses:
             if cstat.name == container['name']:
                 for k, v in cstat.state.to_dict().items():
@@ -431,8 +443,7 @@ class KubernetesClient(ContainerRuntimeClient):
                 infra_service["kubernetes-client-key"] = tls_keys[2]
 
             return infra_service
-        else:
-            return {}
+        return {}
 
     def get_partial_decommission_attributes(self) -> list:
         # TODO for k8s
@@ -458,7 +469,7 @@ class KubernetesClient(ContainerRuntimeClient):
                 return
             log.info(f'Waiting pod {phase}: {namespace}:{name} till {ts_stop}')
             if ts_stop <= time.time():
-                raise Exception(f'Pod is not {phase} after {wait_sec} sec')
+                raise TimeoutException(f'Pod is not {phase} after {wait_sec} sec')
             time.sleep(2)
 
     def _wait_pod_deleted(self, namespace: str, name: str, wait_sec=60):
@@ -471,17 +482,16 @@ class KubernetesClient(ContainerRuntimeClient):
                     return
             log.info(f'Deleting pod: {namespace}:{name} till {ts_stop}')
             if ts_stop <= time.time():
-                raise Exception(f'Pod is still not deleted after {wait_sec} sec')
+                raise TimeoutException(f'Pod is still not deleted after {wait_sec} sec')
             time.sleep(2)
 
     @staticmethod
     def _to_k8s_obj_name(name: str) -> str:
-        return name.replace('_', '-')
+        return name.replace('_', '-').replace('/', '-')
 
-    def container_run_command(self, image, name, command: str = None,
-                              args: str = None,
-                              network: str = None, remove: bool = True,
-                              **kwargs) -> str:
+    @staticmethod
+    def _container_def(image, name, command: str = None, args: str = None) -> \
+            client.V1Container:
         def parse_cmd_args(cmd, arg):
             if cmd:
                 cmd = cmd.split()
@@ -492,31 +502,85 @@ class KubernetesClient(ContainerRuntimeClient):
             else:
                 arg = None
             return cmd, arg
-        name = self._to_k8s_obj_name(name)
         command, args = parse_cmd_args(command, args)
-        pod = client.V1Pod(
-            metadata=client.V1ObjectMeta(name=name,
-                                         annotations={}),
-            spec=client.V1PodSpec(
-                host_network=(network == 'host'),
-                containers=[
-                    client.V1Container(image=image,
-                                       name=name,
-                                       command=command,
-                                       args=args)
-                ])
+        return client.V1Container(
+            image=image,
+            name=name,
+            command=command,
+            args=args)
+
+    @staticmethod
+    def _pod_spec(container: client.V1Container, network: str = None,
+                  **kwargs) -> client.V1PodSpec:
+        pod_spec = client.V1PodSpec(
+            host_network=(network == 'host'),
+            containers=[container])
+        if 'restart_policy' in kwargs:
+            pod_spec.restart_policy = kwargs['restart_policy']
+        return pod_spec
+
+    @staticmethod
+    def _pod_template_spec(name: str, pod_spec: client.V1PodSpec) \
+            -> client.V1PodTemplateSpec:
+        return client.V1PodTemplateSpec(
+            spec=pod_spec,
+            metadata=client.V1ObjectMeta(name=name)
         )
-        log.info(f'Run Pod: {pod.to_str()}')
+
+    def _pod_def(self, image, name, command: str = None, args: str = None,
+                 network: str = None, **kwargs) -> client.V1Pod:
+        container_def = self._container_def(image, name, command=command, args=args)
+        pod_spec = self._pod_spec(container_def, network=network, **kwargs)
+        return client.V1Pod(
+            metadata=client.V1ObjectMeta(name=name, annotations={}),
+            spec=pod_spec
+        )
+
+    def _job_def(self, image, name, command: str = None, args: str = None,
+                 network: str = None, **kwargs) -> client.V1Job:
+
+        name = self._to_k8s_obj_name(name)
+
+        container: client.V1Container = \
+            self._container_def(image, name, command=command, args=args)
+        pod_spec: client.V1PodSpec = \
+            self._pod_spec(container, network=network, **kwargs)
+        pod_template: client.V1PodTemplateSpec = \
+            self._pod_template_spec(name, pod_spec)
+
+        job_sec = client.V1JobSpec(template=pod_template)
+        job_sec.backoff_limit = kwargs.get('backoff_limit', JOB_BACKOFF_LIMIT)
+        job_sec.ttl_seconds_after_finished = \
+            kwargs.get('ttl_seconds_after_finished',
+                       JOB_TTL_SECONDS_AFTER_FINISHED)
+
+        return client.V1Job(
+            api_version="batch/v1",
+            kind="Job",
+            metadata=client.V1ObjectMeta(name=name),
+            spec=job_sec
+        )
+
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              no_output=False,
+                              **kwargs) -> str:
+        name = self._to_k8s_obj_name(name)
+        pod = self._pod_def(image, name, command=command, args=args,
+                            network=network, **kwargs)
         namespace = self._namespace(**kwargs)
+        log.info('Run pod %s in namespace %s', pod.to_str(), namespace)
         try:
             self.client.create_namespaced_pod(namespace, pod)
+            if no_output:
+                return ''
         except ApiException as ex:
-            log.error('Failed to create %s:%s: %s', namespace, name, ex,
-                          exc_info=ex)
+            log.error('Failed to create %s:%s: %s', namespace, name, ex, exc_info=ex)
             return ''
         try:
             self._wait_pod_in_phase(namespace, name, 'Running')
-        except Exception as ex:
+        except TimeoutException as ex:
             log.warning(ex)
             return ''
         output = self.client.read_namespaced_pod_log(name, namespace)
@@ -542,6 +606,8 @@ class KubernetesClient(ContainerRuntimeClient):
         except ApiException as ex:
             log.warning('Failed removing pod %s in %s: %s', name, namespace,
                             ex.reason)
+        except TimeoutException as ex_timeout:
+            log.warning('Timeout waiting for pod to be deleted: %s', ex_timeout)
 
     def collect_container_metrics_net(self):
         # FIXME: implement. Not clear how to get Rx/Tx metrics.
