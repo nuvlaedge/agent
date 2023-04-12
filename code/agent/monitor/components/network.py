@@ -14,6 +14,7 @@ from typing import List, NoReturn, Dict, Union
 import requests
 from docker import errors as docker_err
 from docker.models.containers import Container
+from nuvlaedge.common.constant_files import FILE_NAMES
 
 from agent.common import NuvlaEdgeCommon, util
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface, IP
@@ -48,7 +49,7 @@ class NetworkMonitor(Monitor):
         self.host_fs: str = telemetry.hostfs
         self.first_net_stats: Dict = {}
         self.previous_net_stats_file: str = telemetry.previous_net_stats_file
-        self.vpn_ip_file: str = telemetry.vpn_ip_file
+
         self.runtime_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
             telemetry.container_runtime
 
@@ -350,9 +351,9 @@ class NetworkMonitor(Monitor):
         """ Discovers the NuvlaEdge VPN IP  """
 
         # Check if file exists and not empty
-        if os.path.exists(self.vpn_ip_file) and \
-                os.stat(self.vpn_ip_file).st_size != 0:
-            with open(self.vpn_ip_file, 'r', encoding='UTF-8') as file:
+        if FILE_NAMES.VPN_IP_FILE.exists() and \
+                FILE_NAMES.VPN_IP_FILE.stat().st_size != 0:
+            with FILE_NAMES.VPN_IP_FILE.open() as file:
                 it_line = file.read()
                 ip_address: str = str(it_line.splitlines()[0])
 

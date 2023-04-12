@@ -2,6 +2,7 @@
 This class gathers the main properties of the agent component of the NuvlaEdge engine.
 Also controls the execution flow and provides utilities to the children dependencies
 """
+import json
 import logging
 import os
 import threading
@@ -10,6 +11,9 @@ from threading import Event, Thread
 from typing import Union, NoReturn, List, Dict
 
 from nuvla.api.models import CimiResource
+from nuvlaedge.peripherals.peripheral_manager import PeripheralManager
+from nuvlaedge.broker.file_broker import FileBroker
+from nuvlaedge.common.constant_files import FILE_NAMES
 
 from agent.activate import Activate
 from agent.common import util
@@ -54,6 +58,9 @@ class Agent:
         self.telemetry: Union[Telemetry, None] = None
         self.telemetry_thread: Union[Thread, None] = None
 
+        # Peripheral manager thread
+        self.peripherals_thread: Union[PeripheralManager, None] = None
+
     def activate_nuvlaedge(self) -> NoReturn:
         """
         Creates an "activate" object class and uses it to check the previous status
@@ -96,7 +103,7 @@ class Agent:
             self.logger.warning('Host user home directory not defined.'
                                 'This might impact future SSH management actions')
         else:
-            util.atomic_write(self.infrastructure.host_user_home_file,
+            util.atomic_write(FILE_NAMES.HOST_USER_HOME,
                               self.infrastructure.installation_home,
                               encoding='UTF-8')
             self.infrastructure.set_immutable_ssh_key()
@@ -136,23 +143,19 @@ class Agent:
 
         Returns: a dict with the response from Nuvla
         """
-        self.logger.debug(f'send_heartbeat({self.nuvlaedge_common}, '
-                          f'{self.telemetry}, {self.nuvlaedge_status_id},'
-                          f' {self.past_status_time})')
+        self.logger.info(f'Sending heartbeat')
 
         # Calculate differences NE-Nuvla status
         status, _del_attr = self.telemetry.diff(self.telemetry.status_on_nuvla,
                                                 self.telemetry.status)
         status_current_time = self.telemetry.status.get('current-time', '')
         del_attr: List = []
-
         self.logger.debug(f'send_heartbeat: status_current_time = {status_current_time} '
                           f'_delete_attributes = {_del_attr}  status = {status}')
 
         if not status_current_time:
             status = {'status-notes': ['NuvlaEdge Telemetry is starting']}
             self.telemetry.status.update(status)
-
         else:
             if status_current_time <= self.past_status_time:
                 status = {
@@ -243,6 +246,16 @@ class Agent:
             self.telemetry_thread = threading.Thread(target=self.telemetry.update_status,
                                                      daemon=True)
             self.telemetry_thread.start()
+
+        # Watch peripherals thread
+        if not self.peripherals_thread or not self.peripherals_thread.is_alive():
+            self.logger.info(f'Peripheral manager thread not existing or not started, initialized')
+            self.peripherals_thread = PeripheralManager(
+                FileBroker(),
+                self.nuvlaedge_common.api(),
+                self.nuvlaedge_common.nuvlaedge_id)
+
+            self.peripherals_thread.start()
 
         response: Dict = self.send_heartbeat()
 
