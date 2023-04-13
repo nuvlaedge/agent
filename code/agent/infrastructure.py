@@ -204,6 +204,84 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.infra_logger.info("Auto-commissioning the NuvlaEdge for the first time..")
             return current_conf
 
+    def commission_vpn(self):
+        """ (re)Commissions the NB via the agent API
+
+        :return:
+        """
+        self.infra_logger.info(f'Starting VPN commissioning...')
+
+        vpn_csr, vpn_key = self.prepare_vpn_certificates()
+
+        if not vpn_key or not vpn_csr:
+            return False
+
+        try:
+            vpn_conf_fields = self.do_commission({"vpn-csr": vpn_csr})
+        except Exception as e:
+            self.infra_logger.error(f'Unable to setup VPN connection: {str(e)}')
+            return False
+
+        if not vpn_conf_fields:
+            self.infra_logger.error(f'Invalid response from VPN commissioning... '
+                              f'cannot continue')
+            return False
+
+        self.infra_logger.info(f'VPN configuration fields: {vpn_conf_fields}')
+
+        vpn_values = {
+            'vpn_certificate': vpn_conf_fields['vpn-certificate'],
+            'vpn_intermediate_ca': vpn_conf_fields['vpn-intermediate-ca'],
+            'vpn_ca_certificate': vpn_conf_fields['vpn-ca-certificate'],
+            'vpn_intermediate_ca_is': vpn_conf_fields['vpn-intermediate-ca-is'],
+            'vpn_shared_key': vpn_conf_fields['vpn-shared-key'],
+            'vpn_common_name_prefix': vpn_conf_fields['vpn-common-name-prefix'],
+            'vpn_endpoints_mapped': vpn_conf_fields['vpn-endpoints-mapped'],
+            'vpn_interface_name': self.vpn_interface_name,
+            'nuvlaedge_vpn_key': vpn_key,
+            'vpn_extra_config': self.vpn_config_extra
+        }
+
+        self.write_vpn_conf(vpn_values)
+        return True
+
+    def prepare_vpn_certificates(self):
+
+        cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt',
+               'ec_paramgen_curve:secp521r1',
+               '-keyout', self.nuvlaedge_vpn_key_file,
+               '-out', self.nuvlaedge_vpn_csr_file,
+               '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
+
+        r = self.shell_execute(cmd)
+
+        if r.get('returncode', -1) != 0:
+            self.infra_logger.error(f'Cannot generate certificates for VPN connection: '
+                                    f'{r.get("stdout")} | {r.get("stderr")}')
+            return None, None
+
+        try:
+            wait = 0
+            while not os.path.exists(self.nuvlaedge_vpn_csr_file) and \
+                    not os.path.exists(self.nuvlaedge_vpn_key_file):
+                if wait > 25:
+                    # appr 5 sec
+                    raise TimeoutError
+                wait += 1
+                time.sleep(0.2)
+
+            with open(self.nuvlaedge_vpn_csr_file) as csr:
+                vpn_csr = csr.read()
+
+            with open(self.nuvlaedge_vpn_key_file) as key:
+                vpn_key = key.read()
+        except TimeoutError:
+            self.infra_logger.error(f'Unable to lookup {self.nuvlaedge_vpn_key_file} and '
+                                    f'{self.nuvlaedge_vpn_csr_file}')
+            return None, None
+
+        return vpn_csr, vpn_key
+
     def get_nuvlaedge_capabilities(self, commissioning_dict: dict):
         """ Finds the NuvlaEdge capabilities and adds them to the NB commissioning payload
 

@@ -42,6 +42,8 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.nuvlaedge_vpn_key_file = 'nuvlaedge-vpn.key'
         self.obj.nuvlaedge_vpn_csr_file = 'nuvlaedge-vpn.csr'
         self.obj.vpn_client_conf_file = 'vpn-conf'
+        self.obj.vpn_interface_name = 'vpn'
+        self.obj.vpn_config_extra = ''
         self.obj.ssh_flag = '.ssh'
         self.obj.ssh_pub_key = 'ssh key from env'
         self.obj.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -698,3 +700,4 @@ class InfrastructureTestCase(unittest.TestCase):
         self.assertRaises(InterruptedError, self.obj.run)
         mock_commission.assert_called_once()
         mock_sleep.assert_called_once()
+

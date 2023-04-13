@@ -113,21 +113,6 @@ class ActivateTestCase(unittest.TestCase):
                          'Unable to get old NuvlaEdge context when creating new NB document')
         mock_write_to_file.assert_called_once()
 
-    @mock.patch.object(Activate, 'commission_vpn')
-    def test_vpn_commission_if_needed(self, mock_commission_vpn):
-        old_nuvlaedge_resource = {'id': self.obj.nuvlaedge_id}
-        new_nuvlaedge_resource = {**old_nuvlaedge_resource, **{'vpn-server-id': 'infrastructure-servive/fake-vpn'}}
-
-        mock_commission_vpn.return_value = None
-
-        # if 'vpn-server-id' has not changed, then VPN commissioning will not be invoked
-        self.obj.vpn_commission_if_needed(old_nuvlaedge_resource, old_nuvlaedge_resource)
-        mock_commission_vpn.assert_not_called()
-
-        # but if 'vpn-server-id' changes, then VPN commissioning takes place
-        self.obj.vpn_commission_if_needed(new_nuvlaedge_resource, old_nuvlaedge_resource)
-        mock_commission_vpn.assert_called_once()
-
     @mock.patch.object(Activate, 'api')
     def test_get_nuvlaedge_info(self, mock_api):
         mock_api.return_value = self.set_nuvla_api(json.loads(self.api_key_content))

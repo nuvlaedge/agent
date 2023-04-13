@@ -83,7 +83,6 @@ class Agent:
         nuvlaedge_resource, old_nuvlaedge_resource = \
             self.activate.update_nuvlaedge_resource()
         self.nuvlaedge_status_id = nuvlaedge_resource["nuvlabox-status"]
-        self.activate.vpn_commission_if_needed(nuvlaedge_resource, old_nuvlaedge_resource)
         self.logger.info(f'NuvlaEdge status id {self.nuvlaedge_status_id}')
 
     def initialize_infrastructure(self) -> NoReturn:
