@@ -49,7 +49,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
-        self.compute_api = os.getenv("COMPOSE_PROJECT", "nuvlaedge") + '-compute-api'
+        self.compute_api = util.compose_project_name + '-compute-api'
         self.compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
@@ -237,7 +237,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if not container_api_port:
             container_api_port = self.compute_api_port
 
-        compute_api_url = f'https://{self.compute_api}:{5000}'
+        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
         self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status \
@@ -517,6 +517,16 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             FILE_NAMES.VPN_CREDENTIAL.unlink()  # removes the file
             return None
             # else, do nothing because nothing has changed
+
+    def check_vpn_client_state(self):
+        exists = None
+        running = None
+        try:
+            running = self.container_runtime.is_vpn_client_running()
+            exists = True
+        except docker.errors.NotFound:
+            exists = False
+        return exists, running
 
     def fix_vpn_credential_mismatch(self, online_vpn_credential: dict):
         """

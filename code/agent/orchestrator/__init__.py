@@ -3,6 +3,7 @@ Orchestration base class. To be extended and implemented by docker or kubernetes
 """
 import os
 from abc import ABC, abstractmethod
+from agent.common import util
 
 
 KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
@@ -23,9 +24,9 @@ class ContainerRuntimeClient(ABC):
     def __init__(self, host_rootfs, host_home):
         self.client = None
         self.hostfs = host_rootfs
-        self.job_engine_lite_component = os.getenv("COMPOSE_PROJECT", "nuvlaedge") + "-job-engine-lite"
+        self.job_engine_lite_component = util.compose_project_name + "-job-engine-lite"
         self.job_engine_lite_image = None
-        self.vpn_client_component = os.getenv("COMPOSE_PROJECT", "nuvlaedge") + '-vpn-client'
+        self.vpn_client_component = util.compose_project_name + '-vpn-client'
         self.host_home = host_home
         self.ignore_env_variables = ['NUVLAEDGE_API_KEY', 'NUVLAEDGE_API_SECRET']
         self.data_gateway_name = None

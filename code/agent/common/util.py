@@ -12,6 +12,9 @@ from subprocess import (Popen, run, PIPE, TimeoutExpired,
                         SubprocessError, STDOUT, CompletedProcess)
 
 
+compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
+
+
 def execute_cmd(command: List[str], method_flag: bool = True) \
         -> Union[Dict, CompletedProcess, None]:
     """ Shell wrapper to execute a command

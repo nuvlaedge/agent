@@ -77,6 +77,8 @@ class Agent:
             can_activate, user_info = self.activate.activation_is_possible()
             if can_activate or user_info:
                 break
+            else:
+                self.logger.info(f'Activation not yet possible {can_activate}-{user_info}')
 
             self.agent_event.wait(timeout=3)
 
