@@ -30,7 +30,6 @@ jobs:
         run: pip install tox
 
       - name: Run tox
-        working-directory: code
         run: tox
 
       - name: SonarCloud Scan
