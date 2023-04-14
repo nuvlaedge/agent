@@ -33,7 +33,7 @@ class Agent:
     def __init__(self, agent_flag: bool):
         # Class logger
         self.logger: logging.Logger = logging.getLogger(__name__)
-        self.logger.debug('Creating agent main class')
+        self.logger.debug('Instantiating Agent class')
 
         # Main NuvlaEdge data
         self.nuvlaedge_status_id: str = ''
@@ -41,25 +41,57 @@ class Agent:
         self.nuvlaedge_updated_date: str = ''
         self.agent_flag: bool = agent_flag
 
-        # Class containing  mainly hardcoded paths, ports and addresses related tu nuvla
-        self.nuvlaedge_common: NuvlaEdgeCommon = NuvlaEdgeCommon()
+        self.excluded_monitors = os.environ.get('EXCLUDED_MONITORS', '')
 
-        # Class responsible for activating an controlling previous nuvla installations
-        self.activate: Activate = Activate(self._DATA_VOLUME)
+        self._activate = None
+        self._infrastructure = None
+        self._nuvlaedge_common = None
+        self._telemetry = None
 
-        # Intermediary class which provides and interface to communicate with nuvla
-        self.infrastructure: Union[Infrastructure, None] = None
+        self.infrastructure_thread = None
+        self.telemetry_thread = None
 
-        # Telemetry updater class
-        self.telemetry: Union[Telemetry, None] = None
-        self.telemetry_thread: Union[Thread, None] = None
+    @property
+    def nuvlaedge_common(self) -> NuvlaEdgeCommon:
+        """ Class containing mainly hardcoded paths, ports and addresses related tu nuvla """
+        if not self._nuvlaedge_common:
+            self.logger.info('Instantiating NuvlaEdgeCommon class')
+            self._nuvlaedge_common = NuvlaEdgeCommon()
+        return self._nuvlaedge_common
+
+    @property
+    def activate(self) -> Activate:
+        """ Class responsible for activating and controlling previous nuvla installations """
+        if not self._activate:
+            self.logger.info('Instantiating Activate class')
+            self._activate = Activate(self._DATA_VOLUME)
+        return self._activate
+
+    @property
+    def infrastructure(self) -> Infrastructure:
+        """ Intermediary class which provides and interface to communicate with nuvla """
+        if not self._infrastructure:
+            self.logger.info('Instantiating Infrastructure class')
+            self._infrastructure = Infrastructure(self._DATA_VOLUME,
+                                                  telemetry=self.telemetry)
+            self.initialize_infrastructure()
+        return self._infrastructure
+
+    @property
+    def telemetry(self) -> Telemetry:
+        """ Telemetry updater class """
+        if not self._telemetry:
+            self.logger.info('Instantiating Telemetry class')
+            self._telemetry = Telemetry(self._DATA_VOLUME,
+                                        self.nuvlaedge_status_id,
+                                        self.excluded_monitors)
+        return self._telemetry
 
     def activate_nuvlaedge(self) -> NoReturn:
         """
         Creates an "activate" object class and uses it to check the previous status
         of the NuvlaEdge. If it was activated before, it gathers the previous status.
         If not, it activates the device and again gathers the status
-
         """
 
         self.logger.info(f'Nuvla endpoint: {self.activate.nuvla_endpoint}')
@@ -87,12 +119,10 @@ class Agent:
 
     def initialize_infrastructure(self) -> NoReturn:
         """
-        Initializes the infrastructure class of the agent and check minimum requirements
+        Initializes the infrastructure class
+
         Returns: None
-
         """
-
-        self.infrastructure = Infrastructure(self._DATA_VOLUME, telemetry=self.telemetry)
         if not self.infrastructure.installation_home:
             self.logger.warning('Host user home directory not defined.'
                                 'This might impact future SSH management actions')
@@ -103,15 +133,7 @@ class Agent:
             self.infrastructure.set_immutable_ssh_key()
 
     def initialize_telemetry(self) -> NoReturn:
-        """
-        Gathers the required environmental data and creates the nuvlaedge telemetry class
-        Returns:
-
-        """
-        self.logger.debug('Initializing Telemetry')
-        non_active_monitors: str = os.environ.get('EXCLUDED_MONITORS', '')
-        self.telemetry = Telemetry(self._DATA_VOLUME, self.nuvlaedge_status_id,
-                                   non_active_monitors)
+        pass
 
     def initialize_agent(self) -> bool:
         """
@@ -124,10 +146,10 @@ class Agent:
         self.activate_nuvlaedge()
 
         # 2. Initialization of the telemetry class
-        self.initialize_telemetry()
+        # self.initialize_telemetry()
 
         # 3. Initialize Infrastructure class
-        self.initialize_infrastructure()
+        # self.initialize_infrastructure()
 
         return True
 
@@ -194,7 +216,7 @@ class Agent:
         for job_id in job_list:
             job: Job = Job(self._DATA_VOLUME,
                            job_id,
-                           self.infrastructure.container_runtime.job_engine_lite_image,)
+                           self.infrastructure.container_runtime.job_engine_lite_image)
 
             if not job.do_nothing:
 
@@ -213,12 +235,12 @@ class Agent:
         Returns:
 
         """
-        if not isinstance(response.get('jobs', []), list):
+        pull_jobs: List = response.get('jobs', [])
+        if not isinstance(pull_jobs, list):
             self.logger.warning(f'Jobs received on format {response.get("jobs")} not '
                                 f'compatible')
             return
 
-        pull_jobs: List = response.get('jobs', [])
         if pull_jobs and self.infrastructure.container_runtime.job_engine_lite_image:
             self.logger.info(f'Processing jobs {pull_jobs} in pull mode')
 
@@ -235,21 +257,32 @@ class Agent:
         Controls the main functionalities of the agent:
             1. Sending heartbeat
             2. Running pull jobs
-
-        Returns:
-
         """
-        # check telemetry and infrastructure running
-        if not self.telemetry_thread or not self.telemetry_thread.is_alive():
-            self.telemetry_thread = threading.Thread(target=self.telemetry.update_status,
-                                                     daemon=True)
-            self.telemetry_thread.start()
+
+        def is_thread_creation_needed(name, thread):
+            if not thread:
+                self.logger.info(f'Creating {name} thread')
+            elif not thread.is_alive():
+                self.logger.warning(f'Recreating {name} thread because it is not alive')
+            else:
+                self.logger.debug(f'Thread {name} is alive')
+                return False
+            return True
+
+        def create_start_thread(**kwargs):
+            th = threading.Thread(daemon=True, **kwargs)
+            th.start()
+            return th
+
+        if is_thread_creation_needed('Telemetry', self.telemetry_thread):
+            self.telemetry_thread = create_start_thread(name='Telemetry',
+                                                        target=self.telemetry.update_status)
 
         response: Dict = self.send_heartbeat()
 
         self.handle_pull_jobs(response)
 
-        if not self.infrastructure.is_alive():
-            if not self.infrastructure or self.infrastructure.ident:
-                self.infrastructure = Infrastructure(self._DATA_VOLUME)
-            self.infrastructure.start()
+        if is_thread_creation_needed('Infrastructure', self.infrastructure_thread):
+            self.infrastructure_thread = create_start_thread(name='Infrastructure',
+                                                             target=self.infrastructure.run)
+

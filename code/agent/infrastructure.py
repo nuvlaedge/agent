@@ -18,11 +18,10 @@ import time
 from agent.common import NuvlaEdgeCommon, util
 from agent.telemetry import Telemetry
 from datetime import datetime
-from os import path, stat, remove
-from threading import Thread
+from os import path, remove
 
 
-class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
+class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon):
     """ The Infrastructure class includes all methods and
     properties necessary update the infrastructure services
     and respective credentials in Nuvla, whenever the local
@@ -36,7 +35,6 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         :param data_volume: shared volume
         """
         super(Infrastructure, self).__init__(shared_data_volume=data_volume)
-        Thread.__init__(self, daemon=True)
 
         self.infra_logger: logging.Logger = logging.getLogger(__name__)
 
@@ -224,7 +222,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         if not vpn_conf_fields:
             self.infra_logger.error(f'Invalid response from VPN commissioning... '
-                              f'cannot continue')
+                                    f'cannot continue')
             return False
 
         self.infra_logger.info(f'VPN configuration fields: {vpn_conf_fields}')
