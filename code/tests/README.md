@@ -25,3 +25,21 @@ or, if a report is needed:
 ```shell
 pytest --junitxml=test-report.xml
 ```
+
+## Run tests with coverage
+
+To run tests and obtain the code coverage results for browsing in HTML format,
+run the following command. The command uses the default configuration
+file `.coveragerc` located in the same folder. Update if needed or provide
+configuration parameters on CLI.
+
+```shell
+pytest --cov=agent --cov-report=html --cov-branch
+```
+
+The code coverage results can be viewed under `htmlcov/` directory. To open on
+macOS, run
+
+```shell
+open htmlcov/index.html
+```

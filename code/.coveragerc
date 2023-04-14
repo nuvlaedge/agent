@@ -1,0 +1,6 @@
+[run]
+relative_files = True
+include =
+    agent/*
+    tests/*
+branch = True
