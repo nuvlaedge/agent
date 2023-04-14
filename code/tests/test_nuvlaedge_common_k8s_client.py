@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import kubernetes
 import logging
-import mock
-import unittest
+import os
 import sys
+import unittest
+
+import mock
+import kubernetes
 
 from tests.utils import fake
 from agent.orchestrator.kubernetes import KubernetesClient
 
 
 class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
+
     def setUp(self) -> None:
         os.environ.setdefault('KUBERNETES_SERVICE_HOST', 'force-k8s-coe')
 
@@ -22,13 +24,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
         os.environ.setdefault('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
-        with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
-            with mock.patch('kubernetes.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
-                with mock.patch('kubernetes.client.BatchV1Api') as mock_k8s_client_BatchV1Api:
+        with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_core_v1_api:
+            with mock.patch('kubernetes.client.AppsV1Api') as mock_k8s_client_apps_v1_api:
+                with mock.patch('kubernetes.client.BatchV1Api') as mock_k8s_client_batch_v1_api:
                     with mock.patch('kubernetes.config.load_incluster_config') as mock_k8s_config:
-                        mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
-                        mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
-                        mock_k8s_client_BatchV1Api = mock.MagicMock()
+                        mock_k8s_client_core_v1_api.return_value = mock.MagicMock()
+                        mock_k8s_client_apps_v1_api.return_value = mock.MagicMock()
+                        mock_k8s_client_batch_v1_api.return_value = mock.MagicMock()
                         mock_k8s_config.return_value = True
                         self.obj = KubernetesClient('/fake-rootfs', '/home/fakeUser')
         logging.disable(logging.CRITICAL)
@@ -447,11 +449,11 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Unable to define IS')
 
     def test_get_partial_decommission_attributes(self):
-        # NOT IMPLEMENTED
-        self.assertEqual(self.obj.get_partial_decommission_attributes(), None,
+        # FIXME: NOT IMPLEMENTED
+        self.assertEqual(self.obj.get_partial_decommission_attributes(), [],
                          'Received partial decommissioning attrs for K8s even though method is not implemented')
 
     def test_infer_if_additional_coe_exists(self):
-        # NOT IMPLEMENTED
-        self.assertEqual(self.obj.infer_if_additional_coe_exists(), None,
+        # FIXME: NOT IMPLEMENTED
+        self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
                          'Received additional COE even though method is not implemented for K8s')

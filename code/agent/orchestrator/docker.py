@@ -748,7 +748,7 @@ class DockerClient(ContainerRuntimeClient):
             return False
         except requests.exceptions.ConnectionError:
             # Can happen if the Compute API takes longer than normal on start
-            self.logger.info(f'Too many requests... Compute API not ready yet')
+            self.logger.info('Too many requests... Compute API not ready yet')
             return False
 
         return True

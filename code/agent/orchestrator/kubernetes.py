@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Union
 
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
@@ -446,17 +446,18 @@ class KubernetesClient(ContainerRuntimeClient):
         return {}
 
     def get_partial_decommission_attributes(self) -> list:
-        # TODO for k8s
-        return None
+        # TODO: implement.
+        return []
 
     def infer_if_additional_coe_exists(self, fallback_address: str=None) -> dict:
         # For k8s installations, we might want to see if there's also Docker running alongside
-        # TODO
-        return None
+        # TODO: implement if deemed needed. I don't think discovery of other
+        #       COE is needed (KS).
+        return {}
 
     def get_all_nuvlaedge_components(self) -> list:
-        # TODO
-        return None
+        # TODO: implement.
+        return []
 
     def _namespace(self, **kwargs):
         return kwargs.get('namespace', self.namespace)

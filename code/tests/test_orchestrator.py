@@ -1,8 +1,6 @@
 from mock import Mock
 import unittest
 
-# from kubernetes import config as k8s_config
-
 import agent.orchestrator.factory as orch_factory
 from agent.orchestrator.factory import get_coe_client
 from agent.orchestrator.docker import DockerClient
