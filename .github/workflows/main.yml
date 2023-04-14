@@ -18,15 +18,22 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          python-version: '3.8'
+
+      - name: Download nuvlaedge-common lib from artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: nuvlaedge-common-lib
+          path: dist/
 
       - name: Run unit tests
         run: |
           pip install -r code/requirements.tests.txt
+          pip install dist/nuvlaedge_common-*
           pytest code/tests --junitxml=test-report.xml -v
 
       - name: Multi-arch docker image build prerequired
