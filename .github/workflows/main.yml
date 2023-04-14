@@ -24,10 +24,10 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Download nuvlaedge-common lib from artifacts
-        uses: actions/download-artifact@v3
-        with:
-          name: nuvlaedge-common-lib
+      - name: Retrieve nuvlaedge common library
+        uses: actions/cache@v3
+        key: nuvlaedge-common-lib
+        with: |
           path: dist/
 
       - name: Run unit tests
