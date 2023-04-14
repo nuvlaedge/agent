@@ -26,10 +26,12 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Run unit tests
-        run: |
-          pip install -r code/requirements.tests.txt
-          pytest code/tests --junitxml=test-report.xml -v
+      - name: Install tox
+        run: pip install tox
+
+      - name: Run tox
+        working-directory: code
+        run: tox
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
