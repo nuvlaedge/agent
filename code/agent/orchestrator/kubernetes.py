@@ -1,7 +1,7 @@
 import logging
 import os
 import time
-from typing import Dict, List, Union
+from typing import Dict, List
 
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
@@ -37,6 +37,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
     NAME = 'kubernetes'
     NAME_COE = NAME
+    WAIT_SLEEP_SEC = 2
 
     def __init__(self, host_rootfs, host_home):
         super().__init__(host_rootfs, host_home)
@@ -471,7 +472,7 @@ class KubernetesClient(ContainerRuntimeClient):
             log.info(f'Waiting pod {phase}: {namespace}:{name} till {ts_stop}')
             if ts_stop <= time.time():
                 raise TimeoutException(f'Pod is not {phase} after {wait_sec} sec')
-            time.sleep(2)
+            time.sleep(self.WAIT_SLEEP_SEC)
 
     def _wait_pod_deleted(self, namespace: str, name: str, wait_sec=60):
         ts_stop = time.time() + wait_sec
@@ -484,7 +485,7 @@ class KubernetesClient(ContainerRuntimeClient):
             log.info(f'Deleting pod: {namespace}:{name} till {ts_stop}')
             if ts_stop <= time.time():
                 raise TimeoutException(f'Pod is still not deleted after {wait_sec} sec')
-            time.sleep(2)
+            time.sleep(self.WAIT_SLEEP_SEC)
 
     @staticmethod
     def _to_k8s_obj_name(name: str) -> str:

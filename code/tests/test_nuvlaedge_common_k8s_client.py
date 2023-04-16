@@ -8,9 +8,10 @@ import unittest
 
 import mock
 import kubernetes
+from kubernetes.client.exceptions import ApiException
 
 from tests.utils import fake
-from agent.orchestrator.kubernetes import KubernetesClient
+from agent.orchestrator.kubernetes import KubernetesClient, TimeoutException
 
 
 class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
@@ -48,6 +49,45 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         # the base class should also have been set
         self.assertEqual(self.obj.job_engine_lite_component, "nuvlaedge-job-engine-lite",
                          'Base class of the ContainerRuntime was not properly initialized')
+
+    def test_wait_pod_in_phase_matched(self):
+        check_phase = 'Running'
+
+        class Status:
+            phase = check_phase
+
+        class Pod:
+            status = Status()
+
+        self.obj.client.read_namespaced_pod.return_value = Pod()
+        assert None is self.obj._wait_pod_in_phase('fake-ns', 'fake-pod',
+                                                   check_phase)
+
+    def test_wait_pod_in_phase_timeout(self):
+        self.obj.WAIT_SLEEP_SEC = 0.001
+        check_phase = 'Running'
+
+        class Status:
+            phase = 'Waiting'
+
+        class Pod:
+            status = Status()
+
+        self.obj.client.read_namespaced_pod.return_value = Pod()
+        with self.assertRaises(TimeoutException):
+            self.obj._wait_pod_in_phase('fake-ns', 'fake-pod', check_phase,
+                                        wait_sec=0.001)
+
+    def test_wait_pod_deleted_not_found(self):
+        ex = ApiException()
+        ex.reason = 'Not Found'
+        self.obj.client.read_namespaced_pod.side_effect = ex
+        assert None is self.obj._wait_pod_deleted('fake-ns', 'fake-pod')
+
+    def test_wait_pod_deleted_timeout(self):
+        self.obj.WAIT_SLEEP_SEC = 0.001
+        with self.assertRaises(TimeoutException):
+            self.obj._wait_pod_deleted('fake-ns', 'fake-pod', wait_sec=0.001)
 
     def test_get_node_info(self, ):
         # if MY_HOST_NODE_NAME is setup, then return the node's info
