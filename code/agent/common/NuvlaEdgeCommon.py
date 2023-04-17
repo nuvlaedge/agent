@@ -258,7 +258,8 @@ class NuvlaEdgeCommon:
         env_nuvlaedge_id = self._get_nuvlaedge_id_from_environment()
         session_nuvlaedge_id = self._get_nuvlaedge_id_from_api_session()
         context_nuvlaedge_id = self._get_nuvlaedge_id_from_context_file()
-
+        print(f'\n\n\n {context_nuvlaedge_id} \n\n\n')
+        print(f'\n\n\n {env_nuvlaedge_id} \n\n\n')
         if (context_nuvlaedge_id and env_nuvlaedge_id
                 and get_uuid(context_nuvlaedge_id) != get_uuid(env_nuvlaedge_id)):
             raise RuntimeError(f'You are trying to install a new NuvlaEdge {env_nuvlaedge_id} even though a '

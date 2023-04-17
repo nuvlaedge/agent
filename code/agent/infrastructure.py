@@ -145,7 +145,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
                     break
                 except IndexError:
                     self.logger.exception("Cannot find VPN credential in Nuvla "
-                                                "after commissioning")
+                                          "after commissioning")
                     time.sleep(2)
                 except Exception as e:
                     self.logger.info("something %s" % e)
@@ -505,13 +505,16 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
         """
+        if not FILE_NAMES.VPN_CREDENTIAL.exists():
+            self.logger.warning(f'No VPN registered locally')
+            return
+
         with FILE_NAMES.VPN_CREDENTIAL.open('r') as file:
             local_vpn_credential = json.load(file)
 
         if online_vpn_credential['updated'] != local_vpn_credential['updated']:
             self.logger.warning(f"VPN credential has been modified in Nuvla at "
-                                      f"{online_vpn_credential['updated']}. "
-                                      f"Recommissioning")
+                                f"{online_vpn_credential['updated']}. Recommissioning")
             # Recommission
             self.commission_vpn()
             FILE_NAMES.VPN_CREDENTIAL.unlink()  # removes the file
@@ -538,23 +541,19 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
         """
-        try:
-            vpn_client_running = self.container_runtime.is_vpn_client_running()
-        except docker.errors.NotFound:
-            vpn_client_running = False
-            self.logger.info("VPN client is not running")
+        vpn_client_exists, vpn_client_running = self.check_vpn_client_state()
 
         if vpn_client_running and self.telemetry_instance.get_vpn_ip():
             # just save a copy of the VPN credential locally
             self.write_file(FILE_NAMES.VPN_CREDENTIAL, online_vpn_credential, is_json=True)
-            self.logger.info(f"VPN client is now running. Saving VPN credential "
-                                   f"locally at {FILE_NAMES.VPN_CREDENTIAL}")
-        else:
+            self.logger.info(f"VPN client is currently running. Saving VPN credential "
+                             f"locally at {FILE_NAMES.VPN_CREDENTIAL}")
+        elif vpn_client_exists:
             # there is a VPN credential in Nuvla, but not locally, and the VPN client
             # is not running maybe something went wrong, just recommission
-            self.logger.warning("The local VPN client is either not running or "
-                                      "missing its configuration. Forcing VPN "
-                                      "recommissioning...")
+            self.logger.warning("VPN client is either not running or "
+                                "missing its configuration. Forcing VPN "
+                                "recommissioning...")
             self.commission_vpn()
 
     def watch_vpn_credential(self, vpn_is_id=None):

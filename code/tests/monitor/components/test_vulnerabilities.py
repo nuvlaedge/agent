@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from typing import Dict
+from pathlib import Path
 
 from mock import Mock, patch, mock_open
 import unittest
@@ -11,27 +12,22 @@ from agent.monitor.edge_status import EdgeStatus
 class TestVulnerabilitiesMonitor(unittest.TestCase):
     openssh_ctr: str = 'OpenSSH 7.6p1 Ubuntu 4ubuntu0.5'
 
-    def test_retrieve_security_vulnerabilities(self):
+    @patch.object(Path, 'exists')
+    def test_retrieve_security_vulnerabilities(self, mock_exists):
         fake_telemetry: Mock = Mock()
-        fake_telemetry.vulnerabilities_file = ''
+        mock_exists.return_value = False
         test_monitor: VulnerabilitiesMonitor = VulnerabilitiesMonitor(
             'vul_mon', fake_telemetry, Mock()
         )
-        # Return none if path does not exist
         self.assertIsNone(test_monitor.retrieve_security_vulnerabilities())
 
-        built_open: str = "builtins.open"
-        fake_data: str = ""
-        test_monitor.vulnerabilities_file = "/"
-        with patch(built_open, mock_open(read_data=fake_data)):
-            self.assertIsNone(test_monitor.retrieve_security_vulnerabilities())
-
         fake_data: str = ":"
-        with patch(built_open, mock_open(read_data=fake_data)):
+        with patch.object(Path, 'open', mock_open(read_data=fake_data)):
             self.assertIsNone(test_monitor.retrieve_security_vulnerabilities())
 
         fake_data: str = '{"name": "file"}'
-        with patch(built_open, mock_open(read_data=fake_data)):
+        mock_exists.return_value = True
+        with patch.object(Path, 'open', mock_open(read_data=fake_data)):
             self.assertEqual(test_monitor.retrieve_security_vulnerabilities(),
                              {'name': 'file'})
 
