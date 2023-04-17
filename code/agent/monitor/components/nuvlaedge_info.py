@@ -58,7 +58,7 @@ class NuvlaEdgeInfoMonitor(Monitor):
                 self.runtime_client.get_installation_parameters(filter_label))
 
         # Components running in the current NuvlaEdge deployment
-        self.data.components = self.runtime_client.get_all_nuvlaedge_components()
+        self.data.components = self.runtime_client.get_all_nuvlaedge_components() or None
 
     def populate_nb_report(self, nuvla_report: Dict):
         nuvla_report.update(self.data.dict(by_alias=True, exclude_none=True))
