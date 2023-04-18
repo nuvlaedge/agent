@@ -17,8 +17,6 @@ on:
 jobs:
   build-common-lib:
     runs-on: ubuntu-latest
-    outputs:
-      lock_hash: ${{ steps.build.outputs.hash_lock }}
 
     steps:
       - name: Fetch nuvlaedge common
@@ -32,7 +30,7 @@ jobs:
         with:
           python-version: "3.8"
 
-      - name: Load cached $HOME/.local
+      - name: Load cached poetry
         uses: actions/cache@v2.1.6
         with:
           path: ~/.local
@@ -58,7 +56,6 @@ jobs:
         run: |
           source .venv/bin/activate
           poetry build --no-interaction --format=wheel
-          echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
 
       - name: Save artifact
         uses: actions/upload-artifact@v3
@@ -92,12 +89,10 @@ jobs:
       - name: Run unit tests
         run: |
           pip install -r code/requirements.tests.txt
-          echo "import nuvlaedge " > test_my_test.py
-          python test_my_test.py
           pytest code/tests --junitxml=test-report.xml -v
 
       - name: Publish Unit Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v1
+        uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
           files: test-report.xml
