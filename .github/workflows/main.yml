@@ -24,11 +24,12 @@ jobs:
         with:
           python-version: '3.8'
 
-      - name: Retrieve nuvlaedge common library
+      - name: Get nuvlaedge common from Cache
         uses: actions/cache@v3
-        key: nuvlaedge-common-lib
-        with: |
+        with:
           path: dist/
+          key: nuvlaedge-common-lib
+          restore-keys: nuvlaedge-common-lib
 
       - name: Run unit tests
         run: |
