@@ -32,14 +32,11 @@ jobs:
         with:
           python-version: "3.8"
 
-      #----------------------------------------------
-      #        load pip cache if cache exists
-      #----------------------------------------------
-      - uses: actions/cache@v3
+      - name: Load cached $HOME/.local
+        uses: actions/cache@v2.1.6
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-          restore-keys: ${{ runner.os }}-pip
+          path: ~/.local
+          key: dotlocal-${{ runner.os }}-${{ hashFiles('.github/workflows/main.yml') }}
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
