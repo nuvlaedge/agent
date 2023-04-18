@@ -15,13 +15,15 @@ import docker.errors as docker_err
 import json
 import requests
 import time
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import util
+from agent.common import nuvlaedge_common
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.telemetry import Telemetry
 from datetime import datetime
 from os import path, remove
 
 
-class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Infrastructure(NuvlaEdgeCommon):
     """ The Infrastructure class includes all methods and
     properties necessary update the infrastructure services
     and respective credentials in Nuvla, whenever the local
@@ -302,7 +304,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon):
         :return: True or False
         """
 
-        if NuvlaEdgeCommon.ORCHESTRATOR not in ['docker', 'swarm']:
+        if nuvlaedge_common.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
         if not container_api_port:
@@ -731,7 +733,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon):
             self.infra_logger.info(f'Setting immutable SSH key {self.ssh_pub_key} for '
                                    f'{self.installation_home}')
             try:
-                with NuvlaEdgeCommon.timeout(10):
+                with util.timeout(10):
                     if not self.container_runtime.install_ssh_key(self.ssh_pub_key,
                                                                   ssh_folder):
                         return

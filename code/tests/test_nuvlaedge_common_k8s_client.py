@@ -9,7 +9,7 @@ import unittest
 import tests.utils.fake as fake
 import sys
 
-import agent.common.NuvlaEdgeCommon as NuvlaEdgeCommon
+from agent.common import nuvlaedge_common
 from agent.orchestrator.kubernetes import KubernetesClient
 
 
@@ -22,8 +22,8 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             if 'agent.common.NuvlaEdgeCommon' in sys.modules:
                 del sys.modules['agent.common.NuvlaEdgeCommon']
 
-        self.NuvlaEdgeCommon = NuvlaEdgeCommon
-        self.NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
+        self.nuvlaedge_common = nuvlaedge_common
+        self.nuvlaedge_common.ORCHESTRATOR = 'kubernetes'
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
@@ -42,7 +42,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_init(self):
         # the K8s coe should be set
-        self.assertEqual(self.NuvlaEdgeCommon.ORCHESTRATOR, 'kubernetes',
+        self.assertEqual(self.nuvlaedge_common.ORCHESTRATOR, 'kubernetes',
                              'Unable to set Kubernetes as the COE')
         # client should be set as well
         self.assertIsNotNone(self.obj.client,
@@ -112,7 +112,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Expecting no k8s manager but got something else')
 
         # COE should also match with class' COE
-        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.NuvlaEdgeCommon.ORCHESTRATOR_COE,
+        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.nuvlaedge_common.ORCHESTRATOR_COE,
                          'Got the wrong cluster-orchestrator')
 
         # but if one of the nodes is a master, then we should get 1 worker and 1 manager

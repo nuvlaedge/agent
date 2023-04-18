@@ -9,10 +9,10 @@ It takes care of activating a new NuvlaEdge
 import logging
 import requests
 
-from agent.common import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 
 
-class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Activate(NuvlaEdgeCommon):
     """ The Activate class, which includes all methods and
     properties necessary to activate a NuvlaEdge
 

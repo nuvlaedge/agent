@@ -15,7 +15,7 @@ import requests
 from docker import errors as docker_err
 from docker.models.containers import Container
 
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import nuvlaedge_common, util
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface, IP
 from agent.monitor import Monitor
 from ..components import monitor

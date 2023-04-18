@@ -7,7 +7,7 @@ import unittest
 import socket
 
 import tests.utils.fake as fake
-from agent.common import NuvlaEdgeCommon
+from agent.common import nuvlaedge_common
 import paho.mqtt.client as mqtt
 from agent.telemetry import Telemetry
 
@@ -19,7 +19,7 @@ class TelemetryTestCase(unittest.TestCase):
 
     @mock.patch('agent.telemetry.Telemetry.initialize_monitors')
     def setUp(self, mock_monitor_initializer):
-        fake_nuvlaedge_common = fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon)
+        fake_nuvlaedge_common = fake.Fake.imitate(nuvlaedge_common.NuvlaEdgeCommon)
         setattr(fake_nuvlaedge_common, 'container_runtime', mock.MagicMock())
         setattr(fake_nuvlaedge_common, 'container_stats_json_file', 'fake-stats-file')
         setattr(fake_nuvlaedge_common, 'vpn_ip_file', 'fake-vpn-file')

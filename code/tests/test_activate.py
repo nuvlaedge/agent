@@ -8,7 +8,7 @@ import mock
 import requests
 import unittest
 from tests.utils.fake import Fake, FakeNuvlaApi
-from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 
 
 class ActivateTestCase(unittest.TestCase):

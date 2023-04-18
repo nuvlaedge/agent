@@ -7,7 +7,9 @@ import mock
 import requests
 import unittest
 import tests.utils.fake as fake
-import agent.common.NuvlaEdgeCommon as NuvlaEdgeCommon
+
+from agent.common import nuvlaedge_common
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
 from threading import Thread
 
@@ -18,7 +20,7 @@ class InfrastructureTestCase(unittest.TestCase):
     atomic_write = 'agent.common.util.atomic_write'
 
     def setUp(self):
-        Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread),)
+        Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon, Thread),)
         with mock.patch('agent.infrastructure.Telemetry') as mock_telemetry:
             mock_telemetry.return_value = mock.MagicMock()
             self.shared_volume = "mock/path"
@@ -230,11 +232,11 @@ class InfrastructureTestCase(unittest.TestCase):
 
 
         # only works for non-k8s installations
-        NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
+        nuvlaedge_common.ORCHESTRATOR = 'kubernetes'
         self.assertFalse(self.obj.compute_api_is_running(''),
                          'Tried to check compute-api for a Kubernetes installation')
 
-        NuvlaEdgeCommon.ORCHESTRATOR = 'docker'
+        nuvlaedge_common.ORCHESTRATOR = 'docker'
         # if compute-api is running, return True
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'

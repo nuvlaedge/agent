@@ -17,7 +17,7 @@ class TestAgent(TestCase):
 
     @patch(os_makedir)
     @patch(atomic_write)
-    @patch('agent.common.NuvlaEdgeCommon')
+    @patch('agent.common.nuvlaedge_common')
     @patch('agent.activate.Activate')
     def setUp(self, activate_mock, ne_mock, atomic_write_mock, os_makedir_mock) -> None:
         os.environ['NUVLAEDGE_UUID'] = 'fake-uuid'

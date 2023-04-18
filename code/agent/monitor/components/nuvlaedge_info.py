@@ -6,7 +6,7 @@ import datetime
 import psutil
 
 
-import agent.common.NuvlaEdgeCommon as NuvlaCommon
+import agent.common.nuvlaedge_common as NuvlaCommon
 from agent.monitor import Monitor
 from agent.monitor.data.nuvlaedge_data import NuvlaEdgeData as NuvlaInfo
 from agent.monitor.data.nuvlaedge_data import InstallationParametersData

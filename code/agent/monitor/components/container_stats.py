@@ -7,7 +7,7 @@ from subprocess import CompletedProcess
 
 from docker import errors as docker_err
 
-from agent.common import NuvlaEdgeCommon
+from agent.common import nuvlaedge_common
 from agent.monitor.data.orchestrator_data import (DeploymentData, ContainerStatsData,
                                                   ClusterStatusData)
 from agent.monitor import Monitor
@@ -24,7 +24,7 @@ class ContainerStatsMonitor(Monitor):
     def __init__(self, name: str, telemetry, enable_monitor: bool):
         super().__init__(name, DeploymentData, enable_monitor)
         self.is_thread = True
-        self.client_runtime: NuvlaEdgeCommon.ContainerRuntimeClient = \
+        self.client_runtime: nuvlaedge_common.ContainerRuntimeClient = \
             telemetry.container_runtime
 
         self.nuvlaedge_id: str = telemetry.nuvlaedge_id
@@ -96,7 +96,7 @@ class ContainerStatsMonitor(Monitor):
 
         if node_id:
             self.data.cluster_data.node_id = node_id
-            self.data.cluster_data.orchestrator = NuvlaEdgeCommon.ORCHESTRATOR_COE
+            self.data.cluster_data.orchestrator = nuvlaedge_common.ORCHESTRATOR_COE
             self.data.cluster_data.cluster_node_role = 'worker'
 
         if cluster_id:
@@ -145,7 +145,7 @@ class ContainerStatsMonitor(Monitor):
         self.refresh_container_info()
         version: str = self.client_runtime.get_client_version()
 
-        if NuvlaEdgeCommon.ORCHESTRATOR == 'docker':
+        if nuvlaedge_common.ORCHESTRATOR == 'docker':
             self.data.docker_server_version = version
         else:
             self.data.kubelet_version = version

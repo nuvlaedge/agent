@@ -4,6 +4,7 @@ This file gathers general utilities demanded by most of the classes such as a co
 
 import os
 import logging
+import signal
 import tempfile
 
 from contextlib import contextmanager
@@ -79,3 +80,22 @@ def atomic_write(file, data, **kwargs):
 def file_exists_and_not_empty(filename):
     return (os.path.exists(filename)
             and os.path.getsize(filename) > 0)
+
+
+def raise_timeout(signum, frame):
+    raise TimeoutError
+
+
+@contextmanager
+def timeout(time):
+    # Register a function to raise a TimeoutError on the signal.
+    signal.signal(signal.SIGALRM, raise_timeout)
+    # Schedule the signal to be sent after ``time``.
+    signal.alarm(time)
+
+    try:
+        yield
+    finally:
+        # Unregister the signal so it won't be triggered
+        # if the timeout is not reached.
+        signal.signal(signal.SIGALRM, signal.SIG_IGN)

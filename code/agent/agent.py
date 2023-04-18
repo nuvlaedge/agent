@@ -13,7 +13,7 @@ from nuvla.api.models import CimiResource
 
 from agent.activate import Activate
 from agent.common import util
-from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
 from agent.job import Job
 from agent.telemetry import Telemetry

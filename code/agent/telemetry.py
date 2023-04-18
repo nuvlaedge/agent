@@ -19,7 +19,8 @@ import time
 import psutil
 import paho.mqtt.client as mqtt
 
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import util
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
@@ -61,7 +62,7 @@ class MonitoredDict(dict):
         logging.debug(f'{self.name} updated: {self}')
 
 
-class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Telemetry(NuvlaEdgeCommon):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaEdge and send all
     data into the respective NuvlaEdge status at Nuvla

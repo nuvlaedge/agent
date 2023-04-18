@@ -9,10 +9,10 @@ Relays pull-mode jobs to local job-engine-lite
 import logging
 import json
 
-from agent.common import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 
 
-class Job(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Job(NuvlaEdgeCommon):
     """ The Job class, which includes all methods and
     properties necessary to handle pull mode jobs
 

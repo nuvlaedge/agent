@@ -8,12 +8,8 @@ List of common attributes for all classes
 import json
 import logging
 import os
-import requests
-import signal
 import string
-import time
 
-from contextlib import contextmanager
 from subprocess import PIPE, Popen
 from nuvla.api import Api
 
@@ -33,27 +29,6 @@ else:
     ORCHESTRATOR_COE = 'swarm'
 
 
-def raise_timeout(signum, frame):
-    raise TimeoutError
-
-
-@contextmanager
-def timeout(time):
-    # Register a function to raise a TimeoutError on the signal.
-    signal.signal(signal.SIGALRM, raise_timeout)
-    # Schedule the signal to be sent after ``time``.
-    signal.alarm(time)
-
-    try:
-        yield
-    except TimeoutError:
-        raise
-    finally:
-        # Unregister the signal so it won't be triggered
-        # if the timeout is not reached.
-        signal.signal(signal.SIGALRM, signal.SIG_IGN)
-
-
 class OrchestratorException(Exception):
     ...
 
@@ -69,6 +44,13 @@ class NuvlaEdgeCommon:
         :param shared_data_volume: shared volume target path
         """
         self.logger: logging.Logger = logging.getLogger(__name__)
+
+        self.logger.warning(f'New NuvlaEdgeCommon initialized: {id(self)}')
+        print(id(self))
+        import traceback, sys
+        traceback.print_stack()
+        sys.stdout.flush()
+        sys.stderr.flush()
 
         self.data_volume = shared_data_volume
         self.docker_socket_file = '/var/run/docker.sock'
@@ -427,7 +409,7 @@ class NuvlaEdgeCommon:
 
         notes = []
         try:
-            notes = open(f"{self.data_volume}/{self.status_notes_file}").\
+            notes = open(f"{self.data_volume}/{self.status_notes_file}"). \
                 read().splitlines()
         except Exception as e:
             self.logger.warning(f"Error while reading operational status notes: {str(e)}")
