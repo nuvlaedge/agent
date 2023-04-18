@@ -543,7 +543,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_containers_list.return_value = [fake.MockContainer(myid=agent_id), fake.MockContainer()]
         mock_gethostname.return_value = 'fake-hostname'
         mock_containers_get.side_effect = docker.errors.NotFound('', requests.Response())
-        self.assertRaises(docker.errors.NotFound, self.obj.get_installation_parameters, search_label)
+        self.assertRaises(RuntimeError, self.obj.get_installation_parameters, search_label)
 
         # otherwise...
         mock_containers_get.reset_mock(side_effect=True)

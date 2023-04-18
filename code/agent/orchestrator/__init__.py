@@ -257,3 +257,11 @@ class ContainerRuntimeClient(ABC):
 
         :returns version of the orchestrator in string
         """
+
+    @abstractmethod
+    def get_current_container_id(self) -> str:
+        """
+        Get the container id of the current container
+
+        :return: current container id
+        """

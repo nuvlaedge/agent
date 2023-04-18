@@ -406,3 +406,7 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_all_nuvlaedge_components(self) -> list:
         # TODO
         return []
+
+    def get_current_container_id(self) -> str:
+        # TODO
+        return ''
