@@ -30,17 +30,18 @@ jobs:
         with:
           python-version: "3.8"
 
-      - name: Load cached poetry
-        uses: actions/cache@v2.1.6
-        with:
-          path: ~/.local
-          key: dotlocal-${{ runner.os }}-${{ hashFiles('.github/workflows/main.yml') }}
+#      - name: Load cached poetry
+#        uses: actions/cache@v2.1.6
+#        with:
+#          path: ~/.local
+#          key: dotlocal-${{ runner.os }}-${{ hashFiles('.github/workflows/main.yml') }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
+        uses: snok/install-poetry@v1.3.3
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
+
       - name: test workflow
         run: |
           ls -la
