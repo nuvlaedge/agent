@@ -59,6 +59,8 @@ jobs:
           poetry build --no-interaction --format=wheel
           pip install dist/nuvlaedge_common-*
           echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
+          echo "import nuvlaedge " > test_my_test.py
+          python test_my_test.py
 
   tests:
     needs: build-common-lib
