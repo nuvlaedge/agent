@@ -43,12 +43,12 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-#      - name: Load cached venv
-#        id: cached-poetry-dependencies
-#        uses: actions/cache@v3
-#        with:
-#          path: .venv
-#          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
       #----------------------------------------------
       # install your root project, if required
       #----------------------------------------------
@@ -59,6 +59,7 @@ jobs:
           source .venv/bin/activate
           poetry build --no-interaction --format=wheel
           pip install dist/nuvlaedge_common-*
+          pip list
           echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
 
   tests:
@@ -92,8 +93,10 @@ jobs:
 
       - name: Run unit tests
         run: |
-#          source .venv/bin/activate
+          source .venv/bin/activate
+          pip list
           pip install -r code/requirements.tests.txt
+          pip list
           pytest code/tests --junitxml=test-report.xml -v
 
   build:
