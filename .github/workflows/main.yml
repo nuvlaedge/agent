@@ -53,7 +53,6 @@ jobs:
       # install your root project, if required
       #----------------------------------------------
       - name: Install library
-#        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         id: install
         run: |
           source .venv/bin/activate
@@ -84,12 +83,12 @@ jobs:
           key: ${{ runner.os }}-pip
           restore-keys: ${{ runner.os }}-pip
 
-#      - name: Load cached venv
-#        id: cached-poetry-dependencies
-#        uses: actions/cache@v3
-#        with:
-#          path: .venv
-#          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ needs.build-common-lib.outputs.lock_hash }}
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v3
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ needs.build-common-lib.outputs.lock_hash }}
 
       - name: Run unit tests
         run: |
