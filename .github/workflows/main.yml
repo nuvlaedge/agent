@@ -14,7 +14,7 @@ jobs:
   build-common-lib:
     runs-on: ubuntu-latest
     outputs:
-      lock_hash: ${{ steps.install.outputs.hash_lock }}
+      lock_hash: ${{ steps.build.outputs.hash_lock }}
 
     steps:
       - name: Fetch nuvlaedge common
@@ -52,15 +52,18 @@ jobs:
       #----------------------------------------------
       # install your root project, if required
       #----------------------------------------------
-      - name: Install library
-        id: install
+      - name: Build library
+        id: build
         run: |
           source .venv/bin/activate
           poetry build --no-interaction --format=wheel
-          pip install dist/nuvlaedge_common-*
           echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
-          echo "import nuvlaedge " > test_my_test.py
-          python test_my_test.py
+
+      - name: Save artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nuvlaedge-common-lib
+          path: dist/nuvlaedge_common-*
 
   tests:
     needs: build-common-lib
@@ -74,27 +77,23 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.8"
+          cache: pip
 
-      #----------------------------------------------
-      #        load pip cache if cache exists
-      #----------------------------------------------
-      - uses: actions/cache@v3
+      - name: Download artifact
+        uses: actions/download-artifact@v3
         with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip
-          restore-keys: ${{ runner.os }}-pip
+          name: nuvlaedge-common-lib
 
-      - name: Load cached venv
-        id: cached-poetry-dependencies
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ needs.build-common-lib.outputs.lock_hash }}
+      - name: Test ls
+        run: |
+          ls -la
+          ls -la dist/
 
       - name: Run unit tests
         run: |
           source .venv/bin/activate
           pip install -r code/requirements.tests.txt
+          pip install dist/nuvlaedge-common*
           echo "import nuvlaedge " > test_my_test.py
           python test_my_test.py
           pytest code/tests --junitxml=test-report.xml -v
