@@ -60,14 +60,14 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm/v7,linux/arm/v8,linux/arm64
           build-args: |
-            GIT_BRANCH=${GITHUB_REF##*/}
+            GIT_BRANCH=${{ github.head_ref || github.ref_name }} 
             GIT_BUILD_TIME=$(date --utc +%FT%T.%3NZ)
             GIT_COMMIT_ID=${{ github.sha }}
             GITHUB_RUN_NUMBER=${{ github.run_number }}
             GITHUB_RUN_ID=${{ github.run_id }}
             PROJECT_URL=${{ github.server_url }}/${{ github.repository }}
 
-          tags: nuvladev/agent:${GITHUB_REF##*/}
+          tags: nuvladev/agent:${{ github.head_ref || github.ref_name }}
           push: true
 
       - name: Publish Unit Test Results
