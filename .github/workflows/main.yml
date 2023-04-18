@@ -84,10 +84,14 @@ jobs:
         with:
           name: nuvlaedge-common-lib
 
+      - name: Install common library
+        run: |
+          ls -la
+          pip install nuvlaedge_common-*
+
       - name: Run unit tests
         run: |
           pip install -r code/requirements.tests.txt
-          pip install nuvlaedge-common-*
           echo "import nuvlaedge " > test_my_test.py
           python test_my_test.py
           pytest code/tests --junitxml=test-report.xml -v
