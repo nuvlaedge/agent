@@ -9,6 +9,8 @@ It takes care of activating a new NuvlaEdge
 import logging
 import requests
 
+from nuvlaedge.common.constant_files import FILE_NAMES
+
 from agent.common import NuvlaEdgeCommon
 
 
@@ -35,10 +37,13 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
 
         :return boolean and user info is available"""
 
-        try:
-            self.user_info = self.read_json_file(self.activation_flag)
+        if self.get_operational_status() == "UNKNOWN":
+            return False, self.user_info
 
-            self.activate_logger.warning("{} already exists. Re-activation is not possible!".format(self.activation_flag))
+        try:
+            self.user_info = self.read_json_file(FILE_NAMES.ACTIVATION_FLAG)
+
+            self.activate_logger.warning("{} already exists. Re-activation is not possible!".format(FILE_NAMES.ACTIVATION_FLAG))
             self.activate_logger.info("NuvlaEdge credential: {}".format(self.user_info["api-key"]))
             return False, self.user_info
         except FileNotFoundError:
@@ -53,7 +58,7 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
                     "secret-key": api_secret
                 }
 
-                self.write_json_to_file(self.activation_flag, self.user_info)
+                self.write_json_to_file(FILE_NAMES.ACTIVATION_FLAG, self.user_info)
 
                 return False, self.user_info
 
@@ -75,7 +80,7 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
             raise
 
         # Flags that the activation has been done
-        self.write_json_to_file(self.activation_flag, self.user_info)
+        self.write_json_to_file(FILE_NAMES.ACTIVATION_FLAG, self.user_info)
 
         return self.user_info
 
@@ -85,18 +90,17 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
         :param nuvlaedge_resource: nuvlaedge resource data
         :return copy of the old NB resource context which is being overwritten
         """
-        context_file = "{}/{}".format(self.data_volume, self.context)
 
-        self.activate_logger.info('Managing NB context file {}'.format(context_file))
+        self.activate_logger.info('Managing NB context file {}'.format(FILE_NAMES.CONTEXT))
 
         try:
-            current_context = self.read_json_file(context_file)
+            current_context = self.read_json_file(FILE_NAMES.CONTEXT)
         except (ValueError, FileNotFoundError):
             self.activate_logger.warning("Writing {} for the first "
-                                         "time".format(context_file))
+                                         "time".format(FILE_NAMES.CONTEXT))
             current_context = {}
 
-        self.write_json_to_file(context_file, nuvlaedge_resource)
+        self.write_json_to_file(FILE_NAMES.CONTEXT, nuvlaedge_resource)
 
         return current_context
 
@@ -109,6 +113,7 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
         :param old_nb_resource: old content of the NuvlaEdge resource
         :return:
         """
+
         if current_nb_resource.get("vpn-server-id") != \
                 old_nb_resource.get("vpn-server-id"):
             self.activate_logger.info(f'VPN Server ID has been added/changed in Nuvla: '

@@ -5,6 +5,8 @@ import os
 import json
 from typing import Dict, Union
 
+from nuvlaedge.common.constant_files import FILE_NAMES
+
 from agent.monitor import Monitor
 from agent.monitor.components import monitor
 from agent.monitor.data.vulnerabilities_data import (VulnerabilitiesData,
@@ -17,8 +19,6 @@ class VulnerabilitiesMonitor(Monitor):
     def __init__(self, name: str, telemetry, enable_monitor: bool):
         super().__init__(name, VulnerabilitiesData, enable_monitor)
 
-        self.vulnerabilities_file: str = telemetry.vulnerabilities_file
-
         if not telemetry.edge_status.vulnerabilities:
             telemetry.edge_status.vulnerabilities = self.data
 
@@ -27,8 +27,8 @@ class VulnerabilitiesMonitor(Monitor):
 
             :return: contents of the file
         """
-        if os.path.exists(self.vulnerabilities_file):
-            with open(self.vulnerabilities_file, encoding='UTF-8') as issues_file:
+        if FILE_NAMES.VULNERABILITIES_FILE.exists():
+            with FILE_NAMES.VULNERABILITIES_FILE.open('r') as issues_file:
                 file_content: str = issues_file.read()
                 if file_content:
                     try:

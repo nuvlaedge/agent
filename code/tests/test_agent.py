@@ -124,7 +124,7 @@ class TestAgent(TestCase):
         self.test_agent.telemetry = Mock()
         self.test_agent.infrastructure = Mock()
         self.test_agent.run_single_cycle()
-        mock_start.assert_called_once()
+        self.assertEqual(mock_start.call_count, 2)
         pull_mock.assert_called_once()
 
         mock_beat.return_value = {'jobs': []}

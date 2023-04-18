@@ -4,6 +4,7 @@
 import json
 import os
 import logging
+from pathlib import Path
 import mock
 import nuvla.api
 import unittest
@@ -186,15 +187,22 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertRaises(Exception, self.obj.set_nuvlaedge_id)
 
         # if file is correct, read from it and cleanup ID
+        os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id'
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
             self.assertEqual(self.obj.set_nuvlaedge_id(), 'nuvlabox/fake-id',
                              'Unable to correctly get NuvlaEdge ID from context file')
 
         # and if provided by env, compare it
         # if not equal, raise exception
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
-            os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id-2'
-            self.assertRaises(RuntimeError, self.obj.set_nuvlaedge_id)
+        opener = mock.mock_open()
+
+        def mocked_open(*args, **kwargs):
+            return opener(*args, **kwargs)
+
+        with mock.patch.object(Path, 'open', mocked_open):
+            with mock.patch("json.load", mock.MagicMock(side_effect=[{"id": "fake-id"}])):
+                os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id-2'
+                self.assertRaises(RuntimeError, self.obj.set_nuvlaedge_id)
 
         # if they are the same, all good
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='{"id": "fake-id-2"}')):
@@ -297,9 +305,8 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertEqual(self.obj.read_json_file('fake-file'), json.loads(file_value),
                              'Unable to read JSON from file')
 
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.read_json_file')
-    @mock.patch('os.path.exists')
-    def test_get_nuvlaedge_version(self, mock_exists, mock_read_json):
+    @mock.patch.object(Path, 'exists')
+    def test_get_nuvlaedge_version(self, mock_exists):
         # if the version is already an attribute of the class, just give back its major version
         major = 2
         self.obj.nuvlaedge_engine_version = f'{major}.1.0'
@@ -309,19 +316,26 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
         # otherwise, get it from the data volume
         self.obj.nuvlaedge_engine_version = None
         mock_exists.return_value = True
-        mock_read_json.return_value = {'version': major}
-        self.assertEqual(self.obj.get_nuvlaedge_version(), major,
-                         'Unable to infer NBE major version from data volume file')
-        mock_read_json.assert_called_once()
+
+        opener = mock.mock_open()
+
+        def mocked_open(*args, **kwargs):
+            return opener(*args, **kwargs)
+
+        # otherwise, give back the notes as a list
+        with mock.patch.object(Path, 'open', mocked_open):
+            with mock.patch("json.load", mock.MagicMock(side_effect=[{'version': major}])):
+                self.assertEqual(self.obj.get_nuvlaedge_version(), major,
+                                 'Unable to infer NBE major version from data volume file')
+
         # and if no file exists either, default to latest known (2)
         mock_exists.return_value = False
         self.assertEqual(self.obj.get_nuvlaedge_version(), major,
                          'Unable to default to NBE major version')
-        mock_read_json.assert_called_once()
 
     @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_local_operational_status')
     def test_get_operational_status(self, mock_set_status):
-        with mock.patch(self.agent_nuvlaedge_common_open) as mock_open:
+        with mock.patch.object(Path, 'open') as mock_open:
             # if file not found, return UNKNOWN
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.get_operational_status(), 'UNKNOWN',
@@ -335,7 +349,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
 
         # otherwise, read file and get status out of it
         file_value = 'OPERATIONAL\nsomething else\njunk'
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=file_value)):
+        with mock.patch.object(Path, 'open', mock.mock_open(read_data=file_value)):
             self.assertEqual(self.obj.get_operational_status(), 'OPERATIONAL',
                              'Unable to fetch valid operational status')
 
@@ -346,9 +360,15 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertEqual(self.obj.get_operational_status_notes(), [],
                              'Got operational status notes when there should not be any')
 
-        # otherwise, give back the notes as a list
         file_value = 'note1\nnote2\nnote3\n'
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=file_value)):
+
+        opener = mock.mock_open(read_data=file_value)
+
+        def mocked_open(*args, **kwargs):
+            return opener(*args, **kwargs)
+
+        # otherwise, give back the notes as a list
+        with mock.patch.object(Path, 'open', mocked_open):
             self.assertEqual(self.obj.get_operational_status_notes(), file_value.splitlines(),
                              'Unable to get operational status notes')
 
@@ -385,25 +405,27 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
                               'Failed to write VPN conf')
 
     @mock.patch('time.sleep')
+    @mock.patch.object(Path, 'exists')
+    @mock.patch.object(Path, 'mkdir')
     @mock.patch('os.path.exists')
     @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.shell_execute')
-    def test_prepare_vpn_certificates(self, mock_exec, mock_exists, mock_sleep):
+    def test_prepare_vpn_certificates(self, mock_exec, mock_os_exists, mock_mkdir, mock_exists, mock_sleep):
         # if openssl command fails, return None,None
         mock_exec.return_value = {}
         self.assertEqual(self.obj.prepare_vpn_certificates(), (None, None),
                          'Failed to exit VPN preparation when openssl fails to execute')
 
         # if openssl succeeds, but cred file do not exist, TimeOut and return None, None again
-        mock_exists.return_value = False
+        mock_os_exists.return_value = False
         mock_sleep.return_value = None  # instant sleep
         mock_exec.return_value = {'returncode': 0}
         self.assertEqual(self.obj.prepare_vpn_certificates(), (None, None),
                          'Failed to raise timeout when VPN cred files are not set in time')
-        mock_exists.assert_called()
+        mock_os_exists.assert_called()
         mock_sleep.assert_called()
 
         # if cred files exist, read them, and return their value
-        mock_exists.return_value = True
+        mock_os_exists.return_value = True
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='csr/key')):
             self.assertEqual(self.obj.prepare_vpn_certificates(), ('csr/key', 'csr/key'),
                              'Failed to get VPN CSR and Key values from local files')

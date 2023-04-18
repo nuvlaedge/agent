@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=python:3.8-alpine3.12
+ARG BASE_IMAGE=nuvladev/nuvlaedge-base:latest
 FROM  ${BASE_IMAGE} AS psutil-builder
 
 RUN apk update && apk add --no-cache gcc musl-dev linux-headers
