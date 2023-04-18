@@ -13,6 +13,9 @@ on:
 jobs:
   build-common-lib:
     runs-on: ubuntu-latest
+    outputs:
+      lock_hash: ${{ steps.install.outputs.hash_lock }}
+
     steps:
       - name: Fetch nuvlaedge common
         uses: actions/checkout@v3
@@ -56,9 +59,11 @@ jobs:
       # install your root project, if required
       #----------------------------------------------
       - name: Install library
+        id: install
         run: |
           source .venv/bin/activate
-          poetry install --no-interaction  
+          poetry install --no-interaction
+          echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
 
   tests:
     needs: build-common-lib
@@ -78,7 +83,7 @@ jobs:
         uses: actions/cache@v3
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ needs.build-common-lib.outputs.lock_hash }}
 
       - name: Run unit tests
         run: |
