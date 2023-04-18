@@ -39,9 +39,9 @@ jobs:
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
-#        with:
-#          virtualenvs-create: true
-#          virtualenvs-in-project: true
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
 
 #      - name: Load cached venv
 #        id: cached-poetry-dependencies
@@ -56,7 +56,7 @@ jobs:
 #        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         id: install
         run: |
-#          source .venv/bin/activate
+          source .venv/bin/activate
           poetry build --no-interaction --format=wheel
           pip install dist/nuvlaedge_common-*
           echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
