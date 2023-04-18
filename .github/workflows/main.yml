@@ -58,7 +58,6 @@ jobs:
           source .venv/bin/activate
           poetry build --no-interaction --format=wheel
           pip install dist/nuvlaedge_common-*
-          pip list
           echo "hash_lock=${{ hashFiles('**/poetry.lock') }}" >> $GITHUB_OUTPUT
 
   tests:
@@ -93,10 +92,11 @@ jobs:
       - name: Run unit tests
         run: |
           source .venv/bin/activate
-          pip list
           pip install -r code/requirements.tests.txt
-          pip list
+          echo "import nuvlaedge \nprint(dir(nuvlaedge))" > test_my_test.py
+          python test_my_test.py
           pytest code/tests --junitxml=test-report.xml -v
+          
 
   build:
     # Run only if UnitTest succeed
