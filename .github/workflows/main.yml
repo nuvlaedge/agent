@@ -94,6 +94,12 @@ jobs:
           echo "import nuvlaedge " > test_my_test.py
           python test_my_test.py
           pytest code/tests --junitxml=test-report.xml -v
+
+      - name: Publish Unit Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v1
+        if: always()
+        with:
+          files: test-report.xml
           
 
   build:
@@ -126,12 +132,6 @@ jobs:
           path: |
             dependencies-tree.png
             dependencies-licenses.txt
-
-      - name: Publish Unit Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v1
-        if: always()
-        with:
-          files: test-report.xml
 
   notify:
     if: always()
