@@ -9,18 +9,18 @@ and respective credentials in Nuvla
 
 import logging
 import os
+import time
+from datetime import datetime
 
 import docker
 import docker.errors as docker_err
 import json
 import requests
-import time
-from agent.common import NuvlaEdgeCommon, util
-from agent.telemetry import Telemetry
-from datetime import datetime
 from os import path, stat, remove
 from threading import Thread
 
+from agent.common import NuvlaEdgeCommon, util
+from agent.telemetry import Telemetry
 from nuvlaedge.common.constant_files import FILE_NAMES
 
 from agent.common import NuvlaEdgeCommon, util
@@ -222,7 +222,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if self.container_runtime.has_pull_job_capability():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
-    def compute_api_is_running(self, container_api_port) -> bool:
+    def compute_api_is_running(self) -> bool:
         """
         Pokes ate the compute-api endpoint to see if it is up and running
 
@@ -234,10 +234,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if NuvlaEdgeCommon.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
-        if not container_api_port:
-            container_api_port = self.compute_api_port
-
-        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
+        compute_api_url = f'https://{self.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
         self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status \
@@ -429,7 +426,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             minimum_commission_payload)
 
         infra_service = {}
-        if self.compute_api_is_running(container_api_port):
+        if self.compute_api_is_running():
             infra_service = \
                 self.container_runtime.define_nuvla_infra_service(api_endpoint,
                                                                   self.get_tls_keys())

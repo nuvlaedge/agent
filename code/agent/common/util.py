@@ -13,6 +13,7 @@ from subprocess import (Popen, run, PIPE, TimeoutExpired,
 
 
 compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
+COMPUTE_API_INTERNAL_PORT = 5000
 
 
 def execute_cmd(command: List[str], method_flag: bool = True) \
