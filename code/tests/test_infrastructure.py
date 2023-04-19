@@ -259,7 +259,7 @@ class InfrastructureTestCase(unittest.TestCase):
 
         # only works for non-k8s installations
         NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
-        self.assertFalse(self.obj.compute_api_is_running(''),
+        self.assertFalse(self.obj.compute_api_is_running(),
                          'Tried to check compute-api for a Kubernetes installation')
 
         NuvlaEdgeCommon.ORCHESTRATOR = 'docker'
@@ -267,7 +267,7 @@ class InfrastructureTestCase(unittest.TestCase):
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'
         self.obj.container_runtime.client.containers.get.return_value = compute_api_container
-        self.assertFalse(self.obj.compute_api_is_running(''),
+        self.assertFalse(self.obj.compute_api_is_running(),
                          'Unable to detect that compute-api is not running')
 
         # if running, try to reach its API
@@ -275,12 +275,12 @@ class InfrastructureTestCase(unittest.TestCase):
         compute_api_container.status = 'running'
         self.obj.container_runtime.client.containers.get.return_value = compute_api_container
         mock_get.side_effect = TimeoutError
-        self.assertFalse(self.obj.compute_api_is_running(''),
+        self.assertFalse(self.obj.compute_api_is_running(),
                          'Assuming compute-api is running even though we could not assess that')
         mock_get.assert_called_once()
         # except if the exception is SSL related
         mock_get.side_effect = requests.exceptions.SSLError
-        self.assertTrue(self.obj.compute_api_is_running(''),
+        self.assertTrue(self.obj.compute_api_is_running(),
                         'Unable to detect that compute-api is running')
 
     def test_get_local_nuvlaedge_status(self):
