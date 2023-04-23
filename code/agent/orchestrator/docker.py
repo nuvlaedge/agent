@@ -1,18 +1,16 @@
 import base64
-import json
 import logging
 import os
-
 import socket
+from subprocess import run, PIPE, TimeoutExpired
 from typing import List
 
+import docker
+import requests
 import yaml
 
-from subprocess import run, PIPE, TimeoutExpired
-
 from agent.common import util
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
-import docker
+from agent.orchestrator import ContainerRuntimeClient
 
 
 class InferIPError(Exception):
@@ -24,10 +22,12 @@ class DockerClient(ContainerRuntimeClient):
     Docker client
     """
 
-    def __init__(self, host_rootfs, host_home):
-        super().__init__(host_rootfs, host_home)
+    CLIENT_NAME = 'Docker'
+    ORCHESTRATOR_COE = 'docker'
+
+    def __init__(self):
+        super().__init__()
         self.logger: logging.Logger = logging.getLogger(__name__)
-        self.CLIENT_NAME: str = 'Docker'
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
         self.infra_service_endpoint_keyname = 'swarm-endpoint'
@@ -79,7 +79,7 @@ class DockerClient(ContainerRuntimeClient):
 
             return {
                 'cluster-id': cluster_id,
-                'cluster-orchestrator': ORCHESTRATOR_COE,
+                'cluster-orchestrator': self.ORCHESTRATOR_COE,
                 'cluster-managers': managers,
                 'cluster-workers': workers
             }
@@ -156,7 +156,8 @@ class DockerClient(ContainerRuntimeClient):
         vpn_client_running = it_vpn_container.status == 'running'
         return vpn_client_running
 
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
+        ssh_folder = '/tmp/ssh'
         cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
 
         self.client.containers.run('alpine',
@@ -166,7 +167,7 @@ class DockerClient(ContainerRuntimeClient):
                                        'SSH_PUB': ssh_pub_key
                                    },
                                    volumes={
-                                       f'{self.host_home}/.ssh': {
+                                       f'{host_home}/.ssh': {
                                            'bind': ssh_folder
                                        }})
 
@@ -462,7 +463,7 @@ class DockerClient(ContainerRuntimeClient):
 
     @staticmethod
     def get_working_dir_from_labels(labels) -> List[str]:
-        return labels.get('com.docker.compose.project.working_dir', '').split(',')
+        return labels.get('com.docker.compose.project.working_dir', '')
 
     def get_installation_parameters(self, search_label):
         nuvlaedge_containers = self.list_containers(filters={'label': search_label})

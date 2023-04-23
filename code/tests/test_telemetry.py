@@ -6,9 +6,11 @@ import mock
 import unittest
 import socket
 
+import paho.mqtt.client as mqtt
+
 import tests.utils.fake as fake
 from agent.common import nuvlaedge_common
-import paho.mqtt.client as mqtt
+from agent.orchestrator.factory import get_container_runtime
 from agent.telemetry import Telemetry
 
 
@@ -28,7 +30,9 @@ class TelemetryTestCase(unittest.TestCase):
         self.shared_volume = "mock/path"
         self.nuvlaedge_status_id = "nuvlabox-status/fake-id"
 
-        self.obj = Telemetry(self.shared_volume, self.nuvlaedge_status_id)
+        self.obj = Telemetry(get_container_runtime(),
+                             self.shared_volume,
+                             self.nuvlaedge_status_id)
 
         # monkeypatching
         self.obj.mqtt_broker_host = 'fake-data-gateway'

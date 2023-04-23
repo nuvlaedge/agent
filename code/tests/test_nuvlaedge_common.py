@@ -2,15 +2,17 @@
 # -*- coding: utf-8 -*-
 
 import json
-import os
 import logging
 import mock
-import nuvla.api
+import os
 import unittest
+
+import nuvla.api
+
 import tests.utils.fake as fake
-from agent.common import nuvlaedge_common
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.orchestrator.docker import DockerClient
+from agent.orchestrator.factory import get_container_runtime
 
 
 class NuvlaEdgeCommonTestCase(unittest.TestCase):
@@ -22,24 +24,20 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
     @mock.patch('os.path.isdir')
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_vpn_config_extra')
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_nuvlaedge_id')
-    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_runtime_client_details')
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.save_nuvla_configuration')
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_nuvla_endpoint')
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_installation_home')
     def setUp(self, mock_set_install_home, mock_set_nuvla_endpoint, mock_save_nuvla_conf,
-              mock_set_runtime, mock_set_nuvlaedge_id, mock_set_vpn_config_extra, mock_os_isdir) -> None:
-        self.ssh_pub_key = 'fakeSSHPubKey'
-        os.environ['NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY'] = self.ssh_pub_key
-        os.environ['NUVLAEDGE_ENGINE_VERSION'] = '2.3.1'
+              mock_set_nuvlaedge_id, mock_set_vpn_config_extra, mock_os_isdir) -> None:
+
         self.installation_home = '/home/fake'
         mock_set_install_home.return_value = self.installation_home
         mock_set_nuvla_endpoint.return_value = ('fake.nuvla.io', True)
         mock_save_nuvla_conf.return_value = True
-        mock_set_runtime.return_value = DockerClient('/rootfs', self.installation_home)
         mock_os_isdir.return_value = True
         mock_set_vpn_config_extra.return_value = ''
         mock_set_nuvlaedge_id.return_value = 'nuvlabox/fake-id'
-        self.obj = nuvlaedge_common.NuvlaEdgeCommon()
+        self.obj = NuvlaEdgeCommon(get_container_runtime())
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -48,11 +46,6 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
     def test_init(self):
         self.assertEqual(self.obj.data_volume, "/srv/nuvlaedge/shared",
                          'Default NuvlaEdge data volume path was not set correctly')
-        # confirm that SSH pub key and NBE version are set
-        self.assertIsNotNone(self.obj.ssh_pub_key,
-                             'SSH pub key was not taken from environment')
-        self.assertIsNotNone(self.obj.nuvlaedge_engine_version,
-                             'NuvlaEdge Engine version was not taken from environment')
 
         # by default, we should have a Docker runtime client
         self.assertIsInstance(self.obj.container_runtime, DockerClient,
@@ -153,27 +146,6 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
                               'Returned something when None was expected')
             # TODO: fix
             # mock_open.assert_called_once_with('file', 'w')
-
-    @mock.patch('os.path.exists')
-    @mock.patch('agent.common.nuvlaedge_common.DockerClient')
-    @mock.patch('agent.common.nuvlaedge_common.KubernetesClient')
-    def test_set_runtime_client_details(self, mock_k8s, mock_docker, mock_exists):
-        # if the COE is Kubernetes, get the respective client
-        nuvlaedge_common.ORCHESTRATOR = 'kubernetes'
-        mock_k8s.return_value = 'kubernetes-class'
-        self.assertEqual(self.obj.set_runtime_client_details(), 'kubernetes-class',
-                         'Failed to infer underlying K8s COE and return KubernetesClient')
-
-        # otherwise, get a DockerClient
-        nuvlaedge_common.ORCHESTRATOR = 'docker'
-        mock_docker.return_value = 'docker-class'
-        mock_exists.return_value = True
-        self.assertEqual(self.obj.set_runtime_client_details(), 'docker-class',
-                         'Failed to infer underlying K8s COE and return KubernetesClient')
-
-        # unless the Docker socket does not exist
-        mock_exists.return_value = False
-        self.assertRaises(Exception, self.obj.set_runtime_client_details)
 
     @mock.patch('os.path.exists')
     def test_set_nuvlaedge_id(self, mock_exists):

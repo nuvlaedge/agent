@@ -4,16 +4,17 @@
 import base64
 import contextlib
 import datetime
-import json
-import subprocess
-import docker
 import logging
 import math
 import mock
-import requests
+import subprocess
 import unittest
-import tests.utils.fake as fake
 import yaml
+
+import docker
+import requests
+
+import tests.utils.fake as fake
 from agent.orchestrator.docker import DockerClient
 
 
@@ -24,7 +25,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
-        self.obj = DockerClient(self.hostfs, self.host_home)
+        self.obj = DockerClient()
         self.local_docker_client = docker.from_env()
         self.fake_swarm_tokens = {
             'JoinTokens': {

@@ -61,7 +61,7 @@ class TestAgent(TestCase):
     @patch(os_makedir)
     @patch(atomic_write)
     def test_send_heartbeat(self, atomic_write_mock, os_makedir_mock):
-        self.test_agent._nuvlaedge_common = Mock()
+        self.test_agent._telemetry = Mock()
         tel_mock = Mock()
         tel_mock.diff.return_value = ({}, ['a'])
         tel_mock.status.get.return_value = ''
@@ -77,12 +77,12 @@ class TestAgent(TestCase):
         ret_mock = Mock()
         ret_mock.data = "ret"
         api_mock.edit.return_value = ret_mock
-        self.test_agent.nuvlaedge_common.api.return_value = api_mock
+        self.test_agent._telemetry.api.return_value = api_mock
         self.assertEqual(self.test_agent.send_heartbeat(), "ret")
         self.assertEqual(tel_mock.status.update.call_count, 1)
         self.assertEqual(api_mock.edit.call_count, 1)
 
-        self.test_agent.nuvlaedge_common.api.side_effect = OSError
+        self.test_agent._telemetry.api.side_effect = OSError
         with self.assertRaises(OSError):
             self.test_agent.send_heartbeat()
 
@@ -106,7 +106,7 @@ class TestAgent(TestCase):
         self.assertEqual(it_mock.launch.call_count, 1)
 
     @patch('agent.agent.Infrastructure')
-    @patch('agent.agent.threading.Thread.start')
+    @patch('agent.agent.Thread.start')
     def test_handle_pull_jobs(self, mock_thread, infra_mock):
         infra_mock.container_runtime.job_engine_lite_image = True
         self.test_agent._infrastructure = infra_mock

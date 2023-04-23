@@ -12,6 +12,7 @@ from agent.monitor.data.orchestrator_data import (DeploymentData, ContainerStats
                                                   ClusterStatusData)
 from agent.monitor import Monitor
 from agent.monitor.components import monitor
+from agent.orchestrator import ContainerRuntimeClient
 from agent.common.util import execute_cmd
 
 
@@ -24,7 +25,7 @@ class ContainerStatsMonitor(Monitor):
     def __init__(self, name: str, telemetry, enable_monitor: bool):
         super().__init__(name, DeploymentData, enable_monitor)
         self.is_thread = True
-        self.client_runtime: nuvlaedge_common.ContainerRuntimeClient = \
+        self.client_runtime: ContainerRuntimeClient = \
             telemetry.container_runtime
 
         self.nuvlaedge_id: str = telemetry.nuvlaedge_id
@@ -96,7 +97,7 @@ class ContainerStatsMonitor(Monitor):
 
         if node_id:
             self.data.cluster_data.node_id = node_id
-            self.data.cluster_data.orchestrator = nuvlaedge_common.ORCHESTRATOR_COE
+            self.data.cluster_data.orchestrator = self.client_runtime.ORCHESTRATOR_COE
             self.data.cluster_data.cluster_node_role = 'worker'
 
         if cluster_id:
@@ -145,7 +146,7 @@ class ContainerStatsMonitor(Monitor):
         self.refresh_container_info()
         version: str = self.client_runtime.get_client_version()
 
-        if nuvlaedge_common.ORCHESTRATOR == 'docker':
+        if self.client_runtime.ORCHESTRATOR_COE == 'docker':
             self.data.docker_server_version = version
         else:
             self.data.kubelet_version = version

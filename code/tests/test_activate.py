@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from agent.activate import Activate
 import json
 import logging
 import mock
 import requests
 import unittest
 from tests.utils.fake import Fake, FakeNuvlaApi
+
+from agent.activate import Activate
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator.factory import get_container_runtime
 
 
 class ActivateTestCase(unittest.TestCase):
@@ -16,7 +18,7 @@ class ActivateTestCase(unittest.TestCase):
     def setUp(self):
         Activate.__bases__ = (Fake.imitate(NuvlaEdgeCommon),)
         self.shared_volume = "mock/path"
-        self.obj = Activate(self.shared_volume)
+        self.obj = Activate(get_container_runtime(), self.shared_volume)
         self.api_key_content = '{"api-key": "mock-key", "secret-key": "mock-secret"}'
         self.obj.activation_flag = 'mock-activation-file'
         self.obj.nuvlaedge_id = "nuvlabox/fake-id"

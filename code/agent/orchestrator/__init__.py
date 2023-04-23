@@ -1,18 +1,10 @@
 """
 Orchestration base class. To be extended and implemented by docker or kubernetes
 """
-import os
+
 from abc import ABC, abstractmethod
+
 from agent.common import util
-
-
-KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
-if KUBERNETES_SERVICE_HOST:
-    ORCHESTRATOR = 'kubernetes'
-    ORCHESTRATOR_COE = ORCHESTRATOR
-else:
-    ORCHESTRATOR = 'docker'
-    ORCHESTRATOR_COE = 'swarm'
 
 
 class ContainerRuntimeClient(ABC):
@@ -20,14 +12,15 @@ class ContainerRuntimeClient(ABC):
     Base abstract class for the Docker and Kubernetes clients
     """
     CLIENT_NAME: str
+    ORCHESTRATOR_COE: str
 
-    def __init__(self, host_rootfs, host_home):
+    hostfs = "/rootfs"
+
+    def __init__(self):
         self.client = None
-        self.hostfs = host_rootfs
         self.job_engine_lite_component = util.compose_project_name + "-job-engine-lite"
         self.job_engine_lite_image = None
         self.vpn_client_component = util.compose_project_name + '-vpn-client'
-        self.host_home = host_home
         self.ignore_env_variables = ['NUVLAEDGE_API_KEY', 'NUVLAEDGE_API_SECRET']
         self.data_gateway_name = None
 
@@ -103,7 +96,7 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
         """
         Takes an SSH public key and adds it to the host's HOME authorized keys
         (aka ssh_folder)

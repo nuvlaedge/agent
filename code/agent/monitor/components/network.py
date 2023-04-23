@@ -49,7 +49,7 @@ class NetworkMonitor(Monitor):
         self.first_net_stats: Dict = {}
         self.previous_net_stats_file: str = telemetry.previous_net_stats_file
         self.vpn_ip_file: str = telemetry.vpn_ip_file
-        self.runtime_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
+        self.runtime_client: nuvlaedge_common.ContainerRuntimeClient = \
             telemetry.container_runtime
 
         self.engine_project_name: str = self.get_engine_project_name()

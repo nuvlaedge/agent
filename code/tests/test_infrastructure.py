@@ -6,12 +6,13 @@ import logging
 import mock
 import requests
 import unittest
-import tests.utils.fake as fake
+from threading import Thread
 
-from agent.common import nuvlaedge_common
+import tests.utils.fake as fake
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
-from threading import Thread
+from agent.orchestrator.factory import get_container_runtime
+
 
 
 class InfrastructureTestCase(unittest.TestCase):
@@ -25,8 +26,11 @@ class InfrastructureTestCase(unittest.TestCase):
             mock_telemetry.return_value = mock.MagicMock()
             self.shared_volume = "mock/path"
             self.refresh_period = 16    # change the default
-            self.obj = Infrastructure(self.shared_volume, mock_telemetry,
+            self.obj = Infrastructure(get_container_runtime(),
+                                      self.shared_volume,
+                                      mock_telemetry,
                                       refresh_period=self.refresh_period)
+
         # monkeypatch NuvlaEdgeCommon attributes
         self.obj.data_volume = self.shared_volume
         self.obj.swarm_manager_token_file = 'swarm_manager_token_file'
@@ -41,8 +45,8 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.nuvlaedge_status_file = '.status'
         self.obj.container_runtime.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.obj.vpn_credential = 'vpn-credential'
-        self.obj.nuvlaedge_vpn_key_file = 'nuvlaedge-vpn.key'
-        self.obj.nuvlaedge_vpn_csr_file = 'nuvlaedge-vpn.csr'
+        self.obj.vpn_key_file = 'nuvlaedge-vpn.key'
+        self.obj.vpn_csr_file = 'nuvlaedge-vpn.csr'
         self.obj.vpn_client_conf_file = 'vpn-conf'
         self.obj.vpn_interface_name = 'vpn'
         self.obj.vpn_config_extra = ''
@@ -230,13 +234,12 @@ class InfrastructureTestCase(unittest.TestCase):
     @mock.patch('requests.get')
     def test_compute_api_is_running(self, mock_get):
 
-
         # only works for non-k8s installations
-        nuvlaedge_common.ORCHESTRATOR = 'kubernetes'
+        self.obj.container_runtime.ORCHESTRATOR_COE = 'kubernetes'
         self.assertFalse(self.obj.compute_api_is_running(''),
                          'Tried to check compute-api for a Kubernetes installation')
 
-        nuvlaedge_common.ORCHESTRATOR = 'docker'
+        self.obj.container_runtime.ORCHESTRATOR_COE = 'docker'
         # if compute-api is running, return True
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'

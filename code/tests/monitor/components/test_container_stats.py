@@ -108,6 +108,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_node_id.return_value = 'node-id'
         # if node is not a manager, skip those fields
         test_monitor.client_runtime.get_cluster_managers.return_value = ['node-id-2']
+        test_monitor.client_runtime.ORCHESTRATOR_COE = 'coe'
 
         test_monitor.update_cluster_data()
         test_monitor.client_runtime.get_cluster_join_address.assert_called_once()
@@ -176,22 +177,19 @@ class TestContainerStatsMonitor(unittest.TestCase):
         mock_cert.return_value = None
 
         test_monitor.client_runtime.get_client_version.return_value = '1.0'
-        with patch('agent.monitor.components.container_stats.nuvlaedge_common') as \
-                mock_nb_common:
-            refresh_container.return_value = None
-            mock_nb_common.ORCHESTRATOR = 'docker'
-            test_monitor.update_data()
 
-            self.assertEqual(test_monitor.data.docker_server_version, '1.0')
-            mock_cert.assert_called_once()
-            mock_update.assert_called_once()
+        refresh_container.return_value = None
+        test_monitor.client_runtime.ORCHESTRATOR_COE = 'docker'
+        test_monitor.update_data()
 
-        with patch('agent.monitor.components.container_stats.nuvlaedge_common') as \
-                mock_nb_common:
-            mock_nb_common.ORCHESTRATOR = 'not_docker'
-            test_monitor.client_runtime.get_client_version.return_value = '1.0'
-            test_monitor.update_data()
-            self.assertEqual(test_monitor.data.kubelet_version, '1.0')
+        self.assertEqual(test_monitor.data.docker_server_version, '1.0')
+        mock_cert.assert_called_once()
+        mock_update.assert_called_once()
+
+        test_monitor.client_runtime.ORCHESTRATOR_COE = 'not_docker'
+        test_monitor.client_runtime.get_client_version.return_value = '1.0'
+        test_monitor.update_data()
+        self.assertEqual(test_monitor.data.kubelet_version, '1.0')
 
         mock_cert.return_value = "Expired"
         test_monitor.update_data()

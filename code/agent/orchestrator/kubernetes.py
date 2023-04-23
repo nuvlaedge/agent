@@ -3,7 +3,7 @@ import os
 
 from kubernetes import client, config
 
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
+from agent.orchestrator import ContainerRuntimeClient
 
 
 class KubernetesClient(ContainerRuntimeClient):
@@ -11,9 +11,11 @@ class KubernetesClient(ContainerRuntimeClient):
     Kubernetes client
     """
 
-    def __init__(self, host_rootfs, host_home):
-        super().__init__(host_rootfs, host_home)
-        self.CLIENT_NAME: str = 'Kubernetes'
+    CLIENT_NAME = 'Kubernetes'
+    ORCHESTRATOR_COE = 'kubernetes'
+
+    def __init__(self):
+        super().__init__()
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
@@ -70,7 +72,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return {
             'cluster-id': cluster_id,
-            'cluster-orchestrator': ORCHESTRATOR_COE,
+            'cluster-orchestrator': self.ORCHESTRATOR_COE,
             'cluster-managers': managers,
             'cluster-workers': workers
         }
@@ -129,8 +131,9 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return False
 
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
         name = 'nuvlaedge-ssh-installer'
+        ssh_folder = '/tmp/ssh'
         try:
             existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
         except client.exceptions.ApiException as e:
@@ -155,7 +158,7 @@ class KubernetesClient(ContainerRuntimeClient):
                     client.V1Volume(
                         name=volume_name,
                         host_path=client.V1HostPathVolumeSource(
-                            path=f'{self.host_home}/.ssh'
+                            path=f'{host_home}/.ssh'
                         )
                     )
                 ],

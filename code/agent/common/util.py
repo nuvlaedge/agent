@@ -16,6 +16,9 @@ from subprocess import (Popen, run, PIPE, TimeoutExpired,
 compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
 
 
+def str_if_value_or_none(value):
+    return str(value) if value else None
+
 def execute_cmd(command: List[str], method_flag: bool = True) \
         -> Union[Dict, CompletedProcess, None]:
     """ Shell wrapper to execute a command

@@ -7,20 +7,21 @@ It takes care of updating the NuvlaEdge infrastructure services
 and respective credentials in Nuvla
 """
 
+import json
 import logging
 import os
+import time
+from datetime import datetime
+from os import path, remove
 
 import docker
 import docker.errors as docker_err
-import json
 import requests
-import time
-from agent.common import util
-from agent.common import nuvlaedge_common
+
+from agent.common import nuvlaedge_common, util
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator import ContainerRuntimeClient
 from agent.telemetry import Telemetry
-from datetime import datetime
-from os import path, remove
 
 
 class Infrastructure(NuvlaEdgeCommon):
@@ -31,12 +32,18 @@ class Infrastructure(NuvlaEdgeCommon):
 
     """
 
-    def __init__(self, data_volume, telemetry: Telemetry = None, refresh_period=15):
-        """ Constructs an Infrastructure object, with a status placeholder
+    def __init__(self,
+                 container_runtime: ContainerRuntimeClient,
+                 data_volume: str,
+                 telemetry: Telemetry = None,
+                 refresh_period: int = 15):
+        """
+        Constructs an Infrastructure object, with a status placeholder
 
         :param data_volume: shared volume
         """
-        super(Infrastructure, self).__init__(shared_data_volume=data_volume)
+        super(Infrastructure, self).__init__(container_runtime=container_runtime,
+                                             shared_data_volume=data_volume)
 
         self.infra_logger: logging.Logger = logging.getLogger(__name__)
 
@@ -249,8 +256,8 @@ class Infrastructure(NuvlaEdgeCommon):
 
         cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt',
                'ec_paramgen_curve:secp521r1',
-               '-keyout', self.nuvlaedge_vpn_key_file,
-               '-out', self.nuvlaedge_vpn_csr_file,
+               '-keyout', self.vpn_key_file,
+               '-out', self.vpn_csr_file,
                '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
 
         r = self.shell_execute(cmd)
@@ -262,22 +269,22 @@ class Infrastructure(NuvlaEdgeCommon):
 
         try:
             wait = 0
-            while not os.path.exists(self.nuvlaedge_vpn_csr_file) and \
-                    not os.path.exists(self.nuvlaedge_vpn_key_file):
+            while not os.path.exists(self.vpn_csr_file) and \
+                    not os.path.exists(self.vpn_key_file):
                 if wait > 25:
                     # appr 5 sec
                     raise TimeoutError
                 wait += 1
                 time.sleep(0.2)
 
-            with open(self.nuvlaedge_vpn_csr_file) as csr:
+            with open(self.vpn_csr_file) as csr:
                 vpn_csr = csr.read()
 
-            with open(self.nuvlaedge_vpn_key_file) as key:
+            with open(self.vpn_key_file) as key:
                 vpn_key = key.read()
         except TimeoutError:
-            self.infra_logger.error(f'Unable to lookup {self.nuvlaedge_vpn_key_file} and '
-                                    f'{self.nuvlaedge_vpn_csr_file}')
+            self.infra_logger.error(f'Unable to lookup {self.vpn_key_file} and '
+                                    f'{self.vpn_csr_file}')
             return None, None
 
         return vpn_csr, vpn_key
@@ -304,7 +311,7 @@ class Infrastructure(NuvlaEdgeCommon):
         :return: True or False
         """
 
-        if nuvlaedge_common.ORCHESTRATOR not in ['docker', 'swarm']:
+        if self.container_runtime.ORCHESTRATOR_COE not in ['docker', 'swarm']:
             return False
 
         if not container_api_port:
@@ -708,7 +715,7 @@ class Infrastructure(NuvlaEdgeCommon):
                 "resource": {
                     "href": self.nuvlaedge_id
                 },
-                "state": f"Unknown problem while setting immutable SSH key"
+                "state": "Unknown problem while setting immutable SSH key"
             },
             "severity": "high",
             "timestamp": datetime.utcnow().strftime(self.nuvla_timestamp_format)
@@ -735,7 +742,7 @@ class Infrastructure(NuvlaEdgeCommon):
             try:
                 with util.timeout(10):
                     if not self.container_runtime.install_ssh_key(self.ssh_pub_key,
-                                                                  ssh_folder):
+                                                                  {self.installation_home}):
                         return
             except Exception as e:
                 msg = f'An error occurred while setting immutable SSH key: {str(e)}'

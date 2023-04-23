@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import kubernetes
 import logging
 import mock
-import unittest
-import tests.utils.fake as fake
+import os
 import sys
+import unittest
 
+
+import kubernetes
+
+import tests.utils.fake as fake
 from agent.common import nuvlaedge_common
 from agent.orchestrator.kubernetes import KubernetesClient
 
@@ -34,7 +36,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                     mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
                     mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
                     mock_k8s_config.return_value = True
-                    self.obj = KubernetesClient(self.hostfs, self.host_home)
+                    self.obj = KubernetesClient()
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -112,7 +114,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Expecting no k8s manager but got something else')
 
         # COE should also match with class' COE
-        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.nuvlaedge_common.ORCHESTRATOR_COE,
+        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.obj.ORCHESTRATOR_COE,
                          'Got the wrong cluster-orchestrator')
 
         # but if one of the nodes is a master, then we should get 1 worker and 1 manager

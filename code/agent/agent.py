@@ -4,18 +4,18 @@ Also controls the execution flow and provides utilities to the children dependen
 """
 import logging
 import os
-import threading
 from copy import copy
 from threading import Event, Thread
-from typing import Union, NoReturn, List, Dict
+from typing import NoReturn, List, Dict
 
 from nuvla.api.models import CimiResource
 
 from agent.activate import Activate
 from agent.common import util
-from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
 from agent.job import Job
+from agent.orchestrator import ContainerRuntimeClient
+from agent.orchestrator.factory import get_container_runtime
 from agent.telemetry import Telemetry
 
 
@@ -44,27 +44,28 @@ class Agent:
         self.excluded_monitors = os.environ.get('EXCLUDED_MONITORS', '')
 
         self._activate = None
+        self._container_runtime = None
         self._infrastructure = None
-        self._nuvlaedge_common = None
         self._telemetry = None
 
         self.infrastructure_thread = None
         self.telemetry_thread = None
 
     @property
-    def nuvlaedge_common(self) -> NuvlaEdgeCommon:
-        """ Class containing mainly hardcoded paths, ports and addresses related tu nuvla """
-        if not self._nuvlaedge_common:
-            self.logger.info('Instantiating NuvlaEdgeCommon class')
-            self._nuvlaedge_common = NuvlaEdgeCommon()
-        return self._nuvlaedge_common
+    def container_runtime(self) -> ContainerRuntimeClient:
+        """ Class containing COE functions (docker or kubernetes) """
+        if not self._container_runtime:
+            self.logger.info('Instantiating ContainerRuntime class')
+            self._container_runtime = get_container_runtime()
+        return self._container_runtime
 
     @property
     def activate(self) -> Activate:
         """ Class responsible for activating and controlling previous nuvla installations """
         if not self._activate:
             self.logger.info('Instantiating Activate class')
-            self._activate = Activate(self._DATA_VOLUME)
+            self._activate = Activate(self.container_runtime,
+                                      self._DATA_VOLUME)
         return self._activate
 
     @property
@@ -72,7 +73,8 @@ class Agent:
         """ Intermediary class which provides and interface to communicate with nuvla """
         if not self._infrastructure:
             self.logger.info('Instantiating Infrastructure class')
-            self._infrastructure = Infrastructure(self._DATA_VOLUME,
+            self._infrastructure = Infrastructure(self.container_runtime,
+                                                  self._DATA_VOLUME,
                                                   telemetry=self.telemetry)
             self.initialize_infrastructure()
         return self._infrastructure
@@ -82,7 +84,8 @@ class Agent:
         """ Telemetry updater class """
         if not self._telemetry:
             self.logger.info('Instantiating Telemetry class')
-            self._telemetry = Telemetry(self._DATA_VOLUME,
+            self._telemetry = Telemetry(self.container_runtime,
+                                        self._DATA_VOLUME,
                                         self.nuvlaedge_status_id,
                                         self.excluded_monitors)
         return self._telemetry
@@ -159,7 +162,7 @@ class Agent:
 
         Returns: a dict with the response from Nuvla
         """
-        self.logger.debug(f'send_heartbeat({self.nuvlaedge_common}, '
+        self.logger.debug(f'send_heartbeat(, '
                           f'{self.telemetry}, {self.nuvlaedge_status_id},'
                           f' {self.past_status_time})')
 
@@ -192,7 +195,7 @@ class Agent:
                              f'{", ".join(del_attr)}')
 
         try:
-            resource: CimiResource = self.nuvlaedge_common.api().edit(
+            resource: CimiResource = self.telemetry.api().edit(
                 self.nuvlaedge_status_id,
                 data=status,
                 select=del_attr)
@@ -214,7 +217,8 @@ class Agent:
             job_list: list of job IDs
         """
         for job_id in job_list:
-            job: Job = Job(self._DATA_VOLUME,
+            job: Job = Job(self.container_runtime,
+                           self._DATA_VOLUME,
                            job_id,
                            self.infrastructure.container_runtime.job_engine_lite_image)
 
@@ -244,7 +248,7 @@ class Agent:
         if pull_jobs and self.infrastructure.container_runtime.job_engine_lite_image:
             self.logger.info(f'Processing jobs {pull_jobs} in pull mode')
 
-            threading.Thread(
+            Thread(
                 target=self.run_pull_jobs,
                 args=(pull_jobs,),
                 daemon=True).start()
@@ -270,7 +274,7 @@ class Agent:
             return True
 
         def create_start_thread(**kwargs):
-            th = threading.Thread(daemon=True, **kwargs)
+            th = Thread(daemon=True, **kwargs)
             th.start()
             return th
 

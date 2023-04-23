@@ -24,6 +24,7 @@ from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
+from agent.orchestrator import ContainerRuntimeClient
 
 
 class MonitoredDict(dict):
@@ -71,10 +72,18 @@ class Telemetry(NuvlaEdgeCommon):
         data_volume: path to shared NuvlaEdge data
     """
 
-    def __init__(self, data_volume, nuvlaedge_status_id, excluded_monitors: str = ''):
-        """ Constructs an Telemetry object, with a status placeholder """
+    def __init__(self,
+                 container_runtime: ContainerRuntimeClient,
+                 data_volume: str,
+                 nuvlaedge_status_id: str,
+                 excluded_monitors: str = ''):
+        """
+        Constructs an Telemetry object, with a status placeholder
+        """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(container_runtime=container_runtime,
+                         shared_data_volume=data_volume)
+
         self.logger: logging.Logger = logging.getLogger('Telemetry')
         self.nb_status_id = nuvlaedge_status_id
 
