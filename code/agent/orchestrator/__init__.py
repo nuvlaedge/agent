@@ -11,10 +11,14 @@ class ContainerRuntimeClient(ABC):
     """
     Base abstract class for the Docker and Kubernetes clients
     """
+
     CLIENT_NAME: str
     ORCHESTRATOR_COE: str
 
     hostfs = "/rootfs"
+    infra_service_endpoint_keyname: str
+    join_token_manager_keyname: str
+    join_token_worker_keyname: str
 
     def __init__(self):
         self.client = None
@@ -204,12 +208,15 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         """
         Defines the infra service structure for commissioning
 
         :param api_endpoint: endpoint of the Docker/K8s API
-        :param tls_keys: TLS keys for authenticating with the API endpoint (ca, crt, key)
+        :param client_ca: API endpoint CA
+        :param client_cert: API endpoint client certificate
+        :param client_key: API endpoint client private key
 
         :returns dict of the infra service for commissioning
         """

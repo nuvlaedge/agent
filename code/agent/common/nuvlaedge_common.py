@@ -56,13 +56,6 @@ class NuvlaEdgeCommon:
         """
         self.logger: logging.Logger = logging.getLogger(__name__)
 
-        self.logger.warning(f'New NuvlaEdgeCommon initialized: {id(self)}')
-        print(id(self))
-        import traceback, sys
-        traceback.print_stack()
-        sys.stdout.flush()
-        sys.stderr.flush()
-
         self.hostfs = container_runtime.hostfs
         self.data_volume = shared_data_volume
         self.container_runtime: ContainerRuntimeClient = container_runtime

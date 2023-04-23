@@ -737,7 +737,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         # otherwise, destructs the TLS keys and gives back the commissioning payload for the IS
         is_keys = ["swarm-client-ca", "swarm-client-cert", "swarm-client-key", "swarm-endpoint"]
         self.assertTrue(set(is_keys).issubset(self.obj.define_nuvla_infra_service('valid-api-endpoint',
-                                                                                  ['ca', 'cert', 'key'])),
+                                                                                  'ca', 'cert', 'key')),
                         'Failed to setup Swarm infrastructure service payload for commissioning')
 
         # if there are no TLS keys, they are not included in the IS payload
@@ -755,9 +755,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         # and if there's an extra k8s infra, it should be appended to the final infra
         mock_infer_extra_coe.reset_mock(side_effect=True)
         mock_infer_extra_coe.return_value = {'k8s-stuff': True}
-        self.assertIn('k8s-stuff', self.obj.define_nuvla_infra_service('valid-api-endpoint', ['ca', 'cert', 'key']),
+        self.assertIn('k8s-stuff', self.obj.define_nuvla_infra_service('valid-api-endpoint', 'ca', 'cert', 'key'),
                       'Additional COE was not added to infrastructure service payload')
-        self.assertEqual(len(self.obj.define_nuvla_infra_service('valid-api-endpoint', ['ca', 'cert', 'key']).keys()),
+        self.assertEqual(len(self.obj.define_nuvla_infra_service('valid-api-endpoint', 'ca', 'cert', 'key').keys()),
                          5,
                          'Unexpected number of infrastructure service fields')
 

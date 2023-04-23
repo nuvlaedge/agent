@@ -118,11 +118,11 @@ class InfrastructureTestCase(unittest.TestCase):
         # when failing to find or read any of the TLS key files, return None
         with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
-            self.assertIsNone(self.obj.get_tls_keys(),
-                              'Returned TLS keys even though their files could not be found')
+            self.assertFalse(self.obj.get_tls_keys(),
+                             'Returned TLS keys even though their files could not be found')
             mock_open.side_effect = IndexError
-            self.assertIsNone(self.obj.get_tls_keys(),
-                              'Returned TLS keys even though their files could not be read')
+            self.assertFalse(self.obj.get_tls_keys(),
+                             'Returned TLS keys even though their files could not be read')
 
         # when everything is ok, return the 3 files content as a tuple
         files_content = 'tls'
@@ -474,7 +474,7 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_do_commission.reset_mock()     # reset counters
         self.obj.try_commission()
         self.obj.container_runtime.define_nuvla_infra_service.assert_called_once_with('https://1.1.1.1:5000',
-                                                                                      ('ca', 'cert', 'key'))
+                                                                                      'ca', 'cert', 'key')
 
         # given the aforementioned return_values, we expect the following commissioning payload to be sent and saved
         expected_payload = {

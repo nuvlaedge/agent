@@ -52,7 +52,6 @@ class Infrastructure(NuvlaEdgeCommon):
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
         self.compute_api = util.compose_project_name + '-compute-api'
-        self.compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -106,7 +105,7 @@ class Infrastructure(NuvlaEdgeCommon):
         except (FileNotFoundError, IndexError):
             self.infra_logger.warning("Container orchestration API TLS keys have not been"
                                       " set yet!")
-            return None
+            return []
 
         return client_ca, client_cert, client_key
 
@@ -304,7 +303,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
     def compute_api_is_running(self, container_api_port) -> bool:
         """
-        Pokes ate the compute-api endpoint to see if it is up and running
+        Check if the compute-api endpoint is up and running
 
         Only valid for Docker installations
 
@@ -315,26 +314,34 @@ class Infrastructure(NuvlaEdgeCommon):
             return False
 
         if not container_api_port:
-            container_api_port = self.compute_api_port
+            container_api_port = util.compute_api_port
 
         compute_api_url = f'https://{self.compute_api}:{container_api_port}'
         self.infra_logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
-            if self.container_runtime.client.containers.get(self.compute_api).status \
-                    != 'running':
+            if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
                 return False
+        except (docker_err.NotFound, docker_err.APIError, TimeoutError) as ex:
+            self.infra_logger.debug(f"Compute API container not found {ex}")
+            return False
 
-            requests.get(compute_api_url, timeout=3)
+        try:
+            try:
+                requests.get(compute_api_url, timeout=3)
+            except requests.exceptions.SSLError:
+                raise
+            except requests.exceptions.ConnectionError as e:
+                self.infra_logger.debug(f'Failed to reach Compute API at {compute_api_url}: {e}')
+                # try with service name and internal port
+                requests.get('https://compute-api:5000', timeout=3)
+
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
             self.infra_logger.debug("Compute API up and running with security")
-            pass
-        except (docker_err.NotFound, docker_err.APIError, TimeoutError) as ex:
-            self.infra_logger.debug(f"Compute API not found {ex}")
-            return False
-        except requests.exceptions.ConnectionError:
+
+        except (requests.exceptions.ConnectionError, TimeoutError) as ex:
             # Can happen if the Compute API takes longer than normal on start
-            self.logger.info(f'Too many requests... Compute API not ready yet')
+            self.infra_logger.info(f'Compute API not ready yet: {ex}')
             return False
 
         return True
@@ -413,7 +420,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
     def get_compute_endpoint(self, vpn_ip: str) -> tuple:
         """
-        Find the endpoint and port of the compute API
+        Find the endpoint and port of the Compute API
 
         :returns tuple (api_endpoint, port)
         """
@@ -496,7 +503,8 @@ class Infrastructure(NuvlaEdgeCommon):
         # initialize the commissioning payload
         commission_payload = cluster_info.copy()
         old_commission_payload = self.read_commissioning_file()
-        minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() else cluster_info.copy()
+        minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() \
+                                     else cluster_info.copy()
 
         my_vpn_ip = self.telemetry_instance.get_vpn_ip()
         api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
@@ -510,13 +518,11 @@ class Infrastructure(NuvlaEdgeCommon):
 
         infra_service = {}
         if self.compute_api_is_running(container_api_port):
-            infra_service = \
-                self.container_runtime.define_nuvla_infra_service(api_endpoint,
-                                                                  self.get_tls_keys())
+            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, *self.get_tls_keys())
+
         # 1st time commissioning the IS, so we need to also pass the keys, even if they
         # haven't changed
-        infra_diff = \
-            {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
+        infra_diff = {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
 
         if self.container_runtime.infra_service_endpoint_keyname in \
                 old_commission_payload:

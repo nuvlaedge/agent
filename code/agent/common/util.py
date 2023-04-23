@@ -12,12 +12,13 @@ from typing import List, Union, Dict
 from subprocess import (Popen, run, PIPE, TimeoutExpired,
                         SubprocessError, STDOUT, CompletedProcess)
 
-
 compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
+compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 
 
 def str_if_value_or_none(value):
     return str(value) if value else None
+
 
 def execute_cmd(command: List[str], method_flag: bool = True) \
         -> Union[Dict, CompletedProcess, None]:

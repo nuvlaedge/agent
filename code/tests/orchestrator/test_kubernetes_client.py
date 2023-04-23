@@ -445,7 +445,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                            "kubernetes-client-cert", "kubernetes-client-key"]
 
         self.assertEqual(sorted(expected_fields),
-                         sorted(list(self.obj.define_nuvla_infra_service(api_endpoint, ["ca", "cert", "key"]).keys())),
+                         sorted(list(self.obj.define_nuvla_infra_service(api_endpoint, "ca", "cert", "key").keys())),
                          'Unable to define IS')
 
     def test_get_partial_decommission_attributes(self):

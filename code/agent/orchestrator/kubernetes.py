@@ -14,6 +14,10 @@ class KubernetesClient(ContainerRuntimeClient):
     CLIENT_NAME = 'Kubernetes'
     ORCHESTRATOR_COE = 'kubernetes'
 
+    infra_service_endpoint_keyname = 'kubernetes-endpoint'
+    join_token_manager_keyname = 'kubernetes-token-manager'
+    join_token_worker_keyname = 'kubernetes-token-worker'
+
     def __init__(self):
         super().__init__()
         config.load_incluster_config()
@@ -24,9 +28,6 @@ class KubernetesClient(ContainerRuntimeClient):
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
         self.vpn_client_component = os.getenv('NUVLAEDGE_VPN_COMPONENT_NAME', 'vpn-client')
-        self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
-        self.join_token_manager_keyname = 'kubernetes-token-manager'
-        self.join_token_worker_keyname = 'kubernetes-token-worker'
         self.data_gateway_name = f"data-gateway.{self.namespace}"
 
     def get_node_info(self):
@@ -382,16 +383,17 @@ class KubernetesClient(ContainerRuntimeClient):
         # doesn't seem to be available from the API
         return []
 
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         if api_endpoint:
             infra_service = {
                 "kubernetes-endpoint": api_endpoint
             }
 
-            if tls_keys:
-                infra_service["kubernetes-client-ca"] = tls_keys[0]
-                infra_service["kubernetes-client-cert"] = tls_keys[1]
-                infra_service["kubernetes-client-key"] = tls_keys[2]
+            if client_ca and client_cert and client_key:
+                infra_service["kubernetes-client-ca"] = client_ca
+                infra_service["kubernetes-client-cert"] = client_cert
+                infra_service["kubernetes-client-key"] = client_key
 
             return infra_service
         else:

@@ -25,14 +25,15 @@ class DockerClient(ContainerRuntimeClient):
     CLIENT_NAME = 'Docker'
     ORCHESTRATOR_COE = 'docker'
 
+    infra_service_endpoint_keyname = 'swarm-endpoint'
+    join_token_manager_keyname = 'swarm-token-manager'
+    join_token_worker_keyname = 'swarm-token-worker'
+
     def __init__(self):
         super().__init__()
         self.logger: logging.Logger = logging.getLogger(__name__)
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
-        self.infra_service_endpoint_keyname = 'swarm-endpoint'
-        self.join_token_manager_keyname = 'swarm-token-manager'
-        self.join_token_worker_keyname = 'swarm-token-worker'
         self.data_gateway_name = "data-gateway"
 
     def get_client_version(self) -> str:
@@ -88,7 +89,6 @@ class DockerClient(ContainerRuntimeClient):
 
     def get_api_ip_port(self):
         node_info = self.get_node_info()
-        compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 
         ip = node_info.get("Swarm", {}).get("NodeAddr")
         if not ip:
@@ -115,9 +115,9 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, compute_api_port
+                    return None, util.compute_api_port
 
-        return ip, compute_api_port
+        return ip, util.compute_api_port
 
     def has_pull_job_capability(self):
         try:
@@ -564,22 +564,22 @@ class DockerClient(ContainerRuntimeClient):
 
         return enabled_plugins
 
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         try:
-            infra_service = self.infer_if_additional_coe_exists(
-                fallback_address=api_endpoint.replace('https://', '').split(':')[0])
+            fallback_address = api_endpoint.replace('https://', '').split(':')[0]
+            infra_service = self.infer_if_additional_coe_exists(fallback_address=fallback_address)
         except (IndexError, ConnectionError):
             # this is a non-critical step, so we should never fail because of it
             infra_service = {}
+
         if api_endpoint:
             infra_service["swarm-endpoint"] = api_endpoint
 
-            if tls_keys:
-                infra_service["swarm-client-ca"] = tls_keys[0]
-                infra_service["swarm-client-cert"] = tls_keys[1]
-                infra_service["swarm-client-key"] = tls_keys[2]
-
-            return infra_service
+            if client_ca and client_cert and client_key:
+                infra_service["swarm-client-ca"] = client_ca
+                infra_service["swarm-client-cert"] = client_cert
+                infra_service["swarm-client-key"] = client_key
 
         return infra_service
 
