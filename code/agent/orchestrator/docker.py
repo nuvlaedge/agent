@@ -211,13 +211,31 @@ class DockerClient(ContainerRuntimeClient):
                    nuvla_endpoint_insecure=False, api_key=None, api_secret=None,
                    docker_image=None):
         # Get the compute-api network
+        local_net = None
         try:
             compute_api = self.client.containers.get(util.compose_project_name + '-compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
-        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
-                TimeoutError) as e:
+        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
             logging.error(f'Cannot infer compute-api network for local job {job_id}: {e}')
             return
+
+        # Get environment variables and volumes from job-engine-lite container
+        volumes = {
+            '/var/run/docker.sock': {
+                'bind': '/var/run/docker.sock',
+                'mode': 'rw'
+            }
+        }
+        volumes_from = []
+        environment = []
+        job_engine_lite_container_name = util.compose_project_name + '-job-engine-lite'
+        try:
+            job_engine_lite = self.client.containers.get(job_engine_lite_container_name)
+            environment = job_engine_lite.attrs['Config']['Env']
+            volumes = []
+            volumes_from = [job_engine_lite_container_name]
+        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
+            logging.warning(f'Cannot get env and volumes from job-engine-lite ({job_id}): {e}')
 
         cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
               f'--api-key {api_key} ' \
@@ -227,7 +245,7 @@ class DockerClient(ContainerRuntimeClient):
         if nuvla_endpoint_insecure:
             cmd = f'{cmd} --api-insecure'
 
-        logging.info(f'Starting job {job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
+        logging.info(f'Starting job {job_id} on {self.job_engine_lite_image} image, with command: "{cmd}"')
 
         img = docker_image if docker_image else self.job_engine_lite_image
         self.client.containers.run(img,
@@ -237,12 +255,9 @@ class DockerClient(ContainerRuntimeClient):
                                    hostname=job_execution_id,
                                    remove=True,
                                    network=local_net,
-                                   volumes={
-                                       '/var/run/docker.sock': {
-                                           'bind': '/var/run/docker.sock',
-                                           'mode': 'ro'
-                                       }
-                                   })
+                                   volumes=volumes,
+                                   volumes_from=volumes_from,
+                                   environment=environment)
 
         try:
             # for some jobs (like clustering), it is better if the job container is also
@@ -250,8 +265,7 @@ class DockerClient(ContainerRuntimeClient):
             # in the NuvlaEdge
             self.client.api.connect_container_to_network(job_execution_id, 'bridge')
         except docker.errors.APIError as e:
-            logging.warning(f'Could not attach {job_execution_id} to bridge network: '
-                            f'{str(e)}')
+            logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
 
     @staticmethod
     def collect_container_metrics_cpu(container_stats: dict) -> float:
