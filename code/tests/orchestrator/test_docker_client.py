@@ -538,22 +538,21 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     @mock.patch('docker.models.containers.ContainerCollection.get')
     @mock.patch('docker.models.containers.ContainerCollection.list')
     def test_get_installation_parameters(self, mock_containers_list, mock_containers_get, mock_gethostname):
-        search_label = 'fake-label'
         agent_id = 'my-fake-id'
         # if the agent container cannot find itself, it raises an exception
         mock_containers_list.return_value = [fake.MockContainer(myid=agent_id), fake.MockContainer()]
         mock_gethostname.return_value = 'fake-hostname'
         mock_containers_get.side_effect = docker.errors.NotFound('', requests.Response())
-        self.assertRaises(RuntimeError, self.obj.get_installation_parameters, search_label)
+        self.assertRaises(RuntimeError, self.obj.get_installation_parameters)
 
         # otherwise...
         mock_containers_get.reset_mock(side_effect=True)
         mock_containers_get.return_value = fake.MockContainer(myid=agent_id)
         # since all labels exist, the output should container the respective fields for the telemetry
         expected_fields = ['project-name', 'working-dir', 'config-files', 'environment']
-        self.assertIsInstance(self.obj.get_installation_parameters(search_label), dict,
+        self.assertIsInstance(self.obj.get_installation_parameters(), dict,
                               'Expecting installation parameters to be a JSON structure')
-        self.assertTrue(set(expected_fields).issubset(self.obj.get_installation_parameters(search_label)),
+        self.assertTrue(set(expected_fields).issubset(self.obj.get_installation_parameters()),
                         f'Installation parameters are missing the required telemetry fields: {expected_fields}')
 
         # if containers have labels that are supposed to be ignored, these should not be in the returned value
@@ -563,7 +562,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_containers_list.return_value = [fake.MockContainer(), new_agent_container]
         mock_containers_get.return_value = new_agent_container
         self.assertNotIn(ignore_env,
-                         self.obj.get_installation_parameters(search_label)['environment'],
+                         self.obj.get_installation_parameters()['environment'],
                          'Unwanted environment variables are not being properly ignored')
 
         # other environment variables will be included though
@@ -572,13 +571,13 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_containers_list.return_value = [fake.MockContainer(), new_agent_container]
         mock_containers_get.return_value = new_agent_container
         self.assertIn(include_env,
-                      self.obj.get_installation_parameters(search_label)['environment'],
+                      self.obj.get_installation_parameters()['environment'],
                       'Expected environment variables are not in the final parameters')
 
         # and also make sure the config-files are not duplicated, even if there are many containers reporting
         # the same filenames
         mock_containers_list.return_value = [fake.MockContainer(), new_agent_container, fake.MockContainer()]
-        self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
+        self.assertEqual(sorted(self.obj.get_installation_parameters()['config-files']),
                          sorted(new_agent_container.labels['com.docker.compose.project.config_files'].split(',')),
                          'Installation config files are not reported correctly')
 
@@ -587,14 +586,14 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         updated_container.attrs['Created'] = datetime.datetime.utcnow().isoformat()
         updated_container.labels['com.docker.compose.project.config_files'] = 'c.yml'
         mock_containers_list.return_value = [new_agent_container, updated_container]
-        self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
+        self.assertEqual(sorted(self.obj.get_installation_parameters()['config-files']),
                          ['c.yml'],
                          'Installation config files are not reported correctly after an update')
 
         # finally, if one of the compose file labels are missing from the agent_container, we get None
         new_agent_container.labels['com.docker.compose.project'] = None
         mock_containers_get.return_value = new_agent_container
-        self.assertIsNone(self.obj.get_installation_parameters(search_label),
+        self.assertIsNone(self.obj.get_installation_parameters(),
                           'Expected no installation parameters due to missing Docker Compose labels, but got something')
 
     def test_read_system_issues(self):

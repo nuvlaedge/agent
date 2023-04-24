@@ -137,11 +137,10 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def get_installation_parameters(self, search_label):
+    def get_installation_parameters(self):
         """
         Scans all the NuvlaEdge components and returns all parameters that are relevant to
          the installation of the NB
-        :param search_label: label to be used for searching the components
         """
 
     @abstractmethod
@@ -264,4 +263,12 @@ class ContainerRuntimeClient(ABC):
         Get the container id of the current container
 
         :return: current container id
+        """
+
+    @abstractmethod
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> str:
+        """
+        Get the NuvlaEdge project name
+
+        :return: NuvlaEdge project name
         """

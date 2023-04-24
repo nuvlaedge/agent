@@ -325,7 +325,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             'project-name': self.obj.namespace,
             'environment': []
         }
-        self.assertEqual(self.obj.get_installation_parameters(''), expected_output,
+        self.assertEqual(self.obj.get_installation_parameters(), expected_output,
                          'Got the wrong installation parameters when there are no deployments to list')
 
         # when there are deployments, get the env vars from them, skipping templated env vars
@@ -333,7 +333,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             fake.mock_kubernetes_deployment(),
             fake.mock_kubernetes_deployment()
         ]
-        self.assertGreater(len(self.obj.get_installation_parameters('')['environment']), 0,
+        self.assertGreater(len(self.obj.get_installation_parameters()['environment']), 0,
                            'Expecting installation environment variables to be reported')
 
     def test_read_system_issues(self):

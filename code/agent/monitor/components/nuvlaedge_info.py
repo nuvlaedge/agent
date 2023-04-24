@@ -6,6 +6,7 @@ import datetime
 import psutil
 from typing import Dict
 
+from agent.common import util
 from agent.monitor import Monitor
 from agent.monitor.data.nuvlaedge_data import NuvlaEdgeData as NuvlaInfo
 from agent.monitor.data.nuvlaedge_data import InstallationParametersData
@@ -50,9 +51,8 @@ class NuvlaEdgeInfoMonitor(Monitor):
         # installation parameters
         if not self.data.installation_parameters:
             self.data.installation_parameters = InstallationParametersData()
-        filter_label = "nuvlaedge.component=True"
 
-        installation_parameters = self.runtime_client.get_installation_parameters(filter_label)
+        installation_parameters = self.runtime_client.get_installation_parameters()
         self.data.installation_parameters = InstallationParametersData.parse_obj(installation_parameters)
 
         # Components running in the current NuvlaEdge deployment

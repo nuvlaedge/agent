@@ -3,7 +3,7 @@ import logging
 import os
 import socket
 from subprocess import run, PIPE, TimeoutExpired
-from typing import List
+from typing import List, Optional
 
 import docker
 import requests
@@ -378,6 +378,9 @@ class DockerClient(ContainerRuntimeClient):
         tries = 0
         max_tries = 3
 
+        if 'ignore_removed' not in kwargs:
+            kwargs['ignore_removed'] = True
+
         while True:
             try:
                 return self.client.containers.list(*args, **kwargs)
@@ -387,9 +390,9 @@ class DockerClient(ContainerRuntimeClient):
                 if tries >= max_tries:
                     raise
 
-    def get_containers_stats(self, *args, **kwargs):
+    def get_containers_stats(self):
         containers_stats = []
-        for container in self.list_containers(*args, **kwargs):
+        for container in self.list_containers():
             try:
                 containers_stats.append((container, container.stats(stream=False)))
             except Exception as e:
@@ -472,6 +475,10 @@ class DockerClient(ContainerRuntimeClient):
         return self.get_current_container().id
 
     @staticmethod
+    def get_compose_project_name_from_labels(labels, default='nuvlaedge'):
+        return labels.get('com.docker.compose.project', default)
+
+    @staticmethod
     def get_config_files_from_labels(labels) -> List[str]:
         return labels.get('com.docker.compose.project.config_files', '').split(',')
 
@@ -479,9 +486,7 @@ class DockerClient(ContainerRuntimeClient):
     def get_working_dir_from_labels(labels) -> List[str]:
         return labels.get('com.docker.compose.project.working_dir', '')
 
-    def get_installation_parameters(self, search_label):
-        nuvlaedge_containers = self.list_containers(filters={'label': search_label})
-
+    def get_installation_parameters(self):
         try:
             myself = self.get_current_container()
         except RuntimeError:
@@ -492,7 +497,7 @@ class DockerClient(ContainerRuntimeClient):
         last_update = myself.attrs.get('Created', '')
         working_dir = self.get_working_dir_from_labels(myself.labels)
         config_files = self.get_config_files_from_labels(myself.labels)
-        project_name = myself.labels.get('com.docker.compose.project')
+        project_name = self.get_compose_project_name_from_labels(myself.labels, None)
 
         environment = []
         for env_var in myself.attrs.get('Config', {}).get('Env', []):
@@ -500,10 +505,11 @@ class DockerClient(ContainerRuntimeClient):
                 continue
             environment.append(env_var)
 
+        nuvlaedge_containers = self.get_all_nuvlaedge_containers()
         nuvlaedge_containers = list(filter(lambda x: x.id != myself.id, nuvlaedge_containers))
         for container in nuvlaedge_containers:
             c_labels = container.labels
-            if c_labels.get('com.docker.compose.project', '') == project_name and \
+            if self.get_compose_project_name_from_labels(c_labels, '') == project_name and \
                     self.get_working_dir_from_labels(c_labels) == working_dir:
                 if container.attrs.get('Created', '') > last_update:
                     last_update = container.attrs.get('Created', '')
@@ -710,8 +716,24 @@ class DockerClient(ContainerRuntimeClient):
 
         return k8s_cluster_info
 
-    def get_all_nuvlaedge_components(self) -> list:
-        nuvlaedge_containers = self.list_containers(filters={'label': 'nuvlaedge.component=True'},
-                                                    all=True)
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> Optional[str]:
+        try:
+            current_container = self.get_current_container()
+            return self.get_compose_project_name_from_labels(current_container.labels, None)
+        except Exception as e:
+            self.logger.warning(f'Failed to get docker compose project name: {e}')
+        return default_project_name
 
-        return list(map(lambda y: y.name, nuvlaedge_containers))
+    def get_all_nuvlaedge_containers(self):
+        filter_labels = [util.base_label]
+        project_name = self.get_nuvlaedge_project_name()
+
+        if project_name:
+            filter_labels.append(f'com.docker.compose.project={project_name}')
+
+        filters = {'label': filter_labels}
+
+        return self.list_containers(filters=filters, all=True)
+
+    def get_all_nuvlaedge_components(self) -> list:
+        return [c.name for c in self.get_all_nuvlaedge_containers()]

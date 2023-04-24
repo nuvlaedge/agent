@@ -3,6 +3,7 @@ import os
 
 from kubernetes import client, config
 
+from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
 
 
@@ -23,7 +24,7 @@ class KubernetesClient(ContainerRuntimeClient):
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
-        self.namespace = os.getenv('MY_NAMESPACE', 'nuvlaedge')
+        self.namespace = self.get_nuvlaedge_project_name(util.default_project_name)
         self.job_engine_lite_image = os.getenv('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE')
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
@@ -299,9 +300,9 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return out
 
-    def get_installation_parameters(self, search_label):
+    def get_installation_parameters(self):
         nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
-                                                                            label_selector=search_label).items
+                                                                            label_selector=util.base_label).items
 
         environment = []
         for dep in nuvlaedge_deployments:
@@ -415,3 +416,6 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_current_container_id(self) -> str:
         # TODO
         return ''
+
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> str:
+        return os.getenv('MY_NAMESPACE', default_project_name)
