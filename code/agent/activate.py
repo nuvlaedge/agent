@@ -9,10 +9,11 @@ It takes care of activating a new NuvlaEdge
 import logging
 import requests
 
-from agent.common import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator import ContainerRuntimeClient
 
 
-class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Activate(NuvlaEdgeCommon):
     """ The Activate class, which includes all methods and
     properties necessary to activate a NuvlaEdge
 
@@ -20,10 +21,15 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
         data_volume: path to shared NuvlaEdge data
     """
 
-    def __init__(self, data_volume):
-        """ Constructs an Activation object """
+    def __init__(self,
+                 container_runtime: ContainerRuntimeClient,
+                 data_volume: str):
+        """
+        Constructs an Activation object
+        """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(container_runtime=container_runtime,
+                         shared_data_volume=data_volume)
 
         self.activate_logger: logging.Logger = logging.getLogger(__name__)
         self.user_info = {}
@@ -99,22 +105,6 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
         self.write_json_to_file(context_file, nuvlaedge_resource)
 
         return current_context
-
-    def vpn_commission_if_needed(self, current_nb_resource: dict, old_nb_resource: dict):
-        """
-        Checks if the VPN server ID has changed in the NB resource, and if so, asks for
-        VPN commissioning
-
-        :param current_nb_resource: current NuvlaEdge resource, from Nuvla
-        :param old_nb_resource: old content of the NuvlaEdge resource
-        :return:
-        """
-        if current_nb_resource.get("vpn-server-id") != \
-                old_nb_resource.get("vpn-server-id"):
-            self.activate_logger.info(f'VPN Server ID has been added/changed in Nuvla: '
-                                      f'{current_nb_resource.get("vpn-server-id")}')
-
-            self.commission_vpn()
 
     def get_nuvlaedge_info(self):
         """ Retrieves the respective resource from Nuvla """

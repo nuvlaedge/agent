@@ -2,43 +2,42 @@
 # -*- coding: utf-8 -*-
 
 import json
-import os
 import logging
 import mock
-import nuvla.api
+import os
 import unittest
+
+import nuvla.api
+
 import tests.utils.fake as fake
-from agent.common import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.orchestrator.docker import DockerClient
+from agent.orchestrator.factory import get_container_runtime
 
 
 class NuvlaEdgeCommonTestCase(unittest.TestCase):
 
-    agent_nuvlaedge_common_open = 'agent.common.NuvlaEdgeCommon.open'
+    agent_nuvlaedge_common_open = 'agent.common.nuvlaedge_common.open'
     atomic_write = 'agent.common.util.atomic_write'
-    get_ne_id_api = 'agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon._get_nuvlaedge_id_from_api_session'
+    get_ne_id_api = 'agent.common.nuvlaedge_common.NuvlaEdgeCommon._get_nuvlaedge_id_from_api_session'
 
     @mock.patch('os.path.isdir')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_vpn_config_extra')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_nuvlaedge_id')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_runtime_client_details')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.save_nuvla_configuration')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_nuvla_endpoint')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_installation_home')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_vpn_config_extra')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_nuvlaedge_id')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.save_nuvla_configuration')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_nuvla_endpoint')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_installation_home')
     def setUp(self, mock_set_install_home, mock_set_nuvla_endpoint, mock_save_nuvla_conf,
-              mock_set_runtime, mock_set_nuvlaedge_id, mock_set_vpn_config_extra, mock_os_isdir) -> None:
-        self.ssh_pub_key = 'fakeSSHPubKey'
-        os.environ['NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY'] = self.ssh_pub_key
-        os.environ['NUVLAEDGE_ENGINE_VERSION'] = '2.3.1'
+              mock_set_nuvlaedge_id, mock_set_vpn_config_extra, mock_os_isdir) -> None:
+
         self.installation_home = '/home/fake'
         mock_set_install_home.return_value = self.installation_home
         mock_set_nuvla_endpoint.return_value = ('fake.nuvla.io', True)
         mock_save_nuvla_conf.return_value = True
-        mock_set_runtime.return_value = DockerClient('/rootfs', self.installation_home)
         mock_os_isdir.return_value = True
         mock_set_vpn_config_extra.return_value = ''
         mock_set_nuvlaedge_id.return_value = 'nuvlabox/fake-id'
-        self.obj = NuvlaEdgeCommon.NuvlaEdgeCommon()
+        self.obj = NuvlaEdgeCommon(get_container_runtime())
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -47,11 +46,6 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
     def test_init(self):
         self.assertEqual(self.obj.data_volume, "/srv/nuvlaedge/shared",
                          'Default NuvlaEdge data volume path was not set correctly')
-        # confirm that SSH pub key and NBE version are set
-        self.assertIsNotNone(self.obj.ssh_pub_key,
-                             'SSH pub key was not taken from environment')
-        self.assertIsNotNone(self.obj.nuvlaedge_engine_version,
-                             'NuvlaEdge Engine version was not taken from environment')
 
         # by default, we should have a Docker runtime client
         self.assertIsInstance(self.obj.container_runtime, DockerClient,
@@ -154,27 +148,6 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             # mock_open.assert_called_once_with('file', 'w')
 
     @mock.patch('os.path.exists')
-    @mock.patch('agent.common.NuvlaEdgeCommon.DockerClient')
-    @mock.patch('agent.common.NuvlaEdgeCommon.KubernetesClient')
-    def test_set_runtime_client_details(self, mock_k8s, mock_docker, mock_exists):
-        # if the COE is Kubernetes, get the respective client
-        NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
-        mock_k8s.return_value = 'kubernetes-class'
-        self.assertEqual(self.obj.set_runtime_client_details(), 'kubernetes-class',
-                         'Failed to infer underlying K8s COE and return KubernetesClient')
-
-        # otherwise, get a DockerClient
-        NuvlaEdgeCommon.ORCHESTRATOR = 'docker'
-        mock_docker.return_value = 'docker-class'
-        mock_exists.return_value = True
-        self.assertEqual(self.obj.set_runtime_client_details(), 'docker-class',
-                         'Failed to infer underlying K8s COE and return KubernetesClient')
-
-        # unless the Docker socket does not exist
-        mock_exists.return_value = False
-        self.assertRaises(Exception, self.obj.set_runtime_client_details)
-
-    @mock.patch('os.path.exists')
     def test_set_nuvlaedge_id(self, mock_exists):
         # if there's no env and not previous ID saved on file, raise exception
         mock_exists.return_value = False
@@ -237,7 +210,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
                               'Nuvla Api instance is not of the right type')
 
     @mock.patch('logging.error')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.api')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.api')
     def test_push_event(self, mock_api, mock_log):
         # always get None, but if there's an error, log it
         mock_api.side_effect = TimeoutError
@@ -257,7 +230,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
         self.assertEqual(self.obj.authenticate(api, 'key', 'secret'), api,
                          'Unable to authenticate with Nuvla API')
 
-    @mock.patch('agent.common.NuvlaEdgeCommon.Popen')
+    @mock.patch('agent.common.nuvlaedge_common.Popen')
     def test_shell_execute(self, mock_popen):
         # execute a command as given, and return a dict with the result
         mock_popen.return_value = mock.MagicMock()
@@ -297,7 +270,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertEqual(self.obj.read_json_file('fake-file'), json.loads(file_value),
                              'Unable to read JSON from file')
 
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.read_json_file')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.read_json_file')
     @mock.patch('os.path.exists')
     def test_get_nuvlaedge_version(self, mock_exists, mock_read_json):
         # if the version is already an attribute of the class, just give back its major version
@@ -319,7 +292,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
                          'Unable to default to NBE major version')
         mock_read_json.assert_called_once()
 
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.set_local_operational_status')
+    @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_local_operational_status')
     def test_get_operational_status(self, mock_set_status):
         with mock.patch(self.agent_nuvlaedge_common_open) as mock_open:
             # if file not found, return UNKNOWN
@@ -384,67 +357,4 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertIsNone(self.obj.write_vpn_conf(vpn_values),
                               'Failed to write VPN conf')
 
-    @mock.patch('time.sleep')
-    @mock.patch('os.path.exists')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.shell_execute')
-    def test_prepare_vpn_certificates(self, mock_exec, mock_exists, mock_sleep):
-        # if openssl command fails, return None,None
-        mock_exec.return_value = {}
-        self.assertEqual(self.obj.prepare_vpn_certificates(), (None, None),
-                         'Failed to exit VPN preparation when openssl fails to execute')
 
-        # if openssl succeeds, but cred file do not exist, TimeOut and return None, None again
-        mock_exists.return_value = False
-        mock_sleep.return_value = None  # instant sleep
-        mock_exec.return_value = {'returncode': 0}
-        self.assertEqual(self.obj.prepare_vpn_certificates(), (None, None),
-                         'Failed to raise timeout when VPN cred files are not set in time')
-        mock_exists.assert_called()
-        mock_sleep.assert_called()
-
-        # if cred files exist, read them, and return their value
-        mock_exists.return_value = True
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='csr/key')):
-            self.assertEqual(self.obj.prepare_vpn_certificates(), ('csr/key', 'csr/key'),
-                             'Failed to get VPN CSR and Key values from local files')
-
-    @mock.patch('requests.post')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.write_vpn_conf')
-    @mock.patch('agent.common.NuvlaEdgeCommon.NuvlaEdgeCommon.prepare_vpn_certificates')
-    def test_commission_vpn(self, mock_prep_vpn, mock_write_vpn, mock_post):
-        # if VPN prep goes wrong, return false
-        mock_prep_vpn.return_value = (None, None)
-        self.assertFalse(self.obj.commission_vpn(),
-                         'Succeeded at commissioning VPN when it should not have, cause VPN preparation was not right')
-
-        # if prep is ok, try posting to local API
-        # if post fails, return False
-        mock_prep_vpn.return_value = ('csr', 'key')
-        mock_post.side_effect = TimeoutError
-        self.assertFalse(self.obj.commission_vpn(),
-                         'Succeeded at commissioning VPN when POST request to local API failed')
-        mock_post.assert_called_once()
-
-        # if POST succeeds but returns an empty JSON, return False
-        mock_post.reset_mock(side_effect=True)
-        mock_post.return_value.json.return_value = {}
-        self.assertFalse(self.obj.commission_vpn(),
-                         'Succeeded at commissioning VPN even though POST response was an empty JSON')
-        mock_post.assert_called_once()  # called once after reset
-
-        # if POST is ok, we get VPn fields and do commissioning
-        vpn_conf_fields = {
-            'vpn-interface-name': 'vpn',
-            'vpn-ca-certificate': 'ca',
-            'vpn-intermediate-ca-is': 'ca-is',
-            'vpn-intermediate-ca': 'i-ca',
-            'vpn-certificate': 'cert',
-            'nuvlaedge-vpn-key': 'key',
-            'vpn-shared-key': 's-key',
-            'vpn-common-name-prefix': 'prefix',
-            'vpn-endpoints-mapped': 'endpoints'
-        }
-        mock_write_vpn.return_value = None
-        mock_post.return_value.json.return_value = vpn_conf_fields
-        self.assertTrue(self.obj.commission_vpn(),
-                        'Unable to commission VPN')

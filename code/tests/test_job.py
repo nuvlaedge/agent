@@ -5,8 +5,10 @@ import logging
 import mock
 import unittest
 from tests.utils.fake import Fake
+
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.job import Job
-from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
+from agent.orchestrator.factory import get_container_runtime
 
 
 class JobTestCase(unittest.TestCase):
@@ -18,7 +20,7 @@ class JobTestCase(unittest.TestCase):
         self.job_engine_lite_image = 'job-lite'
         with mock.patch('agent.job.Job.check_job_is_running') as mock_job_is_running:
             mock_job_is_running.return_value = False
-            self.obj = Job(self.shared_volume, self.job_id, self.job_engine_lite_image)
+            self.obj = Job(get_container_runtime(), self.shared_volume, self.job_id, self.job_engine_lite_image)
         # monkeypatches
         self.obj.container_runtime = mock.MagicMock()
         self.obj.activation_flag = '.activation'

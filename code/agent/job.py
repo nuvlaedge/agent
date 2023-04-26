@@ -9,10 +9,11 @@ Relays pull-mode jobs to local job-engine-lite
 import logging
 import json
 
-from agent.common import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator import ContainerRuntimeClient
 
 
-class Job(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Job(NuvlaEdgeCommon):
     """ The Job class, which includes all methods and
     properties necessary to handle pull mode jobs
 
@@ -22,10 +23,17 @@ class Job(NuvlaEdgeCommon.NuvlaEdgeCommon):
         job_engine_lite_image: Docker image for Job Engine lite
     """
 
-    def __init__(self, data_volume, job_id, job_engine_lite_image):
-        """ Constructs an Job object """
+    def __init__(self, container_runtime: ContainerRuntimeClient,
+                 data_volume,
+                 job_id,
+                 job_engine_lite_image):
+        """
+        Constructs an Job object
+        """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(container_runtime=container_runtime,
+                         shared_data_volume=data_volume)
+
         self.job_id = job_id
         self.job_id_clean = job_id.replace('/', '-')
         self.do_nothing = self.check_job_is_running()

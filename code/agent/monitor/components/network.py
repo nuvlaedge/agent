@@ -15,7 +15,7 @@ import requests
 from docker import errors as docker_err
 from docker.models.containers import Container
 
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import nuvlaedge_common, util
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface, IP
 from agent.monitor import Monitor
 from ..components import monitor
@@ -30,9 +30,7 @@ class NetworkMonitor(Monitor):
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
-    _PROJECT_NAME_LABEL_KEY: str = 'com.docker.compose.project'
-    DEFAULT_PROJECT_NAME: str = 'nuvlaedge'
-    _NUVLAEDGE_COMPONENT_LABEL_KEY: str = 'nuvlaedge.component=True'
+    _NUVLAEDGE_COMPONENT_LABEL_KEY: str = util.base_label
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
@@ -49,13 +47,12 @@ class NetworkMonitor(Monitor):
         self.first_net_stats: Dict = {}
         self.previous_net_stats_file: str = telemetry.previous_net_stats_file
         self.vpn_ip_file: str = telemetry.vpn_ip_file
-        self.runtime_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
-            telemetry.container_runtime
+        self.runtime_client: nuvlaedge_common.ContainerRuntimeClient = telemetry.container_runtime
 
         self.engine_project_name: str = self.get_engine_project_name()
         self.logger.info(f'Running network monitor for project '
                          f'{self.engine_project_name}')
-        self.iproute_container_name: str = f'{self.engine_project_name}_iproute'
+        self.iproute_container_name: str = f'{self.engine_project_name}-iproute'
 
         self.last_public_ip: float = 0.0
 
@@ -64,18 +61,7 @@ class NetworkMonitor(Monitor):
             telemetry.edge_status.iface_data = self.data
 
     def get_engine_project_name(self) -> str:
-        project_name = None
-        filters = {'label': [self._PROJECT_NAME_LABEL_KEY,
-                             self._NUVLAEDGE_COMPONENT_LABEL_KEY]}
-        try:
-            container_list: List[Container] = \
-                self.runtime_client.client.containers.list(filters=filters)
-            project_name = container_list[0].labels.get(
-                self._PROJECT_NAME_LABEL_KEY)
-        except (TypeError, IndexError):
-            self.logger.warning(f'Project name not found')
-
-        return project_name if project_name else self.DEFAULT_PROJECT_NAME
+        return self.runtime_client.get_nuvlaedge_project_name(util.default_project_name)
 
     def set_public_data(self) -> NoReturn:
         """

@@ -3,7 +3,8 @@ import os
 
 from kubernetes import client, config
 
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
+from agent.common import util
+from agent.orchestrator import ContainerRuntimeClient
 
 
 class KubernetesClient(ContainerRuntimeClient):
@@ -11,20 +12,24 @@ class KubernetesClient(ContainerRuntimeClient):
     Kubernetes client
     """
 
-    def __init__(self, host_rootfs, host_home):
-        super().__init__(host_rootfs, host_home)
-        self.CLIENT_NAME: str = 'Kubernetes'
+    CLIENT_NAME = 'Kubernetes'
+    ORCHESTRATOR = 'kubernetes'
+    ORCHESTRATOR_COE = ORCHESTRATOR
+
+    infra_service_endpoint_keyname = 'kubernetes-endpoint'
+    join_token_manager_keyname = 'kubernetes-token-manager'
+    join_token_worker_keyname = 'kubernetes-token-worker'
+
+    def __init__(self):
+        super().__init__()
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
-        self.namespace = os.getenv('MY_NAMESPACE', 'nuvlaedge')
+        self.namespace = self.get_nuvlaedge_project_name(util.default_project_name)
         self.job_engine_lite_image = os.getenv('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE')
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
         self.vpn_client_component = os.getenv('NUVLAEDGE_VPN_COMPONENT_NAME', 'vpn-client')
-        self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
-        self.join_token_manager_keyname = 'kubernetes-token-manager'
-        self.join_token_worker_keyname = 'kubernetes-token-worker'
         self.data_gateway_name = f"data-gateway.{self.namespace}"
 
     def get_node_info(self):
@@ -70,7 +75,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return {
             'cluster-id': cluster_id,
-            'cluster-orchestrator': ORCHESTRATOR_COE,
+            'cluster-orchestrator': self.ORCHESTRATOR_COE,
             'cluster-managers': managers,
             'cluster-workers': workers
         }
@@ -129,8 +134,9 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return False
 
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
         name = 'nuvlaedge-ssh-installer'
+        ssh_folder = '/tmp/ssh'
         try:
             existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
         except client.exceptions.ApiException as e:
@@ -155,7 +161,7 @@ class KubernetesClient(ContainerRuntimeClient):
                     client.V1Volume(
                         name=volume_name,
                         host_path=client.V1HostPathVolumeSource(
-                            path=f'{self.host_home}/.ssh'
+                            path=f'{host_home}/.ssh'
                         )
                     )
                 ],
@@ -295,9 +301,9 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return out
 
-    def get_installation_parameters(self, search_label):
+    def get_installation_parameters(self):
         nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
-                                                                            label_selector=search_label).items
+                                                                            label_selector=util.base_label).items
 
         environment = []
         for dep in nuvlaedge_deployments:
@@ -379,16 +385,17 @@ class KubernetesClient(ContainerRuntimeClient):
         # doesn't seem to be available from the API
         return []
 
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         if api_endpoint:
             infra_service = {
                 "kubernetes-endpoint": api_endpoint
             }
 
-            if tls_keys:
-                infra_service["kubernetes-client-ca"] = tls_keys[0]
-                infra_service["kubernetes-client-cert"] = tls_keys[1]
-                infra_service["kubernetes-client-key"] = tls_keys[2]
+            if client_ca and client_cert and client_key:
+                infra_service["kubernetes-client-ca"] = client_ca
+                infra_service["kubernetes-client-cert"] = client_cert
+                infra_service["kubernetes-client-key"] = client_key
 
             return infra_service
         else:
@@ -406,3 +413,10 @@ class KubernetesClient(ContainerRuntimeClient):
     def get_all_nuvlaedge_components(self) -> list:
         # TODO
         return []
+
+    def get_current_container_id(self) -> str:
+        # TODO
+        return ''
+
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> str:
+        return os.getenv('MY_NAMESPACE', default_project_name)
