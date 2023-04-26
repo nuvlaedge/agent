@@ -179,14 +179,14 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_client_version.return_value = '1.0'
 
         refresh_container.return_value = None
-        test_monitor.client_runtime.ORCHESTRATOR_COE = 'docker'
+        test_monitor.client_runtime.ORCHESTRATOR = 'docker'
         test_monitor.update_data()
 
         self.assertEqual(test_monitor.data.docker_server_version, '1.0')
         mock_cert.assert_called_once()
         mock_update.assert_called_once()
 
-        test_monitor.client_runtime.ORCHESTRATOR_COE = 'not_docker'
+        test_monitor.client_runtime.ORCHESTRATOR = 'not_docker'
         test_monitor.client_runtime.get_client_version.return_value = '1.0'
         test_monitor.update_data()
         self.assertEqual(test_monitor.data.kubelet_version, '1.0')

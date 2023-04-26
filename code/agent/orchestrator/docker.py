@@ -23,7 +23,8 @@ class DockerClient(ContainerRuntimeClient):
     """
 
     CLIENT_NAME = 'Docker'
-    ORCHESTRATOR_COE = 'docker'
+    ORCHESTRATOR = 'docker'
+    ORCHESTRATOR_COE = 'swarm'
 
     infra_service_endpoint_keyname = 'swarm-endpoint'
     join_token_manager_keyname = 'swarm-token-manager'

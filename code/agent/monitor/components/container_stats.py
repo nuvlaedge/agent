@@ -146,7 +146,7 @@ class ContainerStatsMonitor(Monitor):
         self.refresh_container_info()
         version: str = self.client_runtime.get_client_version()
 
-        if self.client_runtime.ORCHESTRATOR_COE == 'docker':
+        if self.client_runtime.ORCHESTRATOR == 'docker':
             self.data.docker_server_version = version
         else:
             self.data.kubelet_version = version

@@ -21,7 +21,7 @@ class CoeFactoryTestCase(unittest.TestCase):
         container_runtime = get_container_runtime()
         self.assertIsInstance(container_runtime, DockerClient,
                               'Failed to infer underlying K8s COE and return DockerClient')
-        self.assertEqual(container_runtime.ORCHESTRATOR_COE, 'docker')
+        self.assertEqual(container_runtime.ORCHESTRATOR, 'docker')
 
         # Kubernetes
         os.environ['KUBERNETES_SERVICE_HOST'] = 'something'
@@ -29,4 +29,4 @@ class CoeFactoryTestCase(unittest.TestCase):
         container_runtime = get_container_runtime()
         self.assertIsInstance(container_runtime, KubernetesClient,
                               'Failed to infer underlying K8s COE and return KubernetesClient')
-        self.assertEqual(container_runtime.ORCHESTRATOR_COE, 'kubernetes')
+        self.assertEqual(container_runtime.ORCHESTRATOR, 'kubernetes')

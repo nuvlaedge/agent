@@ -13,6 +13,7 @@ class ContainerRuntimeClient(ABC):
     """
 
     CLIENT_NAME: str
+    ORCHESTRATOR: str
     ORCHESTRATOR_COE: str
 
     hostfs = "/rootfs"

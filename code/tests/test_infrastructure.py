@@ -235,11 +235,11 @@ class InfrastructureTestCase(unittest.TestCase):
     def test_compute_api_is_running(self, mock_get):
 
         # only works for non-k8s installations
-        self.obj.container_runtime.ORCHESTRATOR_COE = 'kubernetes'
+        self.obj.container_runtime.ORCHESTRATOR = 'kubernetes'
         self.assertFalse(self.obj.compute_api_is_running(''),
                          'Tried to check compute-api for a Kubernetes installation')
 
-        self.obj.container_runtime.ORCHESTRATOR_COE = 'docker'
+        self.obj.container_runtime.ORCHESTRATOR = 'docker'
         # if compute-api is running, return True
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'

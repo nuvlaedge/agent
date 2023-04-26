@@ -310,7 +310,7 @@ class Infrastructure(NuvlaEdgeCommon):
         :return: True or False
         """
 
-        if self.container_runtime.ORCHESTRATOR_COE not in ['docker', 'swarm']:
+        if self.container_runtime.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
         if not container_api_port:

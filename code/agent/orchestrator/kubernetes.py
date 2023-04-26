@@ -13,7 +13,8 @@ class KubernetesClient(ContainerRuntimeClient):
     """
 
     CLIENT_NAME = 'Kubernetes'
-    ORCHESTRATOR_COE = 'kubernetes'
+    ORCHESTRATOR = 'kubernetes'
+    ORCHESTRATOR_COE = ORCHESTRATOR
 
     infra_service_endpoint_keyname = 'kubernetes-endpoint'
     join_token_manager_keyname = 'kubernetes-token-manager'
