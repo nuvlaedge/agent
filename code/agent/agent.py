@@ -263,13 +263,20 @@ class Agent:
             2. Running pull jobs
         """
 
-        def is_thread_creation_needed(name, thread):
+        def log(level, message, *args, **kwargs):
+            self.logger.log(level, message.format(*args, **kwargs))
+
+        def is_thread_creation_needed(name, thread,
+                                      log_not_exist=(logging.INFO, 'Creating {} thread'),
+                                      log_not_alive=(logging.WARNING, 'Recreating {} thread because it is not alive'),
+                                      log_alive=(logging.DEBUG, 'Thread {} is alive'),
+                                      *args, **kwargs):
             if not thread:
-                self.logger.info(f'Creating {name} thread')
+                log(*log_not_exist, name, *args, **kwargs)
             elif not thread.is_alive():
-                self.logger.warning(f'Recreating {name} thread because it is not alive')
+                log(*log_not_alive, name, *args, **kwargs)
             else:
-                self.logger.debug(f'Thread {name} is alive')
+                log(*log_alive, name, *args, **kwargs)
                 return False
             return True
 
@@ -278,7 +285,9 @@ class Agent:
             th.start()
             return th
 
-        if is_thread_creation_needed('Telemetry', self.telemetry_thread):
+        if is_thread_creation_needed('Telemetry', self.telemetry_thread,
+                                     log_not_alive=(logging.DEBUG,'Recreating {} thread.'),
+                                     log_alive=(logging.WARNING,'Thread {} taking too long to complete')):
             self.telemetry_thread = create_start_thread(name='Telemetry',
                                                         target=self.telemetry.update_status)
 
