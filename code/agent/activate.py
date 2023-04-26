@@ -11,10 +11,11 @@ import requests
 
 from nuvlaedge.common.constant_files import FILE_NAMES
 
-from agent.common import NuvlaEdgeCommon
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator import ContainerRuntimeClient
 
 
-class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Activate(NuvlaEdgeCommon):
     """ The Activate class, which includes all methods and
     properties necessary to activate a NuvlaEdge
 
@@ -22,10 +23,15 @@ class Activate(NuvlaEdgeCommon.NuvlaEdgeCommon):
         data_volume: path to shared NuvlaEdge data
     """
 
-    def __init__(self, data_volume):
-        """ Constructs an Activation object """
+    def __init__(self,
+                 container_runtime: ContainerRuntimeClient,
+                 data_volume: str):
+        """
+        Constructs an Activation object
+        """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(container_runtime=container_runtime,
+                         shared_data_volume=data_volume)
 
         self.activate_logger: logging.Logger = logging.getLogger(__name__)
         self.user_info = {}

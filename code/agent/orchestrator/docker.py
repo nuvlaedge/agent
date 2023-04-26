@@ -1,16 +1,16 @@
 import base64
-import json
 import logging
 import os
-
 import socket
+from subprocess import run, PIPE, TimeoutExpired
+from typing import List, Optional
+
+import docker
+import requests
 import yaml
 
-from subprocess import run, PIPE, TimeoutExpired
-
 from agent.common import util
-from agent.orchestrator import ContainerRuntimeClient, ORCHESTRATOR_COE
-import docker
+from agent.orchestrator import ContainerRuntimeClient
 
 
 class InferIPError(Exception):
@@ -22,15 +22,19 @@ class DockerClient(ContainerRuntimeClient):
     Docker client
     """
 
-    def __init__(self, host_rootfs, host_home):
-        super().__init__(host_rootfs, host_home)
+    CLIENT_NAME = 'Docker'
+    ORCHESTRATOR = 'docker'
+    ORCHESTRATOR_COE = 'swarm'
+
+    infra_service_endpoint_keyname = 'swarm-endpoint'
+    join_token_manager_keyname = 'swarm-token-manager'
+    join_token_worker_keyname = 'swarm-token-worker'
+
+    def __init__(self):
+        super().__init__()
         self.logger: logging.Logger = logging.getLogger(__name__)
-        self.CLIENT_NAME: str = 'Docker'
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
-        self.infra_service_endpoint_keyname = 'swarm-endpoint'
-        self.join_token_manager_keyname = 'swarm-token-manager'
-        self.join_token_worker_keyname = 'swarm-token-worker'
         self.data_gateway_name = "data-gateway"
 
     def get_client_version(self) -> str:
@@ -77,7 +81,7 @@ class DockerClient(ContainerRuntimeClient):
 
             return {
                 'cluster-id': cluster_id,
-                'cluster-orchestrator': ORCHESTRATOR_COE,
+                'cluster-orchestrator': self.ORCHESTRATOR_COE,
                 'cluster-managers': managers,
                 'cluster-workers': workers
             }
@@ -86,7 +90,6 @@ class DockerClient(ContainerRuntimeClient):
 
     def get_api_ip_port(self):
         node_info = self.get_node_info()
-        compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 
         ip = node_info.get("Swarm", {}).get("NodeAddr")
         if not ip:
@@ -101,9 +104,9 @@ class DockerClient(ContainerRuntimeClient):
                             continue
                         hex_ip = cols[1].split(':')[0]
                         ip = f'{int(hex_ip[len(hex_ip)-2:],16)}.' \
-                            f'{int(hex_ip[len(hex_ip)-4:len(hex_ip)-2],16)}.' \
-                            f'{int(hex_ip[len(hex_ip)-6:len(hex_ip)-4],16)}.' \
-                            f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
+                             f'{int(hex_ip[len(hex_ip)-4:len(hex_ip)-2],16)}.' \
+                             f'{int(hex_ip[len(hex_ip)-6:len(hex_ip)-4],16)}.' \
+                             f'{int(hex_ip[len(hex_ip)-8:len(hex_ip)-6],16)}'
                         break
                 if not ip:
                     raise InferIPError('Cannot infer IP')
@@ -113,14 +116,15 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, compute_api_port
+                    return None, util.compute_api_port
 
-        return ip, compute_api_port
+        return ip, util.compute_api_port
 
     def has_pull_job_capability(self):
         try:
             container = self.client.containers.get(self.job_engine_lite_component)
         except docker.errors.NotFound:
+            logging.warning(f"Container {self.job_engine_lite_component} not found. Reason: {str(e)}")
             return False
         except Exception as e:
             logging.error(f"Unable to search for container {self.job_engine_lite_component}. Reason: {str(e)}")
@@ -131,8 +135,10 @@ class DockerClient(ContainerRuntimeClient):
                 self.job_engine_lite_image = container.attrs['Config']['Image']
                 return True
         except (AttributeError, KeyError):
+            logging.exception(f'Failed to get job-engine-lite image')
             return False
 
+        logging.info(f'job-engine-lite not paused')
         return False
 
     def get_node_labels(self):
@@ -151,7 +157,8 @@ class DockerClient(ContainerRuntimeClient):
         vpn_client_running = it_vpn_container.status == 'running'
         return vpn_client_running
 
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
+        ssh_folder = '/tmp/ssh'
         cmd = "sh -c 'echo -e \"${SSH_PUB}\" >> %s'" % f'{ssh_folder}/authorized_keys'
 
         self.client.containers.run('alpine',
@@ -161,7 +168,7 @@ class DockerClient(ContainerRuntimeClient):
                                        'SSH_PUB': ssh_pub_key
                                    },
                                    volumes={
-                                       f'{self.host_home}/.ssh': {
+                                       f'{host_home}/.ssh': {
                                            'bind': ssh_folder
                                        }})
 
@@ -205,23 +212,41 @@ class DockerClient(ContainerRuntimeClient):
                    nuvla_endpoint_insecure=False, api_key=None, api_secret=None,
                    docker_image=None):
         # Get the compute-api network
+        local_net = None
         try:
             compute_api = self.client.containers.get(util.compose_project_name + '-compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
-        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError,
-                TimeoutError):
-            logging.error(f'Cannot infer compute-api network for local job {job_id}')
+        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
+            logging.error(f'Cannot infer compute-api network for local job {job_id}: {e}')
             return
 
+        # Get environment variables and volumes from job-engine-lite container
+        volumes = {
+            '/var/run/docker.sock': {
+                'bind': '/var/run/docker.sock',
+                'mode': 'rw'
+            }
+        }
+        volumes_from = []
+        environment = []
+        job_engine_lite_container_name = util.compose_project_name + '-job-engine-lite'
+        try:
+            job_engine_lite = self.client.containers.get(job_engine_lite_container_name)
+            environment = job_engine_lite.attrs['Config']['Env']
+            volumes = []
+            volumes_from = [job_engine_lite_container_name]
+        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
+            logging.warning(f'Cannot get env and volumes from job-engine-lite ({job_id}): {e}')
+
         cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
-            f'--api-key {api_key} ' \
-            f'--api-secret {api_secret} ' \
-            f'--job-id {job_id}'
+              f'--api-key {api_key} ' \
+              f'--api-secret {api_secret} ' \
+              f'--job-id {job_id}'
 
         if nuvla_endpoint_insecure:
             cmd = f'{cmd} --api-insecure'
 
-        logging.info(f'Starting job {job_id} inside {self.job_engine_lite_image} container, with command: "{cmd}"')
+        logging.info(f'Starting job {job_id} on {self.job_engine_lite_image} image, with command: "{cmd}"')
 
         img = docker_image if docker_image else self.job_engine_lite_image
         self.client.containers.run(img,
@@ -231,12 +256,9 @@ class DockerClient(ContainerRuntimeClient):
                                    hostname=job_execution_id,
                                    remove=True,
                                    network=local_net,
-                                   volumes={
-                                       '/var/run/docker.sock': {
-                                           'bind': '/var/run/docker.sock',
-                                           'mode': 'ro'
-                                       }
-                                   })
+                                   volumes=volumes,
+                                   volumes_from=volumes_from,
+                                   environment=environment)
 
         try:
             # for some jobs (like clustering), it is better if the job container is also
@@ -244,8 +266,7 @@ class DockerClient(ContainerRuntimeClient):
             # in the NuvlaEdge
             self.client.api.connect_container_to_network(job_execution_id, 'bridge')
         except docker.errors.APIError as e:
-            logging.warning(f'Could not attach {job_execution_id} to bridge network: '
-                            f'{str(e)}')
+            logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
 
     @staticmethod
     def collect_container_metrics_cpu(container_stats: dict) -> float:
@@ -358,6 +379,9 @@ class DockerClient(ContainerRuntimeClient):
         tries = 0
         max_tries = 3
 
+        if 'ignore_removed' not in kwargs:
+            kwargs['ignore_removed'] = True
+
         while True:
             try:
                 return self.client.containers.list(*args, **kwargs)
@@ -367,9 +391,9 @@ class DockerClient(ContainerRuntimeClient):
                 if tries >= max_tries:
                     raise
 
-    def get_containers_stats(self, *args, **kwargs):
+    def get_containers_stats(self):
         containers_stats = []
-        for container in self.list_containers(*args, **kwargs):
+        for container in self.list_containers():
             try:
                 containers_stats.append((container, container.stats(stream=False)))
             except Exception as e:
@@ -410,34 +434,87 @@ class DockerClient(ContainerRuntimeClient):
 
         return containers_metrics
 
-    def get_installation_parameters(self, search_label):
-        nuvlaedge_containers = self.list_containers(filters={'label': search_label})
-
+    @staticmethod
+    def _get_container_id_from_cgroup():
         try:
-            myself = self.client.containers.get(socket.gethostname())
-        except docker.errors.NotFound:
-            logging.error(f'Cannot find this container by hostname: {socket.gethostname()}. Cannot proceed')
+            with open('/proc/self/cgroup', 'r') as f:
+                return f.read().split('/')[-1].strip()
+        except Exception as e:
+            logging.debug(f'Failed to get container id from cgroup: {e}')
+
+    @staticmethod
+    def _get_container_id_from_cpuset():
+        try:
+            with open('/proc/1/cpuset', 'r') as f:
+                return f.read().split('/')[-1].strip()
+        except Exception as e:
+            logging.debug(f'Failed to get container id from cpuset: {e}')
+
+    @staticmethod
+    def _get_container_id_from_hostname():
+        try:
+            return socket.gethostname().strip()
+        except Exception as e:
+            logging.debug(f'Failed to get container id from hostname: {e}')
+
+    def get_current_container(self):
+        get_id_functions = [self._get_container_id_from_hostname,
+                            self._get_container_id_from_cpuset,
+                            self._get_container_id_from_cgroup]
+        for get_id_function in get_id_functions:
+            container_id = get_id_function()
+            if container_id:
+                try:
+                    return self.client.containers.get(container_id)
+                except Exception as e:
+                    logging.debug(f'Failed to get container with id "{container_id}": {e}')
+            else:
+                logging.debug(f'No container id found for "{get_id_function.__name__}"')
+        raise RuntimeError('Failed to get current container')
+
+    def get_current_container_id(self) -> str:
+        return self.get_current_container().id
+
+    @staticmethod
+    def get_compose_project_name_from_labels(labels, default='nuvlaedge'):
+        return labels.get('com.docker.compose.project', default)
+
+    @staticmethod
+    def get_config_files_from_labels(labels) -> List[str]:
+        return labels.get('com.docker.compose.project.config_files', '').split(',')
+
+    @staticmethod
+    def get_working_dir_from_labels(labels) -> List[str]:
+        return labels.get('com.docker.compose.project.working_dir', '')
+
+    def get_installation_parameters(self):
+        try:
+            myself = self.get_current_container()
+        except RuntimeError:
+            message = f'Failed to find the current container by id. Cannot proceed'
+            logging.error(message)
             raise
 
-        config_files = myself.labels.get('com.docker.compose.project.config_files', '').split(',')
         last_update = myself.attrs.get('Created', '')
-        working_dir = myself.labels.get('com.docker.compose.project.working_dir')
-        project_name = myself.labels.get('com.docker.compose.project')
+        working_dir = self.get_working_dir_from_labels(myself.labels)
+        config_files = self.get_config_files_from_labels(myself.labels)
+        project_name = self.get_compose_project_name_from_labels(myself.labels, None)
+
         environment = []
         for env_var in myself.attrs.get('Config', {}).get('Env', []):
             if env_var.split('=')[0] in self.ignore_env_variables:
                 continue
-
             environment.append(env_var)
 
+        nuvlaedge_containers = self.get_all_nuvlaedge_containers()
         nuvlaedge_containers = list(filter(lambda x: x.id != myself.id, nuvlaedge_containers))
         for container in nuvlaedge_containers:
             c_labels = container.labels
-            if c_labels.get('com.docker.compose.project', '') == project_name and \
-                    c_labels.get('com.docker.compose.project.working_dir', '') == working_dir:
+            if self.get_compose_project_name_from_labels(c_labels, '') == project_name and \
+                    self.get_working_dir_from_labels(c_labels) == working_dir:
                 if container.attrs.get('Created', '') > last_update:
                     last_update = container.attrs.get('Created', '')
-                    config_files = c_labels.get('com.docker.compose.project.config_files', '').split(',')
+                    config_files = self.get_config_files_from_labels(c_labels)
                 environment += container.attrs.get('Config', {}).get('Env', [])
 
         unique_config_files = list(filter(None, set(config_files)))
@@ -508,22 +585,22 @@ class DockerClient(ContainerRuntimeClient):
 
         return enabled_plugins
 
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         try:
-            infra_service = self.infer_if_additional_coe_exists(
-                fallback_address=api_endpoint.replace('https://', '').split(':')[0])
+            fallback_address = api_endpoint.replace('https://', '').split(':')[0]
+            infra_service = self.infer_if_additional_coe_exists(fallback_address=fallback_address)
         except (IndexError, ConnectionError):
             # this is a non-critical step, so we should never fail because of it
             infra_service = {}
+
         if api_endpoint:
             infra_service["swarm-endpoint"] = api_endpoint
 
-            if tls_keys:
-                infra_service["swarm-client-ca"] = tls_keys[0]
-                infra_service["swarm-client-cert"] = tls_keys[1]
-                infra_service["swarm-client-key"] = tls_keys[2]
-
-            return infra_service
+            if client_ca and client_cert and client_key:
+                infra_service["swarm-client-ca"] = client_ca
+                infra_service["swarm-client-cert"] = client_cert
+                infra_service["swarm-client-key"] = client_key
 
         return infra_service
 
@@ -640,8 +717,24 @@ class DockerClient(ContainerRuntimeClient):
 
         return k8s_cluster_info
 
-    def get_all_nuvlaedge_components(self) -> list:
-        nuvlaedge_containers = self.list_containers(filters={'label': 'nuvlaedge.component=True'},
-                                                    all=True)
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> Optional[str]:
+        try:
+            current_container = self.get_current_container()
+            return self.get_compose_project_name_from_labels(current_container.labels, None)
+        except Exception as e:
+            self.logger.warning(f'Failed to get docker compose project name: {e}')
+        return default_project_name
 
-        return list(map(lambda y: y.name, nuvlaedge_containers))
+    def get_all_nuvlaedge_containers(self):
+        filter_labels = [util.base_label]
+        project_name = self.get_nuvlaedge_project_name()
+
+        if project_name:
+            filter_labels.append(f'com.docker.compose.project={project_name}')
+
+        filters = {'label': filter_labels}
+
+        return self.list_containers(filters=filters, all=True)
+
+    def get_all_nuvlaedge_components(self) -> list:
+        return [c.name for c in self.get_all_nuvlaedge_containers()]

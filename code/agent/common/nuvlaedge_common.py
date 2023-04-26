@@ -8,104 +8,95 @@ List of common attributes for all classes
 import json
 import logging
 import os
-import requests
-import signal
 import string
-import time
 
-from contextlib import contextmanager
 from subprocess import PIPE, Popen
 from nuvla.api import Api
 from nuvlaedge.common.constant_files import FILE_NAMES
 
 from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
-from agent.orchestrator.docker import DockerClient
-from agent.orchestrator.kubernetes import KubernetesClient
-
-KUBERNETES_SERVICE_HOST = os.getenv('KUBERNETES_SERVICE_HOST')
-if KUBERNETES_SERVICE_HOST:
-    from kubernetes import client, config
-    ORCHESTRATOR = 'kubernetes'
-    ORCHESTRATOR_COE = ORCHESTRATOR
-else:
-    import docker
-    ORCHESTRATOR = 'docker'
-    ORCHESTRATOR_COE = 'swarm'
 
 
-def raise_timeout(signum, frame):
-    raise TimeoutError
-
-
-@contextmanager
-def timeout(time):
-    # Register a function to raise a TimeoutError on the signal.
-    signal.signal(signal.SIGALRM, raise_timeout)
-    # Schedule the signal to be sent after ``time``.
-    signal.alarm(time)
-
-    try:
-        yield
-    except TimeoutError:
-        raise
-    finally:
-        # Unregister the signal so it won't be triggered
-        # if the timeout is not reached.
-        signal.signal(signal.SIGALRM, signal.SIG_IGN)
-
-
-class OrchestratorException(Exception):
-    ...
-
-
-# --------------------
 class NuvlaEdgeCommon:
-    """ Common set of methods and variables for the NuvlaEdge agent
+    """
+    Common set of methods and variables for the NuvlaEdge agent
     """
 
-    def __init__(self, shared_data_volume="/srv/nuvlaedge/shared"):
-        """ Constructs an Infrastructure object, with a status placeholder
+    docker_socket_file = '/var/run/docker.sock'
+    nuvla_endpoint_key = 'NUVLA_ENDPOINT'
+    nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
+    nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
+
+    ssh_pub_key = os.getenv('NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY')
+    vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
+    nuvlaedge_engine_version = util.str_if_value_or_none(
+        os.getenv('NUVLAEDGE_ENGINE_VERSION'))
+
+    swarm_manager_token_file = "swarm-manager-token"
+    swarm_worker_token_file = "swarm-worker-token"
+
+    commissioning_file = ".commission"
+    status_file = ".status"
+    status_notes_file = ".status_notes"
+    ip_file = ".ip"
+    ca = "ca.pem"
+    cert = "cert.pem"
+    key = "key.pem"
+    context = ".context"
+
+    mqtt_broker_port = 1883
+    mqtt_broker_keep_alive = 90
+
+    def __init__(self, container_runtime: ContainerRuntimeClient,
+                 shared_data_volume: str="/srv/nuvlaedge/shared"):
+        """
+        Constructs an Infrastructure object, with a status placeholder
 
         :param shared_data_volume: shared volume target path
         """
         self.logger: logging.Logger = logging.getLogger(__name__)
 
+        self.hostfs = container_runtime.hostfs
         self.data_volume = shared_data_volume
-        self.docker_socket_file = '/var/run/docker.sock'
-        self.hostfs = "/rootfs"
-        self.ssh_pub_key = os.environ.get('NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY')
+        self.container_runtime: ContainerRuntimeClient = container_runtime
+        self.mqtt_broker_host = self.container_runtime.data_gateway_name
 
+        self.host_user_home_file = f'{self.data_volume}/.host_user_home'
         self.installation_home = self.set_installation_home(FILE_NAMES.HOST_USER_HOME)
 
-        self.nuvla_endpoint_key = 'NUVLA_ENDPOINT'
-        self.nuvla_endpoint_insecure_key = 'NUVLA_ENDPOINT_INSECURE'
-
+        self.nuvlaedge_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.nuvla_endpoint, self.nuvla_endpoint_insecure = self.set_nuvla_endpoint()
         # Also store the Nuvla connection details for future restarts
         conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n" \
                f"{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
         self.save_nuvla_configuration(FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION, conf)
 
-        self.container_runtime = self.set_runtime_client_details()
-        self.mqtt_broker_host = self.container_runtime.data_gateway_name
-        self.swarm_manager_token_file = "swarm-manager-token"
-        self.swarm_worker_token_file = "swarm-worker-token"
+        self.activation_flag = "{}/.activated".format(self.data_volume)
+        self.nuvlaedge_status_file = "{}/.nuvlabox-status".format(self.data_volume)
 
+        self.ip_geolocation_file = "{}/.ipgeolocation".format(self.data_volume)
+        self.vulnerabilities_file = "{}/vulnerabilities".format(self.data_volume)
         self.previous_net_stats_file = f"{self.data_volume}/.previous_net_stats"
 
-        self.vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
+        self.vpn_folder = "{}/vpn".format(self.data_volume)
+        if not os.path.isdir(self.vpn_folder):
+            os.makedirs(self.vpn_folder)
+
+        self.vpn_ip_file = "{}/ip".format(self.vpn_folder)
+        self.vpn_credential = "{}/vpn-credential".format(self.vpn_folder)
+        self.vpn_client_conf_file = "{}/nuvlaedge.conf".format(self.vpn_folder)
+        self.vpn_key_file = f'{self.vpn_folder}/nuvlaedge-vpn.key'
+        self.vpn_csr_file = f'{self.vpn_folder}/nuvlaedge-vpn.csr'
         self.vpn_config_extra = self.set_vpn_config_extra()
 
-        self.mqtt_broker_port = 1883
-        self.mqtt_broker_keep_alive = 90
+        self.peripherals_dir = "{}/.peripherals".format(self.data_volume)
 
         self.swarm_node_cert = f"{self.hostfs}/var/lib/docker/swarm/certificates/swarm-node.crt"
-        self.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
+
         self.nuvlaedge_id = self.set_nuvlaedge_id()
 
-        nbe_version = os.getenv('NUVLAEDGE_ENGINE_VERSION')
-        self.nuvlaedge_engine_version = str(nbe_version) if nbe_version else None
+        self.container_stats_json_file = f"{self.data_volume}/docker_stats.json"
 
     def set_vpn_config_extra(self) -> str:
         """
@@ -192,21 +183,6 @@ class NuvlaEdgeCommon:
         if not os.path.exists(file_path):
             util.atomic_write(file_path, content)
 
-    def set_runtime_client_details(self) -> ContainerRuntimeClient:
-        """
-        Sets the right container runtime client based on the underlying orchestrator, and
-        sets the Data Gateway name
-        :return: instance of a ContainerRuntimeClient
-        """
-        if ORCHESTRATOR == 'kubernetes':
-            return KubernetesClient(self.hostfs, self.installation_home)
-        else:
-            if os.path.exists(self.docker_socket_file):
-                return DockerClient(self.hostfs, self.installation_home)
-            else:
-                raise OrchestratorException(f'Orchestrator is "{ORCHESTRATOR}", but file '
-                                            f'{self.docker_socket_file} is not present')
-
     def _get_nuvlaedge_id_from_environment(self):
         nuvlaedge_id = os.getenv('NUVLAEDGE_UUID', os.getenv('NUVLABOX_UUID'))
         if not nuvlaedge_id:
@@ -258,6 +234,7 @@ class NuvlaEdgeCommon:
         env_nuvlaedge_id = self._get_nuvlaedge_id_from_environment()
         session_nuvlaedge_id = self._get_nuvlaedge_id_from_api_session()
         context_nuvlaedge_id = self._get_nuvlaedge_id_from_context_file()
+
         if (context_nuvlaedge_id and env_nuvlaedge_id
                 and get_uuid(context_nuvlaedge_id) != get_uuid(env_nuvlaedge_id)):
             raise RuntimeError(f'You are trying to install a new NuvlaEdge {env_nuvlaedge_id} even though a '
@@ -392,7 +369,6 @@ class NuvlaEdgeCommon:
         try:
             with FILE_NAMES.STATUS_FILE.open('r') as file:
                 operational_status = file.readlines()[0].replace('\n', '').upper()
-
         except FileNotFoundError:
             self.logger.warning("Operational status could not be found")
             operational_status = "UNKNOWN"
@@ -479,7 +455,7 @@ ${vpn_extra_config}
 """)
 
         util.atomic_write(FILE_NAMES.VPN_CLIENT_CONF_FILE, tpl.substitute(values))
-
+    # TODO: Move to its new place (infrastructure?)
     def prepare_vpn_certificates(self):
         if not FILE_NAMES.VPN_FOLDER.exists():
             FILE_NAMES.VPN_FOLDER.mkdir()

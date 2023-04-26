@@ -1,4 +1,5 @@
 # Changelog
+
 ## Unreleased
 ### Added
  - Integration of nuvlaedge-common library
@@ -11,16 +12,26 @@
  - File definitions are no longer class attributes but constants defined in nuvlaedge-common library
  - UnitTests adapted to new nuvlaedge-common library
 
+## [2.10.0] - 2023-04-26
+### Added
+### Changed
+ - Remove Agent API
+ - Refactor Agent
+ - Ensure every requests calls have a timeout
+ - Recommission VPN if OpenVPN config is not available and do nothing is VPN client container doesn't exist
+ - Do not wait on system-manager to Activate the NuvlaEdge
+ - Explicit container naming based on project name
+ - Bugfix of install_ssh_key and get_working_dir_from_labels
+ - Improved test of Compute API
+ - Job executor containers: copy environment variables and volumes (bind mounts) from the job-engine-lite container 
+ - Improved and fixed retrieval of project name and NuvlaEdge containers.
+
 ## [2.9.6] - 2022-12-07
 ### Added
 ### Changed
  - Telemetry: update network/interfaces to a list of dict
  - (re)write files in an atomic way
  - NuvlaEdgeCommon: refactor set_nuvlaedge_id() and use credential alternatively
-
-## Unreleased
-### Added
-### Changed
 
 ## [2.9.5] - 2022-11-16
 ### Added 
@@ -53,6 +64,22 @@
 ### Added
 ### Changed
  - Migration to NuvlaEdge
+
+## [2.8.8] - 2023-01-25
+### Added
+### Changed
+ - Ensure every requests calls have a timeout
+ 
+## [2.8.7] - 2022-12-07
+### Added
+### Changed
+ - (re)write files in an atomic way
+ - NuvlaBoxCommon: refactor set_nuvlabox_id() and use credential alternatively
+ 
+## [2.8.6] - 2022-12-05
+### Added
+### Changed
+ - Telemetry: update network/interfaces to a list of dict
 
 ## [2.8.5] - 2022-11-16
 ### Added 

@@ -14,16 +14,14 @@ from argparse import ArgumentParser
 from threading import Event, Thread
 from typing import Union, Dict
 
-import requests
-
-import agent.api_endpoint as endpoint
 from agent import Agent, Activate, Infrastructure
-from agent.common import NuvlaEdgeCommon
 
 
 # Nuvlaedge globals
 network_timeout: int = 10
 refresh_interval: int = 30
+
+root_logger: logging.Logger = logging.getLogger()
 
 
 def log_threads_stackstraces():
@@ -80,47 +78,6 @@ def configure_root_logger(logger: logging.Logger, debug: bool):
     log.setLevel(logging.WARNING)
 
 
-def configure_endpoint_api(agent: Agent) -> Thread:
-    """
-    Configures the Flask API app  endpoint with the agent components.
-
-    Args:
-        agent: Main agent class. This class has to be initialized before getting here
-    """
-    endpoint.app.config['telemetry'] = agent.telemetry
-    endpoint.app.config['infrastructure'] = agent.infrastructure
-    it_thread: Thread = Thread(target=endpoint.app.run,
-                               kwargs={"host": "0.0.0.0",
-                                       "port": "80",
-                                       "debug": True,
-                                       'use_reloader': False},
-                               daemon=True)
-    it_thread.start()
-
-    with NuvlaEdgeCommon.timeout(10):
-        root_logger.info('Waiting for API to be ready...')
-        wait_for_api_ready()
-
-    return it_thread
-
-
-def wait_for_api_ready():
-    """
-    Waits in a loop for the API to be ready
-    :return:
-    """
-    while True:
-        try:
-            req = requests.get('http://localhost/api/healthcheck', timeout=10)
-            req.raise_for_status()
-            if req.status_code == 200:
-                break
-        except (requests.HTTPError, requests.exceptions.RequestException):
-            time.sleep(1)
-
-    root_logger.info('NuvlaEdge Agent has been initialized.')
-
-
 def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
                     infra: Infrastructure):
     """
@@ -135,8 +92,11 @@ def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
     global refresh_interval
 
     nuvlaedge_resource: Dict = activator.get_nuvlaedge_info()
+
     if nuvlaedge_resource.get('state', '').startswith('DECOMMISSION'):
         exit_flag = False
+
+    vpn_server_id = nuvlaedge_resource.get("vpn-server-id")
 
     if nb_updated_date != nuvlaedge_resource['updated'] and exit_flag:
         refresh_interval = nuvlaedge_resource['refresh-interval']
@@ -144,10 +104,12 @@ def preflight_check(activator: Activate, exit_flag: bool, nb_updated_date: str,
                          f'{refresh_interval}')
 
         old_nuvlaedge_resource = activator.create_nb_document_file(nuvlaedge_resource)
-        activator.vpn_commission_if_needed(nuvlaedge_resource, old_nuvlaedge_resource)
+
+        if vpn_server_id != old_nuvlaedge_resource.get("vpn-server-id"):
+            root_logger.info(f'VPN Server ID has been added/changed in Nuvla: {vpn_server_id}')
+            infra.commission_vpn()
 
     # if there's a mention to the VPN server, then watch the VPN credential
-    vpn_server_id = nuvlaedge_resource.get("vpn-server-id")
     if vpn_server_id:
         infra.watch_vpn_credential(vpn_server_id)
 
@@ -175,16 +137,10 @@ def main():
     watchdog_thread: Union[Thread, None] = None
     nuvlaedge_info_updated_date: str = ''
 
-    # Setup Endpoint API
-    api_thread: Thread = configure_endpoint_api(main_agent)
-
     while agent_exit_flag:
         # Time Start
         start_cycle: float = time.time()
         # ----------------------- Main Agent functionality ------------------------------
-
-        if not api_thread or not api_thread.is_alive():
-            api_thread = configure_endpoint_api(main_agent)
 
         if not watchdog_thread or not watchdog_thread.is_alive():
             watchdog_thread = Thread(target=preflight_check,
@@ -216,7 +172,6 @@ if __name__ == '__main__':
     agent_parser: ArgumentParser = parse_arguments()
 
     # Logger for the root script
-    root_logger: logging.Logger = logging.getLogger()
     configure_root_logger(root_logger, agent_parser.parse_args().debug)
     root_logger.info('Configuring Agent class and main script')
 

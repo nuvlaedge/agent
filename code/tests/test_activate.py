@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from agent.activate import Activate
 import json
 import logging
 import mock
 import requests
 import unittest
 from tests.utils.fake import Fake, FakeNuvlaApi
-from agent.common.NuvlaEdgeCommon import NuvlaEdgeCommon
+
+from agent.activate import Activate
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator.factory import get_container_runtime
 
 from nuvlaedge.common.constant_files import FILE_NAMES
 
@@ -17,7 +19,7 @@ class ActivateTestCase(unittest.TestCase):
     def setUp(self):
         Activate.__bases__ = (Fake.imitate(NuvlaEdgeCommon),)
         self.shared_volume = "mock/path"
-        self.obj = Activate(self.shared_volume)
+        self.obj = Activate(get_container_runtime(), self.shared_volume)
         self.api_key_content = '{"api-key": "mock-key", "secret-key": "mock-secret"}'
         self.obj.nuvlaedge_id = "nuvlabox/fake-id"
         self.obj.nuvla_endpoint = "https://fake-nuvla.io"
@@ -112,21 +114,6 @@ class ActivateTestCase(unittest.TestCase):
         self.assertEqual(self.obj.create_nb_document_file({'foo': 'bar'}), old_nuvlaedge_context,
                          'Unable to get old NuvlaEdge context when creating new NB document')
         mock_write_to_file.assert_called_once()
-
-    @mock.patch.object(Activate, 'commission_vpn')
-    def test_vpn_commission_if_needed(self, mock_commission_vpn):
-        old_nuvlaedge_resource = {'id': self.obj.nuvlaedge_id}
-        new_nuvlaedge_resource = {**old_nuvlaedge_resource, **{'vpn-server-id': 'infrastructure-servive/fake-vpn'}}
-
-        mock_commission_vpn.return_value = None
-
-        # if 'vpn-server-id' has not changed, then VPN commissioning will not be invoked
-        self.obj.vpn_commission_if_needed(old_nuvlaedge_resource, old_nuvlaedge_resource)
-        mock_commission_vpn.assert_not_called()
-
-        # but if 'vpn-server-id' changes, then VPN commissioning takes place
-        self.obj.vpn_commission_if_needed(new_nuvlaedge_resource, old_nuvlaedge_resource)
-        mock_commission_vpn.assert_called_once()
 
     @mock.patch.object(Activate, 'api')
     def test_get_nuvlaedge_info(self, mock_api):

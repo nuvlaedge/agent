@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
-import pathlib
-
 import docker
 import json
 import logging
 import mock
+import pathlib
 import requests
 import unittest
+from threading import Thread
+
 import tests.utils.fake as fake
 from pathlib import Path
 from threading import Thread
 
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.infrastructure import Infrastructure
-import agent.common.NuvlaEdgeCommon as NuvlaEdgeCommon
+
 
 from nuvlaedge.common.constant_files import FILE_NAMES
+from agent.orchestrator.factory import get_container_runtime
+
 
 
 class InfrastructureTestCase(unittest.TestCase):
@@ -23,13 +27,16 @@ class InfrastructureTestCase(unittest.TestCase):
     atomic_write = 'agent.common.util.atomic_write'
 
     def setUp(self):
-        Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread),)
+        Infrastructure.__bases__ = (fake.Fake.imitate(NuvlaEdgeCommon, Thread),)
         with mock.patch('agent.infrastructure.Telemetry') as mock_telemetry:
             mock_telemetry.return_value = mock.MagicMock()
             self.shared_volume = "mock/path"
             self.refresh_period = 16    # change the default
-            self.obj = Infrastructure(self.shared_volume, mock_telemetry,
+            self.obj = Infrastructure(get_container_runtime(),
+                                      self.shared_volume,
+                                      mock_telemetry,
                                       refresh_period=self.refresh_period)
+
         # monkeypatch NuvlaEdgeCommon attributes
         self.obj.data_volume = self.shared_volume
         self.obj.swarm_manager_token_file = 'swarm_manager_token_file'
@@ -44,9 +51,11 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.nuvlaedge_status_file = '.status'
         self.obj.container_runtime.infra_service_endpoint_keyname = 'swarm-endpoint'
         self.obj.vpn_credential = 'vpn-credential'
-        self.obj.nuvlaedge_vpn_key_file = 'nuvlaedge-vpn.key'
-        self.obj.nuvlaedge_vpn_csr_file = 'nuvlaedge-vpn.csr'
+        self.obj.vpn_key_file = 'nuvlaedge-vpn.key'
+        self.obj.vpn_csr_file = 'nuvlaedge-vpn.csr'
         self.obj.vpn_client_conf_file = 'vpn-conf'
+        self.obj.vpn_interface_name = 'vpn'
+        self.obj.vpn_config_extra = ''
         self.obj.ssh_flag = '.ssh'
         self.obj.ssh_pub_key = 'ssh key from env'
         self.obj.nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
@@ -115,11 +124,11 @@ class InfrastructureTestCase(unittest.TestCase):
         # when failing to find or read any of the TLS key files, return None
         with mock.patch(self.agent_infrastructure_open) as mock_open:
             mock_open.side_effect = FileNotFoundError
-            self.assertIsNone(self.obj.get_tls_keys(),
-                              'Returned TLS keys even though their files could not be found')
+            self.assertFalse(self.obj.get_tls_keys(),
+                             'Returned TLS keys even though their files could not be found')
             mock_open.side_effect = IndexError
-            self.assertIsNone(self.obj.get_tls_keys(),
-                              'Returned TLS keys even though their files could not be read')
+            self.assertFalse(self.obj.get_tls_keys(),
+                             'Returned TLS keys even though their files could not be read')
 
         # when everything is ok, return the 3 files content as a tuple
         files_content = 'tls'
@@ -256,18 +265,17 @@ class InfrastructureTestCase(unittest.TestCase):
     @mock.patch('requests.get')
     def test_compute_api_is_running(self, mock_get):
 
-
         # only works for non-k8s installations
-        NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
-        self.assertFalse(self.obj.compute_api_is_running(),
+        self.obj.container_runtime.ORCHESTRATOR = 'kubernetes'
+        self.assertFalse(self.obj.compute_api_is_running(''),
                          'Tried to check compute-api for a Kubernetes installation')
 
-        NuvlaEdgeCommon.ORCHESTRATOR = 'docker'
+        self.obj.container_runtime.ORCHESTRATOR = 'docker'
         # if compute-api is running, return True
         compute_api_container = mock.MagicMock()
         compute_api_container.status = 'stopped'
         self.obj.container_runtime.client.containers.get.return_value = compute_api_container
-        self.assertFalse(self.obj.compute_api_is_running(),
+        self.assertFalse(self.obj.compute_api_is_running(''),
                          'Unable to detect that compute-api is not running')
 
         # if running, try to reach its API
@@ -275,12 +283,12 @@ class InfrastructureTestCase(unittest.TestCase):
         compute_api_container.status = 'running'
         self.obj.container_runtime.client.containers.get.return_value = compute_api_container
         mock_get.side_effect = TimeoutError
-        self.assertFalse(self.obj.compute_api_is_running(),
+        self.assertFalse(self.obj.compute_api_is_running(''),
                          'Assuming compute-api is running even though we could not assess that')
         mock_get.assert_called_once()
         # except if the exception is SSL related
         mock_get.side_effect = requests.exceptions.SSLError
-        self.assertTrue(self.obj.compute_api_is_running(),
+        self.assertTrue(self.obj.compute_api_is_running(''),
                         'Unable to detect that compute-api is running')
 
     def test_get_local_nuvlaedge_status(self):
@@ -510,7 +518,7 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_do_commission.reset_mock()     # reset counters
         self.obj.try_commission()
         self.obj.container_runtime.define_nuvla_infra_service.assert_called_once_with('https://1.1.1.1:5000',
-                                                                                      ('ca', 'cert', 'key'))
+                                                                                      'ca', 'cert', 'key')
 
         # given the aforementioned return_values, we expect the following commissioning payload to be sent and saved
         expected_payload = {

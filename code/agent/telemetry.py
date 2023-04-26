@@ -20,10 +20,12 @@ import psutil
 import paho.mqtt.client as mqtt
 from nuvlaedge.common.constant_files import FILE_NAMES
 
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import util
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.monitor.edge_status import EdgeStatus
 from agent.monitor.components import get_monitor, active_monitors
 from agent.monitor import Monitor
+from agent.orchestrator import ContainerRuntimeClient
 
 
 class MonitoredDict(dict):
@@ -62,7 +64,7 @@ class MonitoredDict(dict):
         logging.debug(f'{self.name} updated: {self}')
 
 
-class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
+class Telemetry(NuvlaEdgeCommon):
     """ The Telemetry class, which includes all methods and
     properties necessary to categorize a NuvlaEdge and send all
     data into the respective NuvlaEdge status at Nuvla
@@ -71,10 +73,18 @@ class Telemetry(NuvlaEdgeCommon.NuvlaEdgeCommon):
         data_volume: path to shared NuvlaEdge data
     """
 
-    def __init__(self, data_volume, nuvlaedge_status_id, excluded_monitors: str = ''):
-        """ Constructs an Telemetry object, with a status placeholder """
+    def __init__(self,
+                 container_runtime: ContainerRuntimeClient,
+                 data_volume: str,
+                 nuvlaedge_status_id: str,
+                 excluded_monitors: str = ''):
+        """
+        Constructs an Telemetry object, with a status placeholder
+        """
 
-        super().__init__(shared_data_volume=data_volume)
+        super().__init__(container_runtime=container_runtime,
+                         shared_data_volume=data_volume)
+
         self.logger: logging.Logger = logging.getLogger('Telemetry')
         self.nb_status_id = nuvlaedge_status_id
 

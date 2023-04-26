@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
-import kubernetes
 import logging
 import mock
-import unittest
-import tests.utils.fake as fake
+import os
 import sys
+import unittest
 
-import agent.common.NuvlaEdgeCommon as NuvlaEdgeCommon
+
+import kubernetes
+
+import tests.utils.fake as fake
+from agent.common import nuvlaedge_common
 from agent.orchestrator.kubernetes import KubernetesClient
 
 
@@ -22,8 +24,8 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             if 'agent.common.NuvlaEdgeCommon' in sys.modules:
                 del sys.modules['agent.common.NuvlaEdgeCommon']
 
-        self.NuvlaEdgeCommon = NuvlaEdgeCommon
-        self.NuvlaEdgeCommon.ORCHESTRATOR = 'kubernetes'
+        self.nuvlaedge_common = nuvlaedge_common
+        self.nuvlaedge_common.ORCHESTRATOR = 'kubernetes'
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
         os.environ.setdefault('MY_HOST_NODE_NAME', 'fake-host-node-name')
@@ -34,7 +36,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                     mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
                     mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
                     mock_k8s_config.return_value = True
-                    self.obj = KubernetesClient(self.hostfs, self.host_home)
+                    self.obj = KubernetesClient()
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -42,7 +44,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_init(self):
         # the K8s coe should be set
-        self.assertEqual(self.NuvlaEdgeCommon.ORCHESTRATOR, 'kubernetes',
+        self.assertEqual(self.nuvlaedge_common.ORCHESTRATOR, 'kubernetes',
                              'Unable to set Kubernetes as the COE')
         # client should be set as well
         self.assertIsNotNone(self.obj.client,
@@ -112,7 +114,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Expecting no k8s manager but got something else')
 
         # COE should also match with class' COE
-        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.NuvlaEdgeCommon.ORCHESTRATOR_COE,
+        self.assertEqual(self.obj.get_cluster_info()['cluster-orchestrator'], self.obj.ORCHESTRATOR_COE,
                          'Got the wrong cluster-orchestrator')
 
         # but if one of the nodes is a master, then we should get 1 worker and 1 manager
@@ -323,7 +325,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             'project-name': self.obj.namespace,
             'environment': []
         }
-        self.assertEqual(self.obj.get_installation_parameters(''), expected_output,
+        self.assertEqual(self.obj.get_installation_parameters(), expected_output,
                          'Got the wrong installation parameters when there are no deployments to list')
 
         # when there are deployments, get the env vars from them, skipping templated env vars
@@ -331,7 +333,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
             fake.mock_kubernetes_deployment(),
             fake.mock_kubernetes_deployment()
         ]
-        self.assertGreater(len(self.obj.get_installation_parameters('')['environment']), 0,
+        self.assertGreater(len(self.obj.get_installation_parameters()['environment']), 0,
                            'Expecting installation environment variables to be reported')
 
     def test_read_system_issues(self):
@@ -443,7 +445,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                            "kubernetes-client-cert", "kubernetes-client-key"]
 
         self.assertEqual(sorted(expected_fields),
-                         sorted(list(self.obj.define_nuvla_infra_service(api_endpoint, ["ca", "cert", "key"]).keys())),
+                         sorted(list(self.obj.define_nuvla_infra_service(api_endpoint, "ca", "cert", "key").keys())),
                          'Unable to define IS')
 
     def test_get_partial_decommission_attributes(self):
