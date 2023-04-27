@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+### Added
+ - Integration of nuvlaedge-common library
+ - PeripheralManager thread to consume from peripheral reports
+ - PeripheralManagerDB handler 
+ - Added nuvlaedge-common builder in the main.yml for testing
+ - Split on main.yml into jobs for readability
+### Changed
+ - Peripherals no longer communicate with API rest but via file
+ - File definitions are no longer class attributes but constants defined in nuvlaedge-common library
+ - UnitTests adapted to new nuvlaedge-common library
+
 ## [2.10.0] - 2023-04-26
 ### Added
 ### Changed

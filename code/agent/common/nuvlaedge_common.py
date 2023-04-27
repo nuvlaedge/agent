@@ -6,12 +6,14 @@ List of common attributes for all classes
 """
 
 import json
+import time
 import logging
 import os
 import string
 
 from subprocess import PIPE, Popen
 from nuvla.api import Api
+from nuvlaedge.common.constant_files import FILE_NAMES
 
 from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
@@ -35,15 +37,6 @@ class NuvlaEdgeCommon:
     swarm_manager_token_file = "swarm-manager-token"
     swarm_worker_token_file = "swarm-worker-token"
 
-    commissioning_file = ".commission"
-    status_file = ".status"
-    status_notes_file = ".status_notes"
-    ip_file = ".ip"
-    ca = "ca.pem"
-    cert = "cert.pem"
-    key = "key.pem"
-    context = ".context"
-
     mqtt_broker_port = 1883
     mqtt_broker_keep_alive = 90
 
@@ -62,14 +55,14 @@ class NuvlaEdgeCommon:
         self.mqtt_broker_host = self.container_runtime.data_gateway_name
 
         self.host_user_home_file = f'{self.data_volume}/.host_user_home'
-        self.installation_home = self.set_installation_home(self.host_user_home_file)
+        self.installation_home = self.set_installation_home(FILE_NAMES.HOST_USER_HOME)
 
         self.nuvlaedge_nuvla_configuration = f'{self.data_volume}/.nuvla-configuration'
         self.nuvla_endpoint, self.nuvla_endpoint_insecure = self.set_nuvla_endpoint()
         # Also store the Nuvla connection details for future restarts
         conf = f"{self.nuvla_endpoint_key}={self.nuvla_endpoint}\n" \
                f"{self.nuvla_endpoint_insecure_key}={str(self.nuvla_endpoint_insecure)}"
-        self.save_nuvla_configuration(self.nuvlaedge_nuvla_configuration, conf)
+        self.save_nuvla_configuration(FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION, conf)
 
         self.activation_flag = "{}/.activated".format(self.data_volume)
         self.nuvlaedge_status_file = "{}/.nuvlabox-status".format(self.data_volume)
@@ -104,7 +97,7 @@ class NuvlaEdgeCommon:
 
         :return: extra config as a string
         """
-        extra_config_file = f'{self.vpn_folder}/.extra_config'
+        extra_config_file = f'{FILE_NAMES.VPN_FOLDER}/.extra_config'
 
         extra_config = os.getenv('VPN_CONFIG_EXTRA')
         if extra_config is not None:
@@ -148,7 +141,7 @@ class NuvlaEdgeCommon:
         nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
         nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
         try:
-            with open(self.nuvlaedge_nuvla_configuration) as nuvla_conf:
+            with open(FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION) as nuvla_conf:
                 local_nuvla_conf = nuvla_conf.read().split()
 
             nuvla_endpoint_line = list(filter(lambda x: x.startswith(self.nuvla_endpoint_key), local_nuvla_conf))
@@ -162,7 +155,7 @@ class NuvlaEdgeCommon:
         except FileNotFoundError:
             self.logger.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaEdge Engine...')
         except IndexError as e:
-            self.logger.debug(f'Unable to read Nuvla configuration from {self.nuvlaedge_nuvla_configuration}: {str(e)}')
+            self.logger.debug(f'Unable to read Nuvla configuration from {FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION}: {str(e)}')
 
         while nuvla_endpoint_raw[-1] == "/":
             nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
@@ -208,11 +201,11 @@ class NuvlaEdgeCommon:
     def _get_nuvlaedge_id_from_context_file(self):
         nuvlaedge_id = None
         try:
-            with open("{}/{}".format(self.data_volume, self.context)) as f:
-                nuvlaedge_id = json.load(f)['id']
+            with FILE_NAMES.CONTEXT.open('r') as file:
+                nuvlaedge_id = json.load(file)['id']
         except Exception as e:
             self.logger.error(f'Failed to read NuvlaEdge uuid from context file '
-                              f'{self.data_volume}/{self.context}: {str(e)}')
+                              f'{FILE_NAMES.CONTEXT}: {str(e)}')
         else:
             if nuvlaedge_id:
                 self.logger.info('NuvlaEdge uuid found in context file')
@@ -354,8 +347,9 @@ class NuvlaEdgeCommon:
         """
         if self.nuvlaedge_engine_version:
             version = int(self.nuvlaedge_engine_version.split('.')[0])
-        elif os.path.exists("{}/{}".format(self.data_volume, self.context)):
-            version = self.read_json_file(f"{self.data_volume}/{self.context}")['version']
+        elif FILE_NAMES.CONTEXT.exists():
+            with FILE_NAMES.CONTEXT.open('r') as file:
+                version = json.load(file)['version']
         else:
             version = 2
 
@@ -365,7 +359,7 @@ class NuvlaEdgeCommon:
         """ Retrieves the operational status of the NuvlaEdge from the .status file """
 
         try:
-            with open("{}/{}".format(self.data_volume, self.status_file)) as file:
+            with FILE_NAMES.STATUS_FILE.open('r') as file:
                 operational_status = file.readlines()[0].replace('\n', '').upper()
         except FileNotFoundError:
             self.logger.warning("Operational status could not be found")
@@ -385,20 +379,20 @@ class NuvlaEdgeCommon:
 
         notes = []
         try:
-            notes = open(f"{self.data_volume}/{self.status_notes_file}"). \
-                read().splitlines()
+            with FILE_NAMES.STATUS_NOTES.open('r') as file:
+                notes = file.read().splitlines()
         except Exception as e:
             self.logger.warning(f"Error while reading operational status notes: {str(e)}")
 
         return notes
 
-    def set_local_operational_status(self, operational_status):
+    @staticmethod
+    def set_local_operational_status(operational_status):
         """ Write the operational status into the .status file
 
         :param operational_status: status of the NuvlaEdge
         """
-        file_path = "{}/{}".format(self.data_volume, self.status_file)
-        util.atomic_write(file_path, operational_status)
+        util.atomic_write(FILE_NAMES.STATUS_FILE, operational_status)
 
     def write_vpn_conf(self, values):
         """ Write VPN configuration into a file
@@ -453,5 +447,5 @@ ${vpn_endpoints_mapped}
 ${vpn_extra_config}
 """)
 
-        util.atomic_write(self.vpn_client_conf_file, tpl.substitute(values))
+        util.atomic_write(FILE_NAMES.VPN_CLIENT_CONF_FILE, tpl.substitute(values))
 

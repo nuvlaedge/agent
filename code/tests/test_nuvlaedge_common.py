@@ -3,6 +3,7 @@
 
 import json
 import logging
+from pathlib import Path
 import mock
 import os
 import unittest
@@ -159,15 +160,22 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertRaises(Exception, self.obj.set_nuvlaedge_id)
 
         # if file is correct, read from it and cleanup ID
+        os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id'
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
             self.assertEqual(self.obj.set_nuvlaedge_id(), 'nuvlabox/fake-id',
                              'Unable to correctly get NuvlaEdge ID from context file')
 
         # and if provided by env, compare it
         # if not equal, raise exception
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='{"id": "fake-id"}')):
-            os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id-2'
-            self.assertRaises(RuntimeError, self.obj.set_nuvlaedge_id)
+        opener = mock.mock_open()
+
+        def mocked_open(*args, **kwargs):
+            return opener(*args, **kwargs)
+
+        with mock.patch.object(Path, 'open', mocked_open):
+            with mock.patch("json.load", mock.MagicMock(side_effect=[{"id": "fake-id"}])):
+                os.environ['NUVLAEDGE_UUID'] = 'nuvlabox/fake-id-2'
+                self.assertRaises(RuntimeError, self.obj.set_nuvlaedge_id)
 
         # if they are the same, all good
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data='{"id": "fake-id-2"}')):
@@ -271,7 +279,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
                              'Unable to read JSON from file')
 
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.read_json_file')
-    @mock.patch('os.path.exists')
+    @mock.patch.object(Path, 'exists')
     def test_get_nuvlaedge_version(self, mock_exists, mock_read_json):
         # if the version is already an attribute of the class, just give back its major version
         major = 2
@@ -282,19 +290,26 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
         # otherwise, get it from the data volume
         self.obj.nuvlaedge_engine_version = None
         mock_exists.return_value = True
-        mock_read_json.return_value = {'version': major}
-        self.assertEqual(self.obj.get_nuvlaedge_version(), major,
-                         'Unable to infer NBE major version from data volume file')
-        mock_read_json.assert_called_once()
+
+        opener = mock.mock_open()
+
+        def mocked_open(*args, **kwargs):
+            return opener(*args, **kwargs)
+
+        # otherwise, give back the notes as a list
+        with mock.patch.object(Path, 'open', mocked_open):
+            with mock.patch("json.load", mock.MagicMock(side_effect=[{'version': major}])):
+                self.assertEqual(self.obj.get_nuvlaedge_version(), major,
+                                 'Unable to infer NBE major version from data volume file')
+
         # and if no file exists either, default to latest known (2)
         mock_exists.return_value = False
         self.assertEqual(self.obj.get_nuvlaedge_version(), major,
                          'Unable to default to NBE major version')
-        mock_read_json.assert_called_once()
 
     @mock.patch('agent.common.nuvlaedge_common.NuvlaEdgeCommon.set_local_operational_status')
     def test_get_operational_status(self, mock_set_status):
-        with mock.patch(self.agent_nuvlaedge_common_open) as mock_open:
+        with mock.patch.object(Path, 'open') as mock_open:
             # if file not found, return UNKNOWN
             mock_open.side_effect = FileNotFoundError
             self.assertEqual(self.obj.get_operational_status(), 'UNKNOWN',
@@ -308,7 +323,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
 
         # otherwise, read file and get status out of it
         file_value = 'OPERATIONAL\nsomething else\njunk'
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=file_value)):
+        with mock.patch.object(Path, 'open', mock.mock_open(read_data=file_value)):
             self.assertEqual(self.obj.get_operational_status(), 'OPERATIONAL',
                              'Unable to fetch valid operational status')
 
@@ -319,9 +334,15 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
             self.assertEqual(self.obj.get_operational_status_notes(), [],
                              'Got operational status notes when there should not be any')
 
-        # otherwise, give back the notes as a list
         file_value = 'note1\nnote2\nnote3\n'
-        with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=file_value)):
+
+        opener = mock.mock_open(read_data=file_value)
+
+        def mocked_open(*args, **kwargs):
+            return opener(*args, **kwargs)
+
+        # otherwise, give back the notes as a list
+        with mock.patch.object(Path, 'open', mocked_open):
             self.assertEqual(self.obj.get_operational_status_notes(), file_value.splitlines(),
                              'Unable to get operational status notes')
 

@@ -9,6 +9,8 @@ Relays pull-mode jobs to local job-engine-lite
 import logging
 import json
 
+from nuvlaedge.common.constant_files import FILE_NAMES
+
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.orchestrator import ContainerRuntimeClient
 
@@ -49,7 +51,7 @@ class Job(NuvlaEdgeCommon):
         :return:
         """
         try:
-            with open(self.activation_flag) as a:
+            with open(FILE_NAMES.ACTIVATION_FLAG) as a:
                 user_info = json.loads(a.read())
         except FileNotFoundError:
             logging.error(f'Cannot find NuvlaEdge API key for job {self.job_id}')

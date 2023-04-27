@@ -19,6 +19,8 @@ compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 default_project_name = 'nuvlaedge'
 
 
+COMPUTE_API_INTERNAL_PORT = 5000
+
 def str_if_value_or_none(value):
     return str(value) if value else None
 

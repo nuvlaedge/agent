@@ -12,6 +12,7 @@ from agent.activate import Activate
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.orchestrator.factory import get_container_runtime
 
+from nuvlaedge.common.constant_files import FILE_NAMES
 
 class ActivateTestCase(unittest.TestCase):
 
@@ -20,7 +21,6 @@ class ActivateTestCase(unittest.TestCase):
         self.shared_volume = "mock/path"
         self.obj = Activate(get_container_runtime(), self.shared_volume)
         self.api_key_content = '{"api-key": "mock-key", "secret-key": "mock-secret"}'
-        self.obj.activation_flag = 'mock-activation-file'
         self.obj.nuvlaedge_id = "nuvlabox/fake-id"
         self.obj.nuvla_endpoint = "https://fake-nuvla.io"
         self.obj.data_volume = self.shared_volume
@@ -77,7 +77,7 @@ class ActivateTestCase(unittest.TestCase):
         self.assertEqual(self.obj.activate(), json.loads(self.api_key_content),
                          'Unable to activate the NuvlaEdge')
         # and because it was successful, the API keys have been written to a file
-        mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
+        mock_write_file.assert_called_once_with(FILE_NAMES.ACTIVATION_FLAG, json.loads(self.api_key_content))
 
         # if there's an SSLError while activating, then systemd-timesyncd should take place
         mock_shell_exec.return_value = True
@@ -86,14 +86,14 @@ class ActivateTestCase(unittest.TestCase):
         self.assertTrue(mock_shell_exec.called,
                         'requests.exceptions.SSLError was not caught during NuvlaEdge activation')
         # there hasn't been a new attempt to write the api keys into the file
-        mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
+        mock_write_file.assert_called_once_with(FILE_NAMES.ACTIVATION_FLAG, json.loads(self.api_key_content))
 
         # if there's a connection error, then an exception must be thrown
         mock_api.side_effect = requests.exceptions.ConnectionError
         self.assertRaises(requests.exceptions.ConnectionError, self.obj.activate)
         # ensure neither the write function nor the shell_exec have been called a second time
         mock_shell_exec.assert_called_once()
-        mock_write_file.assert_called_once_with(self.obj.activation_flag, json.loads(self.api_key_content))
+        mock_write_file.assert_called_once_with(FILE_NAMES.ACTIVATION_FLAG, json.loads(self.api_key_content))
 
     @mock.patch.object(Activate, 'write_json_to_file')
     @mock.patch.object(Activate, 'read_json_file')

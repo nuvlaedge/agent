@@ -2,6 +2,7 @@
 This class gathers the main properties of the agent component of the NuvlaEdge engine.
 Also controls the execution flow and provides utilities to the children dependencies
 """
+import json
 import logging
 import os
 from copy import copy
@@ -9,6 +10,9 @@ from threading import Event, Thread
 from typing import NoReturn, List, Dict
 
 from nuvla.api.models import CimiResource
+from nuvlaedge.peripherals.peripheral_manager import PeripheralManager
+from nuvlaedge.broker.file_broker import FileBroker
+from nuvlaedge.common.constant_files import FILE_NAMES
 
 from agent.activate import Activate
 from agent.common import util
@@ -47,9 +51,22 @@ class Agent:
         self._container_runtime = None
         self._infrastructure = None
         self._telemetry = None
+        self._peripheral_manager = None
 
         self.infrastructure_thread = None
         self.telemetry_thread = None
+        self.peripherals_thread = None
+
+    @property
+    def peripheral_manager(self) -> PeripheralManager:
+        """ Class responsible for handling peripheral reports and posting them to Nuvla """
+        if not self._peripheral_manager:
+            self.logger.info('Instantiating PeripheralManager class')
+            self._peripheral_manager = PeripheralManager(
+                FileBroker(),
+                self.telemetry.api(),
+                self.telemetry.nuvlaedge_id)
+        return self._peripheral_manager
 
     @property
     def container_runtime(self) -> ContainerRuntimeClient:
@@ -171,14 +188,12 @@ class Agent:
                                                 self.telemetry.status)
         status_current_time = self.telemetry.status.get('current-time', '')
         del_attr: List = []
-
         self.logger.debug(f'send_heartbeat: status_current_time = {status_current_time} '
                           f'_delete_attributes = {_del_attr}  status = {status}')
 
         if not status_current_time:
             status = {'status-notes': ['NuvlaEdge Telemetry is starting']}
             self.telemetry.status.update(status)
-
         else:
             if status_current_time <= self.past_status_time:
                 status = {
@@ -286,10 +301,14 @@ class Agent:
             return th
 
         if is_thread_creation_needed('Telemetry', self.telemetry_thread,
-                                     log_not_alive=(logging.DEBUG,'Recreating {} thread.'),
-                                     log_alive=(logging.WARNING,'Thread {} taking too long to complete')):
+                                     log_not_alive=(logging.DEBUG, 'Recreating {} thread.'),
+                                     log_alive=(logging.WARNING, 'Thread {} taking too long to complete')):
             self.telemetry_thread = create_start_thread(name='Telemetry',
                                                         target=self.telemetry.update_status)
+
+        if is_thread_creation_needed('PeripheralManager', self.peripherals_thread):
+            self.peripherals_thread = create_start_thread(name='PeripheralManager',
+                                                          target=self.peripheral_manager.run)
 
         response: Dict = self.send_heartbeat()
 

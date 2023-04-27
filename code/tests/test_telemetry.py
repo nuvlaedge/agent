@@ -5,6 +5,7 @@ import logging
 import mock
 import unittest
 import socket
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 
@@ -236,8 +237,8 @@ class TelemetryTestCase(unittest.TestCase):
         self.assertEqual(delete_attrs, set(),
                          'Saying there are attrs to delete when there are none')
 
-    @mock.patch('agent.telemetry.path.exists')
-    @mock.patch('agent.telemetry.stat')
+    @mock.patch.object(Path, 'exists')
+    @mock.patch.object(Path, 'stat')
     def test_get_vpn_ip(self, mock_stat, mock_exists):
         # if vpn file does not exist or is empty, get None
         mock_exists.return_value = False
@@ -250,6 +251,8 @@ class TelemetryTestCase(unittest.TestCase):
 
         # otherwise, read the file and return the IP
         mock_stat.return_value.st_size = 1
-        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='1.1.1.1')):
+        # with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='1.1.1.1')):
+
+        with mock.patch.object(Path, 'open', mock.mock_open(read_data='1.1.1.1')):
             self.assertEqual(self.obj.get_vpn_ip(), '1.1.1.1',
                              'Failed to get VPN IP')

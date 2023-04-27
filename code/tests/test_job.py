@@ -23,7 +23,6 @@ class JobTestCase(unittest.TestCase):
             self.obj = Job(get_container_runtime(), self.shared_volume, self.job_id, self.job_engine_lite_image)
         # monkeypatches
         self.obj.container_runtime = mock.MagicMock()
-        self.obj.activation_flag = '.activation'
         self.obj.nuvla_endpoint_insecure = False
         self.obj.nuvla_endpoint = 'fake.nuvla.io'
         ###
