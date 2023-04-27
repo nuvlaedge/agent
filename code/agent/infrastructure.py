@@ -598,7 +598,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
         with FILE_NAMES.VPN_CREDENTIAL.open('r') as file:
             local_vpn_credential = json.load(file)
-        print(f'\n\n\n\n {online_vpn_credential["updated"]}={local_vpn_credential["updated"]}\n\n\n')
+
         if online_vpn_credential['updated'] != local_vpn_credential['updated']:
             self.logger.warning(f"VPN credential has been modified in Nuvla at "
                                 f"{online_vpn_credential['updated']}. Recommissioning")
