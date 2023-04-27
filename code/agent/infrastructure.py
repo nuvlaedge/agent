@@ -592,10 +592,6 @@ class Infrastructure(NuvlaEdgeCommon):
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
         """
-        if not FILE_NAMES.VPN_CREDENTIAL.exists():
-            self.logger.warning(f'No VPN registered locally')
-            return
-
         with FILE_NAMES.VPN_CREDENTIAL.open('r') as file:
             local_vpn_credential = json.load(file)
 
