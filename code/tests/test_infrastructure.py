@@ -552,11 +552,13 @@ class InfrastructureTestCase(unittest.TestCase):
         def mocked_open(*args, **kwargs):
             return opener(*args, **kwargs)
 
-        with mock.patch.object(Path, 'open', mocked_open):
-            with mock.patch("json.load", mock.MagicMock(side_effect=[local_vpn_content])):
-                self.obj.validate_local_vpn_credential(local_vpn_content)
-                mock_commission_vpn.assert_not_called()
-                mock_unlink.assert_not_called()
+        with mock.patch.object(Path, 'open', mocked_open), \
+                mock.patch("json.load", mock.MagicMock(side_effect=[local_vpn_content])), \
+                mock.patch('agent.common.util.file_exists_and_not_empty') as mock_util:
+            mock_util.return_value = True
+            self.obj.validate_local_vpn_credential(local_vpn_content)
+            mock_commission_vpn.assert_not_called()
+            mock_unlink.assert_not_called()
 
         remote_content = {
             'updated': 'new'

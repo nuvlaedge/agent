@@ -6,6 +6,7 @@ List of common attributes for all classes
 """
 
 import json
+import time
 import logging
 import os
 import string
@@ -35,15 +36,6 @@ class NuvlaEdgeCommon:
 
     swarm_manager_token_file = "swarm-manager-token"
     swarm_worker_token_file = "swarm-worker-token"
-
-    commissioning_file = ".commission"
-    status_file = ".status"
-    status_notes_file = ".status_notes"
-    ip_file = ".ip"
-    ca = "ca.pem"
-    cert = "cert.pem"
-    key = "key.pem"
-    context = ".context"
 
     mqtt_broker_port = 1883
     mqtt_broker_keep_alive = 90
@@ -394,7 +386,8 @@ class NuvlaEdgeCommon:
 
         return notes
 
-    def set_local_operational_status(self, operational_status):
+    @staticmethod
+    def set_local_operational_status(operational_status):
         """ Write the operational status into the .status file
 
         :param operational_status: status of the NuvlaEdge
@@ -455,90 +448,4 @@ ${vpn_extra_config}
 """)
 
         util.atomic_write(FILE_NAMES.VPN_CLIENT_CONF_FILE, tpl.substitute(values))
-    # TODO: Move to its new place (infrastructure?)
-    def prepare_vpn_certificates(self):
-        if not FILE_NAMES.VPN_FOLDER.exists():
-            FILE_NAMES.VPN_FOLDER.mkdir()
-        nuvlaedge_vpn_key = f'{FILE_NAMES.VPN_FOLDER}/nuvlaedge-vpn.key'
-        nuvlaedge_vpn_csr = f'{FILE_NAMES.VPN_FOLDER}/nuvlaedge-vpn.csr'
 
-        cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt',
-               'ec_paramgen_curve:secp521r1', '-keyout', nuvlaedge_vpn_key, '-out',
-               nuvlaedge_vpn_csr, '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
-
-        r = self.shell_execute(cmd)
-
-        if r.get('returncode', -1) != 0:
-            self.logger.error(f'Cannot generate certificates for VPN connection: '
-                              f'{r.get("stdout")} | {r.get("stderr")}')
-            return None, None
-
-        try:
-            wait = 0
-            while not os.path.exists(nuvlaedge_vpn_csr) and \
-                  not os.path.exists(nuvlaedge_vpn_key):
-                if wait > 25:
-                    # appr 5 sec
-                    raise TimeoutError
-                wait += 1
-                time.sleep(0.2)
-
-            with open(nuvlaedge_vpn_csr) as csr:
-                vpn_csr = csr.read()
-
-            with open(nuvlaedge_vpn_key) as key:
-                vpn_key = key.read()
-        except TimeoutError:
-            self.logger.error(f'Unable to lookup {nuvlaedge_vpn_key} and '
-                              f'{nuvlaedge_vpn_csr}')
-            return None, None
-
-        return vpn_csr, vpn_key
-
-    def commission_vpn(self):
-        """ (re)Commissions the NB via the agent API
-
-        :return:
-        """
-        self.logger.info(f'Starting VPN commissioning...')
-        vpn_csr, vpn_key = self.prepare_vpn_certificates()
-
-        if not vpn_key or not vpn_csr:
-            return False
-
-        try:
-            vpn_conf_fields: requests.Response = \
-                requests.post(
-                    "http://localhost/api/commission",
-                    json={"vpn-csr": vpn_csr},
-                    timeout=(3, 20))
-
-            vpn_conf_fields = vpn_conf_fields.json()
-
-        except Exception as e:
-
-            self.logger.error(f'Unable to setup VPN connection: {str(e)}')
-            return False
-
-        if not vpn_conf_fields:
-            self.logger.error(f'Invalid response from VPN commissioning... '
-                              f'cannot continue')
-            return False
-
-        self.logger.info(f'VPN configuration fields: {vpn_conf_fields}')
-
-        vpn_values = {
-            'vpn_certificate': vpn_conf_fields['vpn-certificate'],
-            'vpn_intermediate_ca': vpn_conf_fields['vpn-intermediate-ca'],
-            'vpn_ca_certificate': vpn_conf_fields['vpn-ca-certificate'],
-            'vpn_intermediate_ca_is': vpn_conf_fields['vpn-intermediate-ca-is'],
-            'vpn_shared_key': vpn_conf_fields['vpn-shared-key'],
-            'vpn_common_name_prefix': vpn_conf_fields['vpn-common-name-prefix'],
-            'vpn_endpoints_mapped': vpn_conf_fields['vpn-endpoints-mapped'],
-            'vpn_interface_name': self.vpn_interface_name,
-            'nuvlaedge_vpn_key': vpn_key,
-            'vpn_extra_config': self.vpn_config_extra
-        }
-
-        self.write_vpn_conf(vpn_values)
-        return True

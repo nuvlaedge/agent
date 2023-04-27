@@ -110,23 +110,6 @@ class Activate(NuvlaEdgeCommon):
 
         return current_context
 
-    def vpn_commission_if_needed(self, current_nb_resource: dict, old_nb_resource: dict):
-        """
-        Checks if the VPN server ID has changed in the NB resource, and if so, asks for
-        VPN commissioning
-
-        :param current_nb_resource: current NuvlaEdge resource, from Nuvla
-        :param old_nb_resource: old content of the NuvlaEdge resource
-        :return:
-        """
-
-        if current_nb_resource.get("vpn-server-id") != \
-                old_nb_resource.get("vpn-server-id"):
-            self.activate_logger.info(f'VPN Server ID has been added/changed in Nuvla: '
-                                      f'{current_nb_resource.get("vpn-server-id")}')
-
-            self.commission_vpn()
-
     def get_nuvlaedge_info(self):
         """ Retrieves the respective resource from Nuvla """
 

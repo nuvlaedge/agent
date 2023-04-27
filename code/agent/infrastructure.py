@@ -216,7 +216,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
         :return:
         """
-        self.infra_logger.info(f'Starting VPN commissioning...')
+        self.logger.info(f'Starting VPN commissioning...')
 
         vpn_csr, vpn_key = self.prepare_vpn_certificates()
 
@@ -226,15 +226,15 @@ class Infrastructure(NuvlaEdgeCommon):
         try:
             vpn_conf_fields = self.do_commission({"vpn-csr": vpn_csr})
         except Exception as e:
-            self.infra_logger.error(f'Unable to setup VPN connection: {str(e)}')
+            self.logger.error(f'Unable to setup VPN connection: {str(e)}')
             return False
 
         if not vpn_conf_fields:
-            self.infra_logger.error(f'Invalid response from VPN commissioning... '
+            self.logger.error(f'Invalid response from VPN commissioning... '
                                     f'cannot continue')
             return False
 
-        self.infra_logger.info(f'VPN configuration fields: {vpn_conf_fields}')
+        self.logger.info(f'VPN configuration fields: {vpn_conf_fields}')
 
         vpn_values = {
             'vpn_certificate': vpn_conf_fields['vpn-certificate'],
@@ -263,7 +263,7 @@ class Infrastructure(NuvlaEdgeCommon):
         r = self.shell_execute(cmd)
 
         if r.get('returncode', -1) != 0:
-            self.infra_logger.error(f'Cannot generate certificates for VPN connection: '
+            self.logger.error(f'Cannot generate certificates for VPN connection: '
                                     f'{r.get("stdout")} | {r.get("stderr")}')
             return None, None
 
@@ -283,7 +283,7 @@ class Infrastructure(NuvlaEdgeCommon):
             with open(self.vpn_key_file) as key:
                 vpn_key = key.read()
         except TimeoutError:
-            self.infra_logger.error(f'Unable to lookup {self.vpn_key_file} and '
+            self.logger.error(f'Unable to lookup {self.vpn_key_file} and '
                                     f'{self.vpn_csr_file}')
             return None, None
 
@@ -318,12 +318,12 @@ class Infrastructure(NuvlaEdgeCommon):
             container_api_port = util.compute_api_port
 
         compute_api_url = f'https://{self.compute_api}:{container_api_port}'
-        self.infra_logger.debug(f'Trying to reach compute API using {compute_api_url} address')
+        self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
                 return False
         except (docker_err.NotFound, docker_err.APIError, TimeoutError) as ex:
-            self.infra_logger.debug(f"Compute API container not found {ex}")
+            self.logger.debug(f"Compute API container not found {ex}")
             return False
 
         try:
@@ -332,13 +332,13 @@ class Infrastructure(NuvlaEdgeCommon):
             except requests.exceptions.SSLError:
                 raise
             except requests.exceptions.ConnectionError as e:
-                self.infra_logger.debug(f'Failed to reach Compute API at {compute_api_url}: {e}')
+                self.logger.debug(f'Failed to reach Compute API at {compute_api_url}: {e}')
                 # try with service name and internal port
                 requests.get('https://compute-api:5000', timeout=3)
 
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
-            self.infra_logger.debug("Compute API up and running with security")
+            self.logger.debug("Compute API up and running with security")
 
         except (requests.exceptions.ConnectionError, TimeoutError) as ex:
             # Can happen if the Compute API takes longer than normal on start
@@ -598,7 +598,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
         with FILE_NAMES.VPN_CREDENTIAL.open('r') as file:
             local_vpn_credential = json.load(file)
-
+        print(f'\n\n\n\n {online_vpn_credential["updated"]}={local_vpn_credential["updated"]}\n\n\n')
         if online_vpn_credential['updated'] != local_vpn_credential['updated']:
             self.logger.warning(f"VPN credential has been modified in Nuvla at "
                                 f"{online_vpn_credential['updated']}. Recommissioning")
@@ -606,9 +606,9 @@ class Infrastructure(NuvlaEdgeCommon):
             self.commission_vpn()
             FILE_NAMES.VPN_CREDENTIAL.unlink()
 
-        elif not util.file_exists_and_not_empty(self.vpn_client_conf_file):
-            self.infra_logger.warning("OpenVPN configuration not available. "
-                                      "Recommissioning")
+        elif not util.file_exists_and_not_empty(FILE_NAMES.VPN_CLIENT_CONF_FILE):
+            self.logger.warning("OpenVPN configuration not available. Recommissioning")
+
             # Recommission
             self.commission_vpn()
             FILE_NAMES.VPN_CREDENTIAL.unlink()
@@ -661,7 +661,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
         vpn_client_exists, _ = self.check_vpn_client_state()
         if not vpn_client_exists:
-            self.infra_logger.info("VPN client container doesn't exist. "
+            self.logger.info("VPN client container doesn't exist. "
                                    "Do nothing")
             return
 

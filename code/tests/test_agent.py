@@ -131,5 +131,5 @@ class TestAgent(TestCase):
         self.test_agent._telemetry = Mock()
         self.test_agent._infrastructure = Mock()
         self.test_agent.run_single_cycle()
-        self.assertEqual(mock_start.call_count, 2)
+        self.assertEqual(mock_start.call_count, 3)
         pull_mock.assert_called_once()

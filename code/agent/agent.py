@@ -51,9 +51,22 @@ class Agent:
         self._container_runtime = None
         self._infrastructure = None
         self._telemetry = None
+        self._peripheral_manager = None
 
         self.infrastructure_thread = None
         self.telemetry_thread = None
+        self.peripherals_thread = None
+
+    @property
+    def peripheral_manager(self) -> PeripheralManager:
+        """ Class responsible for handling peripheral reports and posting them to Nuvla """
+        if not self._peripheral_manager:
+            self.logger.info('Instantiating PeripheralManager class')
+            self._peripheral_manager = PeripheralManager(
+                FileBroker(),
+                self.telemetry.api(),
+                self.telemetry.nuvlaedge_id)
+        return self._peripheral_manager
 
     @property
     def container_runtime(self) -> ContainerRuntimeClient:
@@ -93,9 +106,6 @@ class Agent:
                                         self.nuvlaedge_status_id,
                                         self.excluded_monitors)
         return self._telemetry
-
-        # Peripheral manager thread
-        self.peripherals_thread: Union[PeripheralManager, None] = None
 
     def activate_nuvlaedge(self) -> NoReturn:
         """
@@ -291,20 +301,14 @@ class Agent:
             return th
 
         if is_thread_creation_needed('Telemetry', self.telemetry_thread,
-                                     log_not_alive=(logging.DEBUG,'Recreating {} thread.'),
-                                     log_alive=(logging.WARNING,'Thread {} taking too long to complete')):
+                                     log_not_alive=(logging.DEBUG, 'Recreating {} thread.'),
+                                     log_alive=(logging.WARNING, 'Thread {} taking too long to complete')):
             self.telemetry_thread = create_start_thread(name='Telemetry',
                                                         target=self.telemetry.update_status)
 
-        # Watch peripherals thread
-        if not self.peripherals_thread or not self.peripherals_thread.is_alive():
-            self.logger.info(f'Peripheral manager thread not existing or not started, initialized')
-            self.peripherals_thread = PeripheralManager(
-                FileBroker(),
-                self.nuvlaedge_common.api(),
-                self.nuvlaedge_common.nuvlaedge_id)
-
-            self.peripherals_thread.start()
+        if is_thread_creation_needed('PeripheralManager', self.peripherals_thread):
+            self.peripherals_thread = create_start_thread(name='PeripheralManager',
+                                                          target=self.peripheral_manager.run)
 
         response: Dict = self.send_heartbeat()
 
