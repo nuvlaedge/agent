@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [2.11.0] - 2023-04-27
 ### Added
  - Integration of nuvlaedge-common library
  - PeripheralManager thread to consume from peripheral reports
