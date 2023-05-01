@@ -5,10 +5,13 @@ import logging
 import mock
 import unittest
 import socket
+from pathlib import Path
+
+import paho.mqtt.client as mqtt
 
 import tests.utils.fake as fake
-from agent.common import NuvlaEdgeCommon
-import paho.mqtt.client as mqtt
+from agent.common import nuvlaedge_common
+from agent.orchestrator.factory import get_container_runtime
 from agent.telemetry import Telemetry
 
 
@@ -19,7 +22,7 @@ class TelemetryTestCase(unittest.TestCase):
 
     @mock.patch('agent.telemetry.Telemetry.initialize_monitors')
     def setUp(self, mock_monitor_initializer):
-        fake_nuvlaedge_common = fake.Fake.imitate(NuvlaEdgeCommon.NuvlaEdgeCommon)
+        fake_nuvlaedge_common = fake.Fake.imitate(nuvlaedge_common.NuvlaEdgeCommon)
         setattr(fake_nuvlaedge_common, 'container_runtime', mock.MagicMock())
         setattr(fake_nuvlaedge_common, 'container_stats_json_file', 'fake-stats-file')
         setattr(fake_nuvlaedge_common, 'vpn_ip_file', 'fake-vpn-file')
@@ -28,7 +31,9 @@ class TelemetryTestCase(unittest.TestCase):
         self.shared_volume = "mock/path"
         self.nuvlaedge_status_id = "nuvlabox-status/fake-id"
 
-        self.obj = Telemetry(self.shared_volume, self.nuvlaedge_status_id)
+        self.obj = Telemetry(get_container_runtime(),
+                             self.shared_volume,
+                             self.nuvlaedge_status_id)
 
         # monkeypatching
         self.obj.mqtt_broker_host = 'fake-data-gateway'
@@ -232,8 +237,8 @@ class TelemetryTestCase(unittest.TestCase):
         self.assertEqual(delete_attrs, set(),
                          'Saying there are attrs to delete when there are none')
 
-    @mock.patch('agent.telemetry.path.exists')
-    @mock.patch('agent.telemetry.stat')
+    @mock.patch.object(Path, 'exists')
+    @mock.patch.object(Path, 'stat')
     def test_get_vpn_ip(self, mock_stat, mock_exists):
         # if vpn file does not exist or is empty, get None
         mock_exists.return_value = False
@@ -246,6 +251,8 @@ class TelemetryTestCase(unittest.TestCase):
 
         # otherwise, read the file and return the IP
         mock_stat.return_value.st_size = 1
-        with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='1.1.1.1')):
+        # with mock.patch(self.agent_telemetry_open, mock.mock_open(read_data='1.1.1.1')):
+
+        with mock.patch.object(Path, 'open', mock.mock_open(read_data='1.1.1.1')):
             self.assertEqual(self.obj.get_vpn_ip(), '1.1.1.1',
                              'Failed to get VPN IP')

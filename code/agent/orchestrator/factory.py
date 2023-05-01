@@ -1,31 +1,20 @@
+"""
+Orchestration factory
+"""
+
 import os
 
+from agent.orchestrator import ContainerRuntimeClient
 from agent.orchestrator.docker import DockerClient
 from agent.orchestrator.kubernetes import KubernetesClient
 
-if os.getenv('KUBERNETES_SERVICE_HOST'):
-    ORCHESTRATOR = KubernetesClient.NAME
-    ORCHESTRATOR_COE = KubernetesClient.NAME_COE
-else:
-    ORCHESTRATOR = DockerClient.NAME
-    ORCHESTRATOR_COE = DockerClient.NAME_COE
 
-
-HOSTSFS = "/rootfs"
-
-
-def orchestrator_name():
-    return ORCHESTRATOR
-
-
-def get_coe_client(installation_home, hostfs=HOSTSFS):
+def get_container_runtime() -> ContainerRuntimeClient:
     """
-    Returns COE client based on the underlying orchestrator.
-
+    Instantiate the right container runtime client based on the underlying COE
     :return: instance of a ContainerRuntimeClient
     """
-    if orchestrator_name() == KubernetesClient.NAME:
-        return KubernetesClient(hostfs, installation_home)
-    if orchestrator_name() == DockerClient.NAME:
-        return DockerClient(hostfs, installation_home)
-    raise NotImplementedError(f'COE client of type {ORCHESTRATOR} is not known.')
+    if os.getenv('KUBERNETES_SERVICE_HOST'):
+        return KubernetesClient()
+    else:
+        return DockerClient()

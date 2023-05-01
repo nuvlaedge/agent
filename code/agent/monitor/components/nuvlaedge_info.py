@@ -1,15 +1,16 @@
 """
 Gathers the base NuvlaEdge base information
 """
-from typing import Dict
+
 import datetime
 import psutil
+from typing import Dict
 
-
-import agent.common.NuvlaEdgeCommon as NuvlaCommon
+from agent.common import util
 from agent.monitor import Monitor
 from agent.monitor.data.nuvlaedge_data import NuvlaEdgeData as NuvlaInfo
 from agent.monitor.data.nuvlaedge_data import InstallationParametersData
+from agent.orchestrator import ContainerRuntimeClient
 from ..components import monitor
 
 
@@ -20,8 +21,7 @@ class NuvlaEdgeInfoMonitor(Monitor):
                  enable_monitor: bool = True):
         super().__init__(name, NuvlaInfo, enable_monitor)
 
-        self.runtime_client: NuvlaCommon.ContainerRuntimeClient = \
-            telemetry.container_runtime
+        self.runtime_client: ContainerRuntimeClient = telemetry.container_runtime
         self.ne_id: str = telemetry.nb_status_id
         self.ne_engine_version: str = telemetry.nuvlaedge_engine_version
         self.installation_home: str = telemetry.installation_home
@@ -51,11 +51,9 @@ class NuvlaEdgeInfoMonitor(Monitor):
         # installation parameters
         if not self.data.installation_parameters:
             self.data.installation_parameters = InstallationParametersData()
-        filter_label = "nuvlaedge.component=True"
 
-        self.data.installation_parameters = \
-            InstallationParametersData.parse_obj(
-                self.runtime_client.get_installation_parameters(filter_label))
+        installation_parameters = self.runtime_client.get_installation_parameters()
+        self.data.installation_parameters = InstallationParametersData.parse_obj(installation_parameters)
 
         # Components running in the current NuvlaEdge deployment
         self.data.components = self.runtime_client.get_all_nuvlaedge_components() or None

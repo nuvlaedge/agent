@@ -4,16 +4,17 @@
 import base64
 import contextlib
 import datetime
-import json
-import subprocess
-import docker
 import logging
 import math
 import mock
-import requests
+import subprocess
 import unittest
-import tests.utils.fake as fake
 import yaml
+
+import docker
+import requests
+
+import tests.utils.fake as fake
 from agent.orchestrator.docker import DockerClient
 
 
@@ -24,7 +25,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.hostfs = '/fake-rootfs'
         self.host_home = '/home/fakeUser'
-        self.obj = DockerClient(self.hostfs, self.host_home)
+        self.obj = DockerClient()
         self.local_docker_client = docker.from_env()
         self.fake_swarm_tokens = {
             'JoinTokens': {
@@ -537,22 +538,21 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
     @mock.patch('docker.models.containers.ContainerCollection.get')
     @mock.patch('docker.models.containers.ContainerCollection.list')
     def test_get_installation_parameters(self, mock_containers_list, mock_containers_get, mock_gethostname):
-        search_label = 'fake-label'
         agent_id = 'my-fake-id'
         # if the agent container cannot find itself, it raises an exception
         mock_containers_list.return_value = [fake.MockContainer(myid=agent_id), fake.MockContainer()]
         mock_gethostname.return_value = 'fake-hostname'
         mock_containers_get.side_effect = docker.errors.NotFound('', requests.Response())
-        self.assertRaises(docker.errors.NotFound, self.obj.get_installation_parameters, search_label)
+        self.assertRaises(RuntimeError, self.obj.get_installation_parameters)
 
         # otherwise...
         mock_containers_get.reset_mock(side_effect=True)
         mock_containers_get.return_value = fake.MockContainer(myid=agent_id)
         # since all labels exist, the output should container the respective fields for the telemetry
         expected_fields = ['project-name', 'working-dir', 'config-files', 'environment']
-        self.assertIsInstance(self.obj.get_installation_parameters(search_label), dict,
+        self.assertIsInstance(self.obj.get_installation_parameters(), dict,
                               'Expecting installation parameters to be a JSON structure')
-        self.assertTrue(set(expected_fields).issubset(self.obj.get_installation_parameters(search_label)),
+        self.assertTrue(set(expected_fields).issubset(self.obj.get_installation_parameters()),
                         f'Installation parameters are missing the required telemetry fields: {expected_fields}')
 
         # if containers have labels that are supposed to be ignored, these should not be in the returned value
@@ -562,7 +562,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_containers_list.return_value = [fake.MockContainer(), new_agent_container]
         mock_containers_get.return_value = new_agent_container
         self.assertNotIn(ignore_env,
-                         self.obj.get_installation_parameters(search_label)['environment'],
+                         self.obj.get_installation_parameters()['environment'],
                          'Unwanted environment variables are not being properly ignored')
 
         # other environment variables will be included though
@@ -571,13 +571,13 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         mock_containers_list.return_value = [fake.MockContainer(), new_agent_container]
         mock_containers_get.return_value = new_agent_container
         self.assertIn(include_env,
-                      self.obj.get_installation_parameters(search_label)['environment'],
+                      self.obj.get_installation_parameters()['environment'],
                       'Expected environment variables are not in the final parameters')
 
         # and also make sure the config-files are not duplicated, even if there are many containers reporting
         # the same filenames
         mock_containers_list.return_value = [fake.MockContainer(), new_agent_container, fake.MockContainer()]
-        self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
+        self.assertEqual(sorted(self.obj.get_installation_parameters()['config-files']),
                          sorted(new_agent_container.labels['com.docker.compose.project.config_files'].split(',')),
                          'Installation config files are not reported correctly')
 
@@ -586,14 +586,14 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         updated_container.attrs['Created'] = datetime.datetime.utcnow().isoformat()
         updated_container.labels['com.docker.compose.project.config_files'] = 'c.yml'
         mock_containers_list.return_value = [new_agent_container, updated_container]
-        self.assertEqual(sorted(self.obj.get_installation_parameters(search_label)['config-files']),
+        self.assertEqual(sorted(self.obj.get_installation_parameters()['config-files']),
                          ['c.yml'],
                          'Installation config files are not reported correctly after an update')
 
         # finally, if one of the compose file labels are missing from the agent_container, we get None
         new_agent_container.labels['com.docker.compose.project'] = None
         mock_containers_get.return_value = new_agent_container
-        self.assertIsNone(self.obj.get_installation_parameters(search_label),
+        self.assertIsNone(self.obj.get_installation_parameters(),
                           'Expected no installation parameters due to missing Docker Compose labels, but got something')
 
     def test_read_system_issues(self):
@@ -726,36 +726,39 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_container_plugins(), [],
                          'Returned container plugins when none are active')
 
-    @mock.patch('agent.orchestrator.docker.DockerClient.other_coe_infra_service')
-    def test_define_nuvla_infra_service(self, mock_other_coe_infra_service):
-        mock_other_coe_infra_service.return_value = {}
+    @mock.patch('agent.orchestrator.docker.DockerClient.infer_if_additional_coe_exists')
+    def test_define_nuvla_infra_service(self, mock_infer_extra_coe):
+        mock_infer_extra_coe.return_value = {}
         # if the api_endpoint is not set, the infra is not set either
-        self.assertEqual({},
-                         self.obj.coe_infra_service_def('', []),
+        self.assertEqual(self.obj.define_nuvla_infra_service('', []), {},
                          'Returned a valid infra service when there is no API endpoint')
 
         # otherwise, destructs the TLS keys and gives back the commissioning payload for the IS
         is_keys = ["swarm-client-ca", "swarm-client-cert", "swarm-client-key", "swarm-endpoint"]
-        self.assertTrue(
-            set(is_keys).issubset(
-                self.obj.coe_infra_service_def('valid-api-endpoint',
-                                               ['ca', 'cert', 'key'])),
-            'Failed to setup Swarm infrastructure service payload for commissioning')
+        self.assertTrue(set(is_keys).issubset(self.obj.define_nuvla_infra_service('valid-api-endpoint',
+                                                                                  'ca', 'cert', 'key')),
+                        'Failed to setup Swarm infrastructure service payload for commissioning')
 
         # if there are no TLS keys, they are not included in the IS payload
-        mock_other_coe_infra_service.return_value = {}
-        self.assertEqual(
-            {'swarm-endpoint': 'valid-api-endpoint'},
-            self.obj.coe_infra_service_def('valid-api-endpoint', []),
-            'Returned more IS keys than just the expected API endpoint')
+        mock_infer_extra_coe.return_value = {}
+        self.assertEqual(self.obj.define_nuvla_infra_service('valid-api-endpoint', []),
+                         {'swarm-endpoint': 'valid-api-endpoint'},
+                         'Returned more IS keys than just the expected API endpoint')
+
+        # the result should not be affected by the inference of the extra COE throwing an exeception
+        mock_infer_extra_coe.side_effect = ConnectionError
+        self.assertEqual(self.obj.define_nuvla_infra_service('valid-api-endpoint', []),
+                         {'swarm-endpoint': 'valid-api-endpoint'},
+                         'Infra service definition was affected by k8s discovery function exception')
 
         # and if there's an extra k8s infra, it should be appended to the final infra
-        mock_other_coe_infra_service.return_value = {'k8s-stuff': True}
-        coe_is = self.obj.coe_infra_service_def('valid-api-endpoint', ['ca', 'cert', 'key'])
-        self.assertIn('k8s-stuff', coe_is,
-            'Additional COE was not added to infrastructure service payload')
-        self.assertEqual(5, len(coe_is),
-            'Unexpected number of infrastructure service fields')
+        mock_infer_extra_coe.reset_mock(side_effect=True)
+        mock_infer_extra_coe.return_value = {'k8s-stuff': True}
+        self.assertIn('k8s-stuff', self.obj.define_nuvla_infra_service('valid-api-endpoint', 'ca', 'cert', 'key'),
+                      'Additional COE was not added to infrastructure service payload')
+        self.assertEqual(len(self.obj.define_nuvla_infra_service('valid-api-endpoint', 'ca', 'cert', 'key').keys()),
+                         5,
+                         'Unexpected number of infrastructure service fields')
 
     def test_get_partial_decommission_attributes(self):
         # returns a constant, so let's just make sure that all return list items start with 'swarm'

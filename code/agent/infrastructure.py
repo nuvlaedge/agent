@@ -9,19 +9,23 @@ and respective credentials in Nuvla
 
 import json
 import logging
+import os
 import time
-
 from datetime import datetime
 from os import path, remove
-from threading import Thread
 
 import docker
+import docker.errors as docker_err
+import requests
+from nuvlaedge.common.constant_files import FILE_NAMES
 
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import nuvlaedge_common, util
+from agent.common.nuvlaedge_common import NuvlaEdgeCommon
+from agent.orchestrator import ContainerRuntimeClient
 from agent.telemetry import Telemetry
 
 
-class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
+class Infrastructure(NuvlaEdgeCommon):
     """ The Infrastructure class includes all methods and
     properties necessary to update the infrastructure services
     and respective credentials in Nuvla, whenever the local
@@ -29,20 +33,26 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
     """
 
-    def __init__(self, data_volume, telemetry: Telemetry = None, refresh_period=15):
-        """ Constructs an Infrastructure object, with a status placeholder
+    def __init__(self,
+                 container_runtime: ContainerRuntimeClient,
+                 data_volume: str,
+                 telemetry: Telemetry = None,
+                 refresh_period: int = 15):
+        """
+        Constructs an Infrastructure object, with a status placeholder
 
         :param data_volume: shared volume
         """
-        super().__init__(data_volume=data_volume)
-        Thread.__init__(self, daemon=True)
+        super(Infrastructure, self).__init__(container_runtime=container_runtime,
+                                             shared_data_volume=data_volume)
 
-        self.infra_logger: logging.Logger = logging.getLogger(__name__)
+        self.logger: logging.Logger = logging.getLogger(__name__)
 
         if telemetry:
             self.telemetry_instance = telemetry
         else:
             self.telemetry_instance = Telemetry(data_volume, None)
+        self.compute_api = util.compose_project_name + '-compute-api'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -75,7 +85,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             open(worker_token_file).readlines()[0].replace('\n', '')
             open(manager_token_file).readlines()[0].replace('\n', '')
         except (FileNotFoundError, IndexError):
-            self.infra_logger.info("Docker Swarm tokens not registered yet...registering")
+            self.logger.info("Docker Swarm tokens not registered yet...registering")
             self.write_file(manager_token_file, current_manager_token)
             self.write_file(worker_token_file, current_worker_token)
             return True
@@ -85,18 +95,18 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
     def get_tls_keys(self):
         """ Finds and returns the Container orchestration API client TLS keys """
 
-        ca_file = "{}/{}".format(self.data_volume, self.ca)
-        cert_file = "{}/{}".format(self.data_volume, self.cert)
-        key_file = "{}/{}".format(self.data_volume, self.key)
-
         try:
-            client_ca = open(ca_file).read()
-            client_cert = open(cert_file).read()
-            client_key = open(key_file).read()
+            with FILE_NAMES.CA.open('r') as file:
+                client_ca = file.read()
+            with FILE_NAMES.CERT.open('r') as file:
+                client_cert = file.read()
+            with FILE_NAMES.KEY.open('r') as file:
+                client_key = file.read()
+
         except (FileNotFoundError, IndexError):
-            self.infra_logger.warning("Container orchestration API TLS keys have not been"
-                                      " set yet!")
-            return None
+            self.logger.warning("Container orchestration API TLS keys have not been "
+                                "set yet!")
+            return []
 
         return client_ca, client_cert, client_key
 
@@ -108,44 +118,44 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         """
 
         if not payload:
-            self.infra_logger.debug("Tried commissioning with empty payload. Nothing "
+            self.logger.debug("Tried commissioning with empty payload. Nothing "
                                     "to do")
             return
 
-        self.infra_logger.info("Commissioning the NuvlaEdge...{}".format(payload))
+        self.logger.info("Commissioning the NuvlaEdge...{}".format(payload))
         try:
             self.api()._cimi_post(self.nuvlaedge_id+"/commission", json=payload)
         except Exception as e:
-            self.infra_logger.error(f"Could not commission with payload {payload}: {e}")
+            self.logger.error(f"Could not commission with payload {payload}: {e}")
             return False
 
         if "vpn-csr" in payload:
             # get the respective VPN credential that was just created
-            with open("{}/{}".format(self.data_volume, self.context)) as vsi:
-                vpn_server_id = json.loads(vsi.read()).get("vpn-server-id")
+            with FILE_NAMES.CONTEXT.open('r') as file:
+                vpn_server_id = json.load(file).get("vpn-server-id")
 
             searcher_filter = self.build_vpn_credential_search_filter(vpn_server_id)
 
             attempts = 0
             credential_id = None
             while attempts <= 20:
-                self.infra_logger.info("Getting VPN credential from Nuvla...")
+                self.logger.info("Getting VPN credential from Nuvla...")
                 try:
                     credential_id = self.api().search("credential",
                                                       filter=searcher_filter,
                                                       last=1).resources[0].id
                     break
                 except IndexError:
-                    self.infra_logger.exception("Cannot find VPN credential in Nuvla "
-                                                "after commissioning")
+                    self.logger.exception("Cannot find VPN credential in Nuvla "
+                                          "after commissioning")
                     time.sleep(2)
-                except Exception as e:
-                    self.infra_logger.info("something %s" % e)
+                except Exception as ex:
+                    self.logger.info(f"Exception finding VPN credential in Nuvla: {ex}")
 
                 attempts += 1
 
             if not credential_id:
-                self.infra_logger.warning("Failing to provide necessary values for "
+                self.logger.warning("Failing to provide necessary values for "
                                           "NuvlaEdge VPN client")
                 return None
 
@@ -184,8 +194,8 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         """
 
         try:
-            with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
-                old_conf = json.loads(r.read())
+            with FILE_NAMES.COMMISSIONING_FILE.open('r') as file:
+                old_conf = json.load(file)
                 if current_conf == old_conf:
                     return {}
                 else:
@@ -198,8 +208,86 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
                     return diff_conf
         except FileNotFoundError:
-            self.infra_logger.info("Auto-commissioning the NuvlaEdge for the first time..")
+            self.logger.info("Auto-commissioning the NuvlaEdge for the first time..")
             return current_conf
+
+    def commission_vpn(self):
+        """ (re)Commissions the NB via the agent API
+
+        :return:
+        """
+        self.logger.info(f'Starting VPN commissioning...')
+
+        vpn_csr, vpn_key = self.prepare_vpn_certificates()
+
+        if not vpn_key or not vpn_csr:
+            return False
+
+        try:
+            vpn_conf_fields = self.do_commission({"vpn-csr": vpn_csr})
+        except Exception as e:
+            self.logger.error(f'Unable to setup VPN connection: {str(e)}')
+            return False
+
+        if not vpn_conf_fields:
+            self.logger.error(f'Invalid response from VPN commissioning... '
+                                    f'cannot continue')
+            return False
+
+        self.logger.info(f'VPN configuration fields: {vpn_conf_fields}')
+
+        vpn_values = {
+            'vpn_certificate': vpn_conf_fields['vpn-certificate'],
+            'vpn_intermediate_ca': vpn_conf_fields['vpn-intermediate-ca'],
+            'vpn_ca_certificate': vpn_conf_fields['vpn-ca-certificate'],
+            'vpn_intermediate_ca_is': vpn_conf_fields['vpn-intermediate-ca-is'],
+            'vpn_shared_key': vpn_conf_fields['vpn-shared-key'],
+            'vpn_common_name_prefix': vpn_conf_fields['vpn-common-name-prefix'],
+            'vpn_endpoints_mapped': vpn_conf_fields['vpn-endpoints-mapped'],
+            'vpn_interface_name': self.vpn_interface_name,
+            'nuvlaedge_vpn_key': vpn_key,
+            'vpn_extra_config': self.vpn_config_extra
+        }
+
+        self.write_vpn_conf(vpn_values)
+        return True
+
+    def prepare_vpn_certificates(self):
+
+        cmd = ['openssl', 'req', '-batch', '-nodes', '-newkey', 'ec', '-pkeyopt',
+               'ec_paramgen_curve:secp521r1',
+               '-keyout', self.vpn_key_file,
+               '-out', self.vpn_csr_file,
+               '-subj', f'/CN={self.nuvlaedge_id.split("/")[-1]}']
+
+        r = self.shell_execute(cmd)
+
+        if r.get('returncode', -1) != 0:
+            self.logger.error(f'Cannot generate certificates for VPN connection: '
+                                    f'{r.get("stdout")} | {r.get("stderr")}')
+            return None, None
+
+        try:
+            wait = 0
+            while not os.path.exists(self.vpn_csr_file) and \
+                    not os.path.exists(self.vpn_key_file):
+                if wait > 25:
+                    # appr 5 sec
+                    raise TimeoutError
+                wait += 1
+                time.sleep(0.2)
+
+            with open(self.vpn_csr_file) as csr:
+                vpn_csr = csr.read()
+
+            with open(self.vpn_key_file) as key:
+                vpn_key = key.read()
+        except TimeoutError:
+            self.logger.error(f'Unable to lookup {self.vpn_key_file} and '
+                                    f'{self.vpn_csr_file}')
+            return None, None
+
+        return vpn_csr, vpn_key
 
     def get_nuvlaedge_capabilities(self, commissioning_dict: dict):
         """ Finds the NuvlaEdge capabilities and adds them to the NB commissioning payload
@@ -214,6 +302,51 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         if self.container_runtime.has_pull_job_capability():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
+    def compute_api_is_running(self, container_api_port) -> bool:
+        """
+        Check if the compute-api endpoint is up and running
+
+        Only valid for Docker installations
+
+        :return: True or False
+        """
+
+        if self.container_runtime.ORCHESTRATOR not in ['docker', 'swarm']:
+            return False
+
+        if not container_api_port:
+            container_api_port = util.compute_api_port
+
+        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
+        self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
+        try:
+            if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
+                return False
+        except (docker_err.NotFound, docker_err.APIError, TimeoutError) as ex:
+            self.logger.debug(f"Compute API container not found {ex}")
+            return False
+
+        try:
+            try:
+                requests.get(compute_api_url, timeout=3)
+            except requests.exceptions.SSLError:
+                raise
+            except requests.exceptions.ConnectionError as e:
+                self.logger.debug(f'Failed to reach Compute API at {compute_api_url}: {e}')
+                # try with service name and internal port
+                requests.get('https://compute-api:5000', timeout=3)
+
+        except requests.exceptions.SSLError:
+            # this is expected. It means it is up, we just weren't authorized
+            self.logger.debug("Compute API up and running with security")
+
+        except (requests.exceptions.ConnectionError, TimeoutError) as ex:
+            # Can happen if the Compute API takes longer than normal on start
+            self.logger.info(f'Compute API not ready yet: {ex}')
+            return False
+
+        return True
+
     def get_local_nuvlaedge_status(self) -> dict:
         """
         Reads the local nuvlaedge-status file
@@ -223,7 +356,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         """
 
         try:
-            with open(self.nuvlaedge_status_file) as ns:
+            with open(FILE_NAMES.NUVLAEDGE_STATUS_FILE) as ns:
                 return json.load(ns)
         except FileNotFoundError:
             return {}
@@ -245,8 +378,8 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         :return: last commissioning content
         """
         try:
-            with open("{}/{}".format(self.data_volume, self.commissioning_file)) as r:
-                commission_payload = json.loads(r.read())
+            with FILE_NAMES.COMMISSIONING_FILE.open('r') as file:
+                commission_payload = json.load(file)
         except FileNotFoundError:
             commission_payload = {}
 
@@ -288,7 +421,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
     def get_compute_endpoint(self, vpn_ip: str) -> tuple:
         """
-        Find the endpoint and port of the compute API
+        Find the endpoint and port of the Compute API
 
         :returns tuple (api_endpoint, port)
         """
@@ -348,10 +481,10 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         """
 
         if compare_with_nb_resource:
-            with open(f'{self.data_volume}/{self.context}') as f:
+            with FILE_NAMES.CONTEXT.open('r') as file:
                 # overwrite the old commissioning value with the one from the NB resource
                 # (source of truth)
-                old_value = json.load(f).get(attr_name)
+                old_value = json.load(file).get(attr_name)
                 if old_value:
                     old[attr_name] = old_value
 
@@ -370,7 +503,11 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         # initialize the commissioning payload
         commission_payload = cluster_info.copy()
         old_commission_payload = self.read_commissioning_file()
-        minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() else cluster_info.copy()
+        minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() \
+                                     else cluster_info.copy()
+
+        my_vpn_ip = self.telemetry_instance.get_vpn_ip()
+        api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
         commission_payload["tags"] = self.container_runtime.get_node_labels()
         self.commissioning_attr_has_changed(
@@ -379,16 +516,13 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             "tags",
             minimum_commission_payload)
 
-        api_endpoint, _ = \
-            self.get_compute_endpoint(self.telemetry_instance.get_vpn_ip())
-        infra_service = \
-            self.container_runtime.define_nuvla_infra_service(api_endpoint,
-                                                              self.get_tls_keys())
+        infra_service = {}
+        if self.compute_api_is_running(container_api_port):
+            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, *self.get_tls_keys())
 
         # 1st time commissioning the IS, so we need to also pass the keys, even if they
         # haven't changed
-        infra_diff = \
-            {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
+        infra_diff = {k: v for k, v in infra_service.items() if v != old_commission_payload.get(k)}
 
         if self.container_runtime.infra_service_endpoint_keyname in \
                 old_commission_payload:
@@ -398,48 +532,16 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         commission_payload.update(infra_service)
 
-        self.set_join_tokens_on_commission_payload(commission_payload,
-                                                   minimum_commission_payload,
-                                                   old_commission_payload)
-
-        self.get_nuvlaedge_capabilities(commission_payload)
-        # capabilities should always be commissioned when infra is also being commissioned
-        if any(k in minimum_commission_payload for k in infra_service):
-            minimum_commission_payload['capabilities'] = \
-                commission_payload.get('capabilities', [])
-        else:
-            self.commissioning_attr_has_changed(
-                commission_payload,
-                old_commission_payload,
-                "capabilities",
-                minimum_commission_payload,
-                compare_with_nb_resource=True)
-
-        # if this node is a worker, then we must force remove some assets
-        self.needs_partial_decommission(minimum_commission_payload, commission_payload,
-                                        old_commission_payload)
-
-        if self.do_commission(minimum_commission_payload):
-            self.write_file("{}/{}".format(self.data_volume, self.commissioning_file),
-                            commission_payload,
-                            is_json=True)
-
-    def set_join_tokens_on_commission_payload(self, commission_payload,
-                                              minimum_commission_payload,
-                                              old_commission_payload):
-        cluster_join_tokens = self.container_runtime.get_join_tokens()
+        # atm, it isn't clear whether these will make sense for k8s
+        # if they do, then this block should be moved to an abstractmethod of the
+        # ContainerRuntime
         if len(cluster_join_tokens) > 1:
-            # FIXME: This is an old implementation handling only Docker. Define
-            #  interface via abstract class. Push this to DockerClient and
-            #  implement for KubernetesClient.
-            self.swarm_token_diff(cluster_join_tokens[0],
-                                  cluster_join_tokens[1])
+            self.swarm_token_diff(cluster_join_tokens[0], cluster_join_tokens[1])
             commission_payload.update({
-                self.container_runtime.join_token_manager_keyname:
-                    cluster_join_tokens[0],
-                self.container_runtime.join_token_worker_keyname:
-                    cluster_join_tokens[1]
+                self.container_runtime.join_token_manager_keyname: cluster_join_tokens[0],
+                self.container_runtime.join_token_worker_keyname: cluster_join_tokens[1]
             })
+
             self.commissioning_attr_has_changed(
                 commission_payload,
                 old_commission_payload,
@@ -450,6 +552,26 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
                 old_commission_payload,
                 self.container_runtime.join_token_worker_keyname,
                 minimum_commission_payload)
+
+        self.get_nuvlaedge_capabilities(commission_payload)
+        # capabilities should always be commissioned when infra is also being commissioned
+        if any(k in minimum_commission_payload for k in infra_service):
+            minimum_commission_payload['capabilities'] = \
+                commission_payload.get('capabilities', [])
+        else:
+            self.commissioning_attr_has_changed(
+                commission_payload, old_commission_payload,
+                "capabilities", minimum_commission_payload,
+                compare_with_nb_resource=True)
+
+        # if this node is a worker, them we must force remove some assets
+        self.needs_partial_decommission(minimum_commission_payload, commission_payload,
+                                        old_commission_payload)
+
+        if self.do_commission(minimum_commission_payload):
+            self.write_file(FILE_NAMES.COMMISSIONING_FILE,
+                            commission_payload,
+                            is_json=True)
 
     def build_vpn_credential_search_filter(self, vpn_server_id):
         """ Simply build the API query for searching this NuvlaEdge's VPN credential
@@ -469,23 +591,22 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         :param online_vpn_credential: VPN credential resource received from Nuvla
         :return:
         """
-        with open(self.vpn_credential) as vpn_local:
-            local_vpn_credential = json.loads(vpn_local.read())
+        with FILE_NAMES.VPN_CREDENTIAL.open('r') as file:
+            local_vpn_credential = json.load(file)
 
         if online_vpn_credential['updated'] != local_vpn_credential['updated']:
-            self.infra_logger.warning(f"VPN credential has been modified in Nuvla at "
-                                      f"{online_vpn_credential['updated']}. "
-                                      f"Recommissioning")
+            self.logger.warning(f"VPN credential has been modified in Nuvla at "
+                                f"{online_vpn_credential['updated']}. Recommissioning")
             # Recommission
             self.commission_vpn()
-            remove(self.vpn_credential)
+            FILE_NAMES.VPN_CREDENTIAL.unlink()
 
-        elif not util.file_exists_and_not_empty(self.vpn_client_conf_file):
-            self.infra_logger.warning("OpenVPN configuration not available. "
-                                      "Recommissioning")
+        elif not util.file_exists_and_not_empty(FILE_NAMES.VPN_CLIENT_CONF_FILE):
+            self.logger.warning("OpenVPN configuration not available. Recommissioning")
+
             # Recommission
             self.commission_vpn()
-            remove(self.vpn_credential)
+            FILE_NAMES.VPN_CREDENTIAL.unlink()
 
         # else, do nothing because nothing has changed
 
@@ -513,15 +634,15 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         if vpn_client_running and self.telemetry_instance.get_vpn_ip():
             # just save a copy of the VPN credential locally
-            self.write_file(self.vpn_credential, online_vpn_credential, is_json=True)
-            self.infra_logger.info(f"VPN client is currently running. Saving VPN credential "
-                                   f"locally at {self.vpn_credential}")
+            self.write_file(FILE_NAMES.VPN_CREDENTIAL, online_vpn_credential, is_json=True)
+            self.logger.info(f"VPN client is currently running. Saving VPN credential "
+                             f"locally at {FILE_NAMES.VPN_CREDENTIAL}")
         elif vpn_client_exists:
             # there is a VPN credential in Nuvla, but not locally, and the VPN client
             # is not running maybe something went wrong, just recommission
-            self.infra_logger.warning("VPN client is either not running or "
-                                      "missing its configuration. Forcing VPN "
-                                      "recommissioning...")
+            self.logger.warning("VPN client is either not running or "
+                                "missing its configuration. Forcing VPN "
+                                "recommissioning...")
             self.commission_vpn()
 
     def watch_vpn_credential(self, vpn_is_id=None):
@@ -535,28 +656,28 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
         vpn_client_exists, _ = self.check_vpn_client_state()
         if not vpn_client_exists:
-            self.infra_logger.info("VPN client container doesn't exist. "
+            self.logger.info("VPN client container doesn't exist. "
                                    "Do nothing")
             return
 
         search_filter = self.build_vpn_credential_search_filter(vpn_is_id)
-        self.infra_logger.debug("Watching VPN credential in Nuvla...")
+        self.logger.debug("Watching VPN credential in Nuvla...")
         try:
             credential_id = self.api().search("credential",
                                               filter=search_filter,
                                               last=1).resources[0].id
-            self.infra_logger.debug("Found VPN credential ID %s" % credential_id)
+            self.logger.debug("Found VPN credential ID %s" % credential_id)
         except IndexError:
             credential_id = None
 
         if not credential_id:
             # If you cannot find a VPN credential in Nuvla, then it is either in the
             # process of being created or it has been removed from Nuvla
-            self.infra_logger.info("VPN server is set but cannot find VPN credential in "
+            self.logger.info("VPN server is set but cannot find VPN credential in "
                                    "Nuvla. Commissioning VPN...")
 
-            if util.file_exists_and_not_empty(self.vpn_credential):
-                self.infra_logger.warning("NOTE: VPN credential exists locally, so it "
+            if util.file_exists_and_not_empty(FILE_NAMES.VPN_CREDENTIAL):
+                self.logger.warning("NOTE: VPN credential exists locally, so it "
                                           "was removed from Nuvla")
 
             self.commission_vpn()
@@ -565,14 +686,14 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
 
             # IF there is a VPN credential in Nuvla:
             #  - if we also have one locally, BUT is different, then recommission
-            if util.file_exists_and_not_empty(self.vpn_credential):
+            if util.file_exists_and_not_empty(FILE_NAMES.VPN_CREDENTIAL):
                 self.validate_local_vpn_credential(vpn_credential_nuvla)
             else:
                 # - IF we don't have it locally, but there's one in Nuvla, then:
                 #     - IF the vpn-client is already running, then all is good, just
                 #     save the VPN credential locally
-                self.infra_logger.warning("VPN credential exists in Nuvla, but not "
-                                          "locally")
+                self.logger.warning("VPN credential exists in Nuvla, but not "
+                                    "locally")
                 self.fix_vpn_credential_mismatch(vpn_credential_nuvla)
 
     def set_immutable_ssh_key(self):
@@ -584,12 +705,12 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
         """
 
         if path.exists(self.ssh_flag):
-            self.infra_logger.debug("Immutable SSH key has already been processed at "
-                                    "installation time")
+            self.logger.debug("Immutable SSH key has already been processed at "
+                              "installation time")
             with open(self.ssh_flag) as sshf:
                 original_ssh_key = sshf.read()
                 if self.ssh_pub_key != original_ssh_key:
-                    self.infra_logger.warning(f'Received new SSH key but the original '
+                    self.logger.warning(f'Received new SSH key but the original '
                                               f'{original_ssh_key} is immutable.Ignoring')
             return
 
@@ -599,7 +720,7 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
                 "resource": {
                     "href": self.nuvlaedge_id
                 },
-                "state": f"Unknown problem while setting immutable SSH key"
+                "state": "Unknown problem while setting immutable SSH key"
             },
             "severity": "high",
             "timestamp": datetime.utcnow().strftime(self.nuvla_timestamp_format)
@@ -614,23 +735,23 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
                 self.push_event(event)
                 return
 
-            with open(f'{self.data_volume}/{self.context}') as nb:
-                nb_owner = json.load(nb).get('owner')
+            with FILE_NAMES.CONTEXT.open('r') as file:
+                nb_owner = json.load(file).get('owner')
 
             event_owners = [nb_owner, self.nuvlaedge_id] if nb_owner \
                 else [self.nuvlaedge_id]
             event['acl'] = {'owners': event_owners}
 
-            self.infra_logger.info(f'Setting immutable SSH key {self.ssh_pub_key} for '
-                                   f'{self.installation_home}')
+            self.logger.info(f'Setting immutable SSH key {self.ssh_pub_key} for '
+                             f'{self.installation_home}')
             try:
-                with NuvlaEdgeCommon.timeout(10):
+                with util.timeout(10):
                     if not self.container_runtime.install_ssh_key(self.ssh_pub_key,
-                                                                  ssh_folder):
+                                                                  self.installation_home):
                         return
             except Exception as e:
                 msg = f'An error occurred while setting immutable SSH key: {str(e)}'
-                self.infra_logger.error(msg)
+                self.logger.error(msg)
                 event['content']['state'] = msg
                 self.push_event(event)
 
@@ -645,6 +766,6 @@ class Infrastructure(NuvlaEdgeCommon.NuvlaEdgeCommon, Thread):
             try:
                 self.try_commission()
             except RuntimeError as ex:
-                self.infra_logger.exception('Error while trying to commission NuvlaEdge',
-                                            ex)
+                self.logger.exception('Error while trying to commission NuvlaEdge',
+                                      ex)
             time.sleep(self.refresh_period)

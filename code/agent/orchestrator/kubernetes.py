@@ -4,30 +4,9 @@ import time
 from typing import Dict, List
 
 from kubernetes import client, config
-from kubernetes.client.exceptions import ApiException
 
+from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
-
-
-def init_logger(level=logging.INFO, handler=logging.StreamHandler()) \
-        -> logging.Logger:
-    logger = logging.getLogger('KubernetesClient')
-    logger.setLevel(level)
-    handler.setLevel(level)
-    logger.addHandler(handler)
-    logger.info('Logging initialised.')
-    return logger
-
-
-log = init_logger()
-
-
-JOB_TTL_SECONDS_AFTER_FINISHED = 60 * 2
-JOB_BACKOFF_LIMIT = 0
-
-
-class TimeoutException(Exception):
-    ...
 
 
 class KubernetesClient(ContainerRuntimeClient):
@@ -35,25 +14,24 @@ class KubernetesClient(ContainerRuntimeClient):
     Kubernetes client
     """
 
-    NAME = 'kubernetes'
-    NAME_COE = NAME
-    WAIT_SLEEP_SEC = 2
+    CLIENT_NAME = 'Kubernetes'
+    ORCHESTRATOR = 'kubernetes'
+    ORCHESTRATOR_COE = ORCHESTRATOR
 
-    def __init__(self, host_rootfs, host_home):
-        super().__init__(host_rootfs, host_home)
-        self.CLIENT_NAME: str = 'Kubernetes'
+    infra_service_endpoint_keyname = 'kubernetes-endpoint'
+    join_token_manager_keyname = 'kubernetes-token-manager'
+    join_token_worker_keyname = 'kubernetes-token-worker'
+
+    def __init__(self):
+        super().__init__()
         config.load_incluster_config()
         self.client = client.CoreV1Api()
         self.client_apps = client.AppsV1Api()
-        self.client_batch_api = client.BatchV1Api()
-        self.namespace = os.getenv('MY_NAMESPACE', 'nuvlaedge')
+        self.namespace = self.get_nuvlaedge_project_name(util.default_project_name)
         self.job_engine_lite_image = os.getenv('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE')
         self.host_node_ip = os.getenv('MY_HOST_NODE_IP')
         self.host_node_name = os.getenv('MY_HOST_NODE_NAME')
         self.vpn_client_component = os.getenv('NUVLAEDGE_VPN_COMPONENT_NAME', 'vpn-client')
-        self.infra_service_endpoint_keyname = 'kubernetes-endpoint'
-        self.join_token_manager_keyname = 'kubernetes-token-manager'
-        self.join_token_worker_keyname = 'kubernetes-token-worker'
         self.data_gateway_name = f"data-gateway.{self.namespace}"
 
     def get_node_info(self):
@@ -101,7 +79,7 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return {
             'cluster-id': cluster_id,
-            'cluster-orchestrator': self.NAME_COE,
+            'cluster-orchestrator': self.ORCHESTRATOR_COE,
             'cluster-managers': managers,
             'cluster-workers': workers
         }
@@ -159,8 +137,9 @@ class KubernetesClient(ContainerRuntimeClient):
 
         return False
 
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
         name = 'nuvlaedge-ssh-installer'
+        ssh_folder = '/tmp/ssh'
         try:
             existing_pod = self.client.read_namespaced_pod(namespace=self.namespace, name=name)
         except client.exceptions.ApiException as e:
@@ -185,7 +164,7 @@ class KubernetesClient(ContainerRuntimeClient):
                     client.V1Volume(
                         name=volume_name,
                         host_path=client.V1HostPathVolumeSource(
-                            path=f'{self.host_home}/.ssh'
+                            path=f'{host_home}/.ssh'
                         )
                     )
                 ],
@@ -346,12 +325,15 @@ class KubernetesClient(ContainerRuntimeClient):
                         metrics['container-status'] = k
                         break
 
-                metrics['restart-count'] = int(cstat.restart_count or 0)
-        return metrics
+                        container['restart-count'] = int(cstat.restart_count)
 
-    def get_installation_parameters(self, search_label):
+                out.append(metrics)
+
+        return out
+
+    def get_installation_parameters(self):
         nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
-                                                                            label_selector=search_label).items
+                                                                            label_selector=util.base_label).items
 
         environment = []
         for dep in nuvlaedge_deployments:
@@ -432,16 +414,17 @@ class KubernetesClient(ContainerRuntimeClient):
         # doesn't seem to be available from the API
         return None
 
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         if api_endpoint:
             infra_service = {
                 "kubernetes-endpoint": api_endpoint
             }
 
-            if tls_keys:
-                infra_service["kubernetes-client-ca"] = tls_keys[0]
-                infra_service["kubernetes-client-cert"] = tls_keys[1]
-                infra_service["kubernetes-client-key"] = tls_keys[2]
+            if client_ca and client_cert and client_key:
+                infra_service["kubernetes-client-ca"] = client_ca
+                infra_service["kubernetes-client-cert"] = client_cert
+                infra_service["kubernetes-client-key"] = client_key
 
             return infra_service
         return {}
@@ -460,161 +443,9 @@ class KubernetesClient(ContainerRuntimeClient):
         # TODO: implement.
         return []
 
-    def _namespace(self, **kwargs):
-        return kwargs.get('namespace', self.namespace)
+    def get_current_container_id(self) -> str:
+        # TODO
+        return ''
 
-    def _wait_pod_in_phase(self, namespace: str, name: str, phase: str, wait_sec=60):
-        ts_stop = time.time() + wait_sec
-        while True:
-            pod: client.V1Pod = self.client.read_namespaced_pod(name, namespace)
-            if phase == pod.status.phase:
-                return
-            log.info(f'Waiting pod {phase}: {namespace}:{name} till {ts_stop}')
-            if ts_stop <= time.time():
-                raise TimeoutException(f'Pod is not {phase} after {wait_sec} sec')
-            time.sleep(self.WAIT_SLEEP_SEC)
-
-    def _wait_pod_deleted(self, namespace: str, name: str, wait_sec=60):
-        ts_stop = time.time() + wait_sec
-        while True:
-            try:
-                self.client.read_namespaced_pod(name, namespace)
-            except ApiException as ex:
-                if ex.reason == 'Not Found':
-                    return
-            log.info(f'Deleting pod: {namespace}:{name} till {ts_stop}')
-            if ts_stop <= time.time():
-                raise TimeoutException(f'Pod is still not deleted after {wait_sec} sec')
-            time.sleep(self.WAIT_SLEEP_SEC)
-
-    @staticmethod
-    def _to_k8s_obj_name(name: str) -> str:
-        return name.replace('_', '-').replace('/', '-')
-
-    @staticmethod
-    def _container_def(image, name, command: str = None, args: str = None) -> \
-            client.V1Container:
-        def parse_cmd_args(cmd, arg):
-            if cmd:
-                cmd = cmd.split()
-            else:
-                cmd = None
-            if arg:
-                arg = arg.split()
-            else:
-                arg = None
-            return cmd, arg
-        command, args = parse_cmd_args(command, args)
-        return client.V1Container(
-            image=image,
-            name=name,
-            command=command,
-            args=args)
-
-    @staticmethod
-    def _pod_spec(container: client.V1Container, network: str = None,
-                  **kwargs) -> client.V1PodSpec:
-        pod_spec = client.V1PodSpec(
-            host_network=(network == 'host'),
-            containers=[container])
-        if 'restart_policy' in kwargs:
-            pod_spec.restart_policy = kwargs['restart_policy']
-        return pod_spec
-
-    @staticmethod
-    def _pod_template_spec(name: str, pod_spec: client.V1PodSpec) \
-            -> client.V1PodTemplateSpec:
-        return client.V1PodTemplateSpec(
-            spec=pod_spec,
-            metadata=client.V1ObjectMeta(name=name)
-        )
-
-    def _pod_def(self, image, name, command: str = None, args: str = None,
-                 network: str = None, **kwargs) -> client.V1Pod:
-        container_def = self._container_def(image, name, command=command, args=args)
-        pod_spec = self._pod_spec(container_def, network=network, **kwargs)
-        return client.V1Pod(
-            metadata=client.V1ObjectMeta(name=name, annotations={}),
-            spec=pod_spec
-        )
-
-    def _job_def(self, image, name, command: str = None, args: str = None,
-                 network: str = None, **kwargs) -> client.V1Job:
-
-        name = self._to_k8s_obj_name(name)
-
-        container: client.V1Container = \
-            self._container_def(image, name, command=command, args=args)
-        pod_spec: client.V1PodSpec = \
-            self._pod_spec(container, network=network, **kwargs)
-        pod_template: client.V1PodTemplateSpec = \
-            self._pod_template_spec(name, pod_spec)
-
-        job_sec = client.V1JobSpec(template=pod_template)
-        job_sec.backoff_limit = kwargs.get('backoff_limit', JOB_BACKOFF_LIMIT)
-        job_sec.ttl_seconds_after_finished = \
-            kwargs.get('ttl_seconds_after_finished',
-                       JOB_TTL_SECONDS_AFTER_FINISHED)
-
-        return client.V1Job(
-            api_version="batch/v1",
-            kind="Job",
-            metadata=client.V1ObjectMeta(name=name),
-            spec=job_sec
-        )
-
-    def container_run_command(self, image, name, command: str = None,
-                              args: str = None,
-                              network: str = None, remove: bool = True,
-                              no_output=False,
-                              **kwargs) -> str:
-        name = self._to_k8s_obj_name(name)
-        pod = self._pod_def(image, name, command=command, args=args,
-                            network=network, **kwargs)
-        namespace = self._namespace(**kwargs)
-        log.info('Run pod %s in namespace %s', pod.to_str(), namespace)
-        try:
-            self.client.create_namespaced_pod(namespace, pod)
-            if no_output:
-                return ''
-        except ApiException as ex:
-            log.error('Failed to create %s:%s: %s', namespace, name, ex, exc_info=ex)
-            return ''
-        try:
-            self._wait_pod_in_phase(namespace, name, 'Running')
-        except TimeoutException as ex:
-            log.warning(ex)
-            return ''
-        output = self.client.read_namespaced_pod_log(name, namespace)
-        if remove:
-            self.container_remove(name, **kwargs)
-        return output
-
-    def container_remove(self, name: str, **kwargs):
-        """
-        Interprets `name` as the name of the pod and removes it (which
-        effectively removes all the containers in the pod).
-
-        :param name:
-        :param kwargs:
-        :return:
-        """
-        name = self._to_k8s_obj_name(name)
-        namespace = self._namespace(**kwargs)
-        try:
-            log.info(f'Deleting pod {namespace}:{name}')
-            self.client.delete_namespaced_pod(name, namespace)
-            self._wait_pod_deleted(namespace, name)
-        except ApiException as ex:
-            log.warning('Failed removing pod %s in %s: %s', name, namespace,
-                            ex.reason)
-        except TimeoutException as ex_timeout:
-            log.warning('Timeout waiting for pod to be deleted: %s', ex_timeout)
-
-    def collect_container_metrics_net(self):
-        # FIXME: implement. Not clear how to get Rx/Tx metrics.
-        return 0, 0
-
-    def collect_container_metrics_block(self):
-        # FIXME: implement. Not clear how to get the block IO.
-        return 0, 0
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> str:
+        return os.getenv('MY_NAMESPACE', default_project_name)

@@ -77,6 +77,8 @@ jobs:
       - name: Run Validation on board ${{ matrix.board-config }}
         run: |
           python -m validation_framework --target ${{ matrix.board-config }}.toml \
+          --key ${{ secrets.VALIDATION_NUVLA_API_KEY }} \
+          --secret ${{ secrets.VALIDATION_NUVLA_API_SECRET }} \
           --validator ${{ matrix.validation-type }} --repository ${{ github.event.repository.name }} \
           --branch ${{ env.BRANCH_NAME }}
 

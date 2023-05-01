@@ -104,18 +104,9 @@ class BaseDataStructure(BaseModel):
     Base data structure for providing a common configuration for all the
     structures.
     """
-    # updated: bool = False
-    # updated_date: Optional[datetime]
 
     class Config:
         """ Configuration class for base telemetry data """
         allow_population_by_field_name = True
         alias_generator = underscore_to_hyphen
         validate_assignment = True
-
-    # @root_validator
-    # def check_updated(cls, values):
-    #     values['updated'] = True
-    #     values['updated_date'] = datetime.now()
-        # print(f'\n\n {json.dumps(values, indent=4)} \n\n')
-        # return values

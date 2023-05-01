@@ -4,6 +4,7 @@ This file gathers general utilities demanded by most of the classes such as a co
 
 import os
 import logging
+import signal
 import tempfile
 
 from contextlib import contextmanager
@@ -12,7 +13,16 @@ from subprocess import (Popen, run, PIPE, TimeoutExpired,
                         SubprocessError, STDOUT, CompletedProcess)
 
 
+base_label = 'nuvlaedge.component=True'
 compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
+compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
+default_project_name = 'nuvlaedge'
+
+
+COMPUTE_API_INTERNAL_PORT = 5000
+
+def str_if_value_or_none(value):
+    return str(value) if value else None
 
 
 def execute_cmd(command: List[str], method_flag: bool = True) \
@@ -79,3 +89,22 @@ def atomic_write(file, data, **kwargs):
 def file_exists_and_not_empty(filename):
     return (os.path.exists(filename)
             and os.path.getsize(filename) > 0)
+
+
+def raise_timeout(signum, frame):
+    raise TimeoutError
+
+
+@contextmanager
+def timeout(time):
+    # Register a function to raise a TimeoutError on the signal.
+    signal.signal(signal.SIGALRM, raise_timeout)
+    # Schedule the signal to be sent after ``time``.
+    signal.alarm(time)
+
+    try:
+        yield
+    finally:
+        # Unregister the signal so it won't be triggered
+        # if the timeout is not reached.
+        signal.signal(signal.SIGALRM, signal.SIG_IGN)

@@ -1,27 +1,31 @@
 """
 Orchestration base class. To be implemented and extended for Docker or Kubernetes.
 """
+
 from abc import ABC, abstractmethod
+
 from agent.common import util
-
-
-class OrchestratorException(Exception):
-    ...
 
 
 class ContainerRuntimeClient(ABC):
     """
     Base abstract class for the Docker and Kubernetes clients
     """
-    CLIENT_NAME: str
 
-    def __init__(self, host_rootfs, host_home):
+    CLIENT_NAME: str
+    ORCHESTRATOR: str
+    ORCHESTRATOR_COE: str
+
+    hostfs = "/rootfs"
+    infra_service_endpoint_keyname: str
+    join_token_manager_keyname: str
+    join_token_worker_keyname: str
+
+    def __init__(self):
         self.client = None
-        self.hostfs = host_rootfs
         self.job_engine_lite_component = util.compose_project_name + "-job-engine-lite"
         self.job_engine_lite_image = None
         self.vpn_client_component = util.compose_project_name + '-vpn-client'
-        self.host_home = host_home
         self.ignore_env_variables = ['NUVLAEDGE_API_KEY', 'NUVLAEDGE_API_SECRET']
         self.data_gateway_name = None
 
@@ -108,7 +112,7 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def install_ssh_key(self, ssh_pub_key, ssh_folder):
+    def install_ssh_key(self, ssh_pub_key, host_home):
         """
         Takes an SSH public key and adds it to the host's HOME authorized keys
         (aka ssh_folder)
@@ -145,11 +149,10 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def get_installation_parameters(self, search_label):
+    def get_installation_parameters(self):
         """
         Scans all the NuvlaEdge components and returns all parameters that are relevant to
          the installation of the NB
-        :param search_label: label to be used for searching the components
         """
 
     @abstractmethod
@@ -216,12 +219,15 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str,
+                                   client_ca=None, client_cert=None, client_key=None) -> dict:
         """
         Defines the infra service structure for commissioning
 
         :param api_endpoint: endpoint of the Docker/K8s API
-        :param tls_keys: TLS keys for authenticating with the API endpoint (ca, crt, key)
+        :param client_ca: API endpoint CA
+        :param client_cert: API endpoint client certificate
+        :param client_key: API endpoint client private key
 
         :returns dict of the infra service for commissioning
         """
@@ -264,24 +270,17 @@ class ContainerRuntimeClient(ABC):
         """
 
     @abstractmethod
-    def container_run_command(self, image, name, command: str = None,
-                              args: str = None,
-                              network: str = None, remove: bool = True,
-                              **kwargs) -> str:
+    def get_current_container_id(self) -> str:
         """
-        Runs `command` with `args` in a container started from `image` and
-        returns output.
+        Get the container id of the current container
 
-        :return: output of running default entrypoint or `command` with
-                 optional `args`.
+        :return: current container id
         """
 
     @abstractmethod
-    def container_remove(self, name: str, **kwargs):
+    def get_nuvlaedge_project_name(self, default_project_name=None) -> str:
         """
-        Removes "container" by `name`. Notion of the "container" is COE
-        dependent. It is container for Docker and pod (with all the containers
-        in it) for K8s.
+        Get the NuvlaEdge project name
 
-        :param name:
+        :return: NuvlaEdge project name
         """

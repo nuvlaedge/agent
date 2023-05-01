@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 import json
-import os
 import time
 import unittest
 from random import SystemRandom
 from typing import List, Dict, Any
+from pathlib import Path
 
-import pydantic.error_wrappers
 import requests
 from docker import errors as docker_err
 from mock import Mock, mock_open, patch, MagicMock
@@ -205,7 +204,10 @@ class TestNetworkMonitor(unittest.TestCase):
         self.assertTrue(test_ip_monitor.is_skip_route({}))
 
     # -------------------- VPN data tests -------------------- #
-    def test_set_vpn_data(self):
+
+    @patch.object(Path, 'exists')
+    @patch.object(Path, 'stat')
+    def test_set_vpn_data(self, mock_stat, mock_exists):
         vpn_file = Mock()
         status = Mock()
         status.iface_data = None
@@ -213,23 +215,18 @@ class TestNetworkMonitor(unittest.TestCase):
             monitor.NetworkMonitor(vpn_file, Mock(), status)
 
         it_ip: str = generate_random_ip_address()
-        with patch("os.stat") as stat_mock, \
-                patch("os.path.exists") as exists_mock:
-            exists_mock.return_value = True
-            stat_mock.return_value = Mock(st_size=30)
+        mock_stat.return_value.st_size = 1
+        mock_exists.return_value = True
+        with patch.object(Path, 'open', mock_open(read_data=it_ip)):
+            test_ip_monitor.set_vpn_data()
+            self.assertEqual(test_ip_monitor.data.ips.vpn, it_ip)
 
-            with patch(self.built_open, mock_open(read_data=it_ip)):
-                test_ip_monitor.set_vpn_data()
-                self.assertEqual(test_ip_monitor.data.ips.vpn, it_ip)
         test_ip_monitor.data.ips.vpn = ''
-        with patch("os.stat") as stat_mock, \
-                patch("os.path.exists") as exists_mock:
-            exists_mock.return_value = True
-            stat_mock.return_value = Mock(st_size=0)
-
-            with patch(self.built_open, mock_open(read_data="")):
-                test_ip_monitor.set_vpn_data()
-                self.assertFalse(test_ip_monitor.data.ips.vpn)
+        mock_stat.return_value.st_size = 0
+        mock_exists.return_value = True
+        with patch.object(Path, 'open', mock_open(read_data="")):
+            test_ip_monitor.set_vpn_data()
+            self.assertFalse(test_ip_monitor.data.ips.vpn)
 
     # -------------------- Swarm data tests -------------------- #
     def test_set_swarm_data(self):

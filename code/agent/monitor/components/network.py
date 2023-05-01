@@ -14,8 +14,9 @@ from typing import List, NoReturn, Dict, Union
 
 import requests
 from docker.models.containers import Container
+from nuvlaedge.common.constant_files import FILE_NAMES
 
-from agent.common import NuvlaEdgeCommon, util
+from agent.common import nuvlaedge_common, util
 from agent.monitor.data.network_data import NetworkingData, NetworkInterface, IP
 from agent.monitor import Monitor
 from ..components import monitor
@@ -30,9 +31,7 @@ class NetworkMonitor(Monitor):
     _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
     _IP_COMMAND_ARGS: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
-    _PROJECT_NAME_LABEL_KEY: str = 'com.docker.compose.project'
-    DEFAULT_PROJECT_NAME: str = 'nuvlaedge'
-    _NUVLAEDGE_COMPONENT_LABEL_KEY: str = 'nuvlaedge.component=True'
+    _NUVLAEDGE_COMPONENT_LABEL_KEY: str = util.base_label
 
     def __init__(self, name: str, telemetry, enable_monitor=True):
 
@@ -48,14 +47,14 @@ class NetworkMonitor(Monitor):
         self.host_fs: str = telemetry.hostfs
         self.first_net_stats: Dict = {}
         self.previous_net_stats_file: str = telemetry.previous_net_stats_file
-        self.vpn_ip_file: str = telemetry.vpn_ip_file
-        self.coe_client: NuvlaEdgeCommon.ContainerRuntimeClient = \
-            telemetry.container_runtime
+
+        self.runtime_client: nuvlaedge_common.ContainerRuntimeClient = telemetry.container_runtime
+
 
         self.engine_project_name: str = self.get_engine_project_name()
         self.logger.info(f'Running network monitor for project '
                          f'{self.engine_project_name}')
-        self.iproute_container_name: str = f'{self.engine_project_name}_iproute'
+        self.iproute_container_name: str = f'{self.engine_project_name}-iproute'
 
         self.last_public_ip: float = 0.0
 
@@ -64,15 +63,7 @@ class NetworkMonitor(Monitor):
             telemetry.edge_status.iface_data = self.data
 
     def get_engine_project_name(self) -> str:
-        filters = {'label': [self._PROJECT_NAME_LABEL_KEY,
-                             self._NUVLAEDGE_COMPONENT_LABEL_KEY]}
-        try:
-            container_list: List[Container] = \
-                self.coe_client.list_containers(filters=filters)
-            return container_list[0].labels.get(self._PROJECT_NAME_LABEL_KEY)
-        except Exception as ex:
-            self.logger.warning('Project name not found: %s', ex)
-        return self.DEFAULT_PROJECT_NAME
+        return self.runtime_client.get_nuvlaedge_project_name(util.default_project_name)
 
     def set_public_data(self) -> NoReturn:
         """
@@ -325,9 +316,9 @@ class NetworkMonitor(Monitor):
         """ Discovers the NuvlaEdge VPN IP  """
 
         # Check if file exists and not empty
-        if os.path.exists(self.vpn_ip_file) and \
-                os.stat(self.vpn_ip_file).st_size != 0:
-            with open(self.vpn_ip_file, 'r', encoding='UTF-8') as file:
+        if FILE_NAMES.VPN_IP_FILE.exists() and \
+                FILE_NAMES.VPN_IP_FILE.stat().st_size != 0:
+            with FILE_NAMES.VPN_IP_FILE.open() as file:
                 it_line = file.read()
                 ip_address: str = str(it_line.splitlines()[0])
 
