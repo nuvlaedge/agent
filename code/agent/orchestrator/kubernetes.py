@@ -325,11 +325,8 @@ class KubernetesClient(ContainerRuntimeClient):
                         metrics['container-status'] = k
                         break
 
-                        container['restart-count'] = int(cstat.restart_count)
-
-                out.append(metrics)
-
-        return out
+                metrics['restart-count'] = int(cstat.restart_count or 0)
+        return metrics
 
     def get_installation_parameters(self):
         nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
