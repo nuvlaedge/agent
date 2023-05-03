@@ -36,7 +36,7 @@ class Infrastructure(NuvlaEdgeCommon):
     def __init__(self,
                  container_runtime: ContainerRuntimeClient,
                  data_volume: str,
-                 telemetry: Telemetry = None,
+                 telemetry: Telemetry,
                  refresh_period: int = 15):
         """
         Constructs an Infrastructure object, with a status placeholder
@@ -48,10 +48,8 @@ class Infrastructure(NuvlaEdgeCommon):
 
         self.logger: logging.Logger = logging.getLogger(__name__)
 
-        if telemetry:
-            self.telemetry_instance = telemetry
-        else:
-            self.telemetry_instance = Telemetry(data_volume, None)
+        self.telemetry_instance = telemetry
+
         self.compute_api = util.compose_project_name + '-compute-api'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
@@ -302,7 +300,7 @@ class Infrastructure(NuvlaEdgeCommon):
         if self.container_runtime.has_pull_job_capability():
             commissioning_dict['capabilities'].append('NUVLA_JOB_PULL')
 
-    def compute_api_is_running(self, container_api_port) -> bool:
+    def compute_api_is_running(self) -> bool:
         """
         Check if the compute-api endpoint is up and running
 
@@ -314,10 +312,7 @@ class Infrastructure(NuvlaEdgeCommon):
         if self.container_runtime.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
-        if not container_api_port:
-            container_api_port = util.compute_api_port
-
-        compute_api_url = f'https://{self.compute_api}:{container_api_port}'
+        compute_api_url = f'https://{self.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
         self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
@@ -327,14 +322,7 @@ class Infrastructure(NuvlaEdgeCommon):
             return False
 
         try:
-            try:
-                requests.get(compute_api_url, timeout=3)
-            except requests.exceptions.SSLError:
-                raise
-            except requests.exceptions.ConnectionError as e:
-                self.logger.debug(f'Failed to reach Compute API at {compute_api_url}: {e}')
-                # try with service name and internal port
-                requests.get('https://compute-api:5000', timeout=3)
+            requests.get(compute_api_url, timeout=3)
 
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
@@ -347,7 +335,8 @@ class Infrastructure(NuvlaEdgeCommon):
 
         return True
 
-    def get_local_nuvlaedge_status(self) -> dict:
+    @staticmethod
+    def get_local_nuvlaedge_status() -> dict:
         """
         Reads the local nuvlaedge-status file
 
@@ -371,7 +360,8 @@ class Infrastructure(NuvlaEdgeCommon):
 
         return self.get_local_nuvlaedge_status().get('cluster-node-role')
 
-    def read_commissioning_file(self) -> dict:
+    @staticmethod
+    def read_commissioning_file() -> dict:
         """
         Reads the current content of the commissioning file from the local shared volume
 
@@ -425,15 +415,15 @@ class Infrastructure(NuvlaEdgeCommon):
 
         :returns tuple (api_endpoint, port)
         """
-        container_api_ip, container_api_port = self.container_runtime.get_api_ip_port()
+        container_api_ip, external_api_port = self.container_runtime.get_api_ip_port()
 
         api_endpoint = None
         if vpn_ip:
-            api_endpoint = f"https://{vpn_ip}:{container_api_port}"
-        elif container_api_ip and container_api_port:
-            api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+            api_endpoint = f"https://{vpn_ip}:{external_api_port}"
+        elif container_api_ip and external_api_port:
+            api_endpoint = f"https://{container_api_ip}:{external_api_port}"
 
-        return api_endpoint, container_api_port
+        return api_endpoint, external_api_port
 
     def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict,
                                    old_payload: dict):
@@ -463,7 +453,8 @@ class Infrastructure(NuvlaEdgeCommon):
             except KeyError:
                 pass
 
-    def commissioning_attr_has_changed(self, current: dict, old: dict, attr_name: str,
+    @staticmethod
+    def commissioning_attr_has_changed(current: dict, old: dict, attr_name: str,
                                        payload: dict,
                                        compare_with_nb_resource: bool = False):
         """
@@ -518,7 +509,7 @@ class Infrastructure(NuvlaEdgeCommon):
             minimum_commission_payload)
 
         infra_service = {}
-        if self.compute_api_is_running(container_api_port):
+        if self.compute_api_is_running():
             infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, *self.get_tls_keys())
 
         # 1st time commissioning the IS, so we need to also pass the keys, even if they
@@ -657,8 +648,7 @@ class Infrastructure(NuvlaEdgeCommon):
 
         vpn_client_exists, _ = self.check_vpn_client_state()
         if not vpn_client_exists:
-            self.logger.info("VPN client container doesn't exist. "
-                                   "Do nothing")
+            self.logger.info("VPN client container doesn't exist. Do nothing")
             return
 
         search_filter = self.build_vpn_credential_search_filter(vpn_is_id)
@@ -674,12 +664,12 @@ class Infrastructure(NuvlaEdgeCommon):
         if not credential_id:
             # If you cannot find a VPN credential in Nuvla, then it is either in the
             # process of being created or it has been removed from Nuvla
-            self.logger.info("VPN server is set but cannot find VPN credential in "
-                                   "Nuvla. Commissioning VPN...")
+            self.logger.info("VPN server is set but cannot find VPN credential in Nuvla."
+                             " Commissioning VPN...")
 
             if util.file_exists_and_not_empty(FILE_NAMES.VPN_CREDENTIAL):
                 self.logger.warning("NOTE: VPN credential exists locally, so it "
-                                          "was removed from Nuvla")
+                                    "was removed from Nuvla")
 
             self.commission_vpn()
         else:

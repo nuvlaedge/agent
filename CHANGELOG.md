@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+### Added
+ - NuvlaEdge Docker client, now reads the port from the container configuration 
+### Changed
+ - Compute API Connectivity check only performed in local network using container-name and internal port. 
+
 ## [2.11.0] - 2023-04-27
 ### Added
  - Integration of nuvlaedge-common library

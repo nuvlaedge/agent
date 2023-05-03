@@ -6,6 +6,9 @@ from subprocess import run, PIPE, TimeoutExpired
 from typing import List, Optional
 
 import docker
+import docker.errors
+from docker.models.containers import Container
+
 import requests
 import yaml
 
@@ -88,9 +91,25 @@ class DockerClient(ContainerRuntimeClient):
         else:
             return {}
 
+    def find_compute_api_external_port(self) -> str:
+        try:
+            cont: Container = self.client.containers.get(util.compose_project_name + '-compute-api')
+
+        except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
+            self.logger.debug(f"Compute API container not found {ex}")
+            return ''
+
+        try:
+            return cont.ports['5000/tcp'][0]['HostPort']
+
+        except KeyError as ex:
+            self.logger.warning(f'Cannot infer ComputeAPI external port, container attributes '
+                                f'not properly formatted', exc_info=ex)
+        return ""
+
     def get_api_ip_port(self):
         node_info = self.get_node_info()
-
+        compute_api_external_port = self.find_compute_api_external_port()
         ip = node_info.get("Swarm", {}).get("NodeAddr")
         if not ip:
             # then probably this isn't running in Swarm mode
@@ -116,14 +135,14 @@ class DockerClient(ContainerRuntimeClient):
                 # Double check - we should never get here
                 if not ip:
                     logging.warning("Cannot infer the NuvlaEdge API IP!")
-                    return None, util.compute_api_port
+                    return None, compute_api_external_port
 
-        return ip, util.compute_api_port
+        return ip, compute_api_external_port
 
     def has_pull_job_capability(self):
         try:
             container = self.client.containers.get(self.job_engine_lite_component)
-        except docker.errors.NotFound:
+        except docker.errors.NotFound as e:
             logging.warning(f"Container {self.job_engine_lite_component} not found. Reason: {str(e)}")
             return False
         except Exception as e:
