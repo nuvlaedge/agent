@@ -284,3 +284,6 @@ class ContainerRuntimeClient(ABC):
 
         :return: NuvlaEdge project name
         """
+class OrchestratorException(Exception):
+    ...
+
