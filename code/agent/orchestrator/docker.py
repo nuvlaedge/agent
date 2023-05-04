@@ -5,7 +5,6 @@ import socket
 from subprocess import run, PIPE, TimeoutExpired
 from typing import List, Optional
 
-<<<<<<< HEAD
 import requests
 import docker
 from docker import errors as docker_err
@@ -14,15 +13,7 @@ from docker.models.containers import Container
 
 from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient, OrchestratorException
-=======
-import docker
-import requests
 import yaml
-
-from agent.common import util
-from agent.orchestrator import ContainerRuntimeClient
->>>>>>> main
-
 
 class InferIPError(Exception):
     ...
@@ -33,30 +24,6 @@ class DockerClient(ContainerRuntimeClient):
     Docker client
     """
 
-<<<<<<< HEAD
-    NAME = 'docker'
-    NAME_COE = 'swarm'
-
-    def __init__(self, host_rootfs, host_home, docker_host=None,
-                 check_docker_host=True):
-        """
-        Public constructor.
-
-        :param host_rootfs: path to hosts' root file system
-        :param host_home:
-        :param docker_host: corresponds to DOCKER_HOST env var for bootstrapping
-                            Docker client.
-        """
-        super().__init__(host_rootfs, host_home)
-        self.logger: logging.Logger = logging.getLogger(__name__)
-        self.CLIENT_NAME: str = 'Docker'
-        if check_docker_host:
-            self.check_docker_host(docker_host)
-        self.client: docker.DockerClient = \
-            docker.from_env(
-                environment={
-                    'DOCKER_HOST': docker_host or get_context_host()})
-=======
     CLIENT_NAME = 'Docker'
     ORCHESTRATOR = 'docker'
     ORCHESTRATOR_COE = 'swarm'
@@ -69,7 +36,6 @@ class DockerClient(ContainerRuntimeClient):
         super().__init__()
         self.logger: logging.Logger = logging.getLogger(__name__)
         self.client = docker.from_env()
->>>>>>> main
         self.lost_quorum_hint = 'possible that too few managers are online'
         self.data_gateway_name = "data-gateway"
 
@@ -128,11 +94,7 @@ class DockerClient(ContainerRuntimeClient):
 
             return {
                 'cluster-id': cluster_id,
-<<<<<<< HEAD
-                'cluster-orchestrator': self.NAME_COE,
-=======
                 'cluster-orchestrator': self.ORCHESTRATOR_COE,
->>>>>>> main
                 'cluster-managers': managers,
                 'cluster-workers': workers
             }
@@ -636,36 +598,6 @@ class DockerClient(ContainerRuntimeClient):
 
         return enabled_plugins
 
-<<<<<<< HEAD
-    def define_nuvla_infra_service(self, api_endpoint: str, tls_keys: list) -> dict:
-        if not self.compute_api_is_running(self.compute_api_port):
-            return {}
-        return self.coe_infra_service_def(api_endpoint, tls_keys)
-
-    def coe_infra_service_def(self, api_endpoint, tls_keys) -> dict:
-        main_coe_is = self.main_coe_infra_service(api_endpoint, tls_keys)
-        other_coe_is = self.other_coe_infra_service(api_endpoint)
-        return {**other_coe_is, **main_coe_is}
-
-    @staticmethod
-    def main_coe_infra_service(api_endpoint: str, tls_keys: list) -> dict:
-        infra_service = {}
-        if api_endpoint:
-            infra_service["swarm-endpoint"] = api_endpoint
-            if tls_keys:
-                infra_service["swarm-client-ca"] = tls_keys[0]
-                infra_service["swarm-client-cert"] = tls_keys[1]
-                infra_service["swarm-client-key"] = tls_keys[2]
-        return infra_service
-
-    def other_coe_infra_service(self, api_endpoint):
-        try:
-            infra_service = self.infer_if_additional_coe_exists(
-                fallback_address=api_endpoint.replace('https://', '').split(':')[0])
-        except Exception as ex:
-            self.logger.warning('Failed discovering additional COE: %s', ex)
-            infra_service = {}
-=======
     def define_nuvla_infra_service(self, api_endpoint: str,
                                    client_ca=None, client_cert=None, client_key=None) -> dict:
         try:
@@ -683,7 +615,6 @@ class DockerClient(ContainerRuntimeClient):
                 infra_service["swarm-client-cert"] = client_cert
                 infra_service["swarm-client-key"] = client_key
 
->>>>>>> main
         return infra_service
 
     def get_partial_decommission_attributes(self) -> list:
