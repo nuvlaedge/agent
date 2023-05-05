@@ -172,10 +172,6 @@ class ContainerStatsMonitor(Monitor):
         if self.data.cluster_data:
             nuvla_report.update(self.data.cluster_data.dict(by_alias=True, exclude_none=True))
 
-        if self.data.containers:
-            nuvla_report['components'] = \
-                [container_data.name for container_data in self.data.containers.values()]
-
         if self.data.swarm_node_cert_expiry_date:
             nuvla_report.update(self.data.dict(
                 by_alias=True, include={'swarm_node_cert_expiry_date'}))
