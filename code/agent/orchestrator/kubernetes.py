@@ -4,8 +4,9 @@ import time
 from typing import Dict, List
 
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 
-from agent.common import util
+from agent.orchestrator import ContainerRuntimeClient
 
 
 def init_logger(level=logging.INFO, handler=logging.StreamHandler()) \
@@ -27,6 +28,7 @@ JOB_BACKOFF_LIMIT = 0
 
 class TimeoutException(Exception):
     ...
+
 
 class KubernetesClient(ContainerRuntimeClient):
     """
