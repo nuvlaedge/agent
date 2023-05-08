@@ -498,6 +498,7 @@ class Infrastructure(NuvlaEdgeCommon):
     def try_commission(self):
         """ Checks whether any of the system configurations have changed
         and if so, returns True or False """
+        cluster_join_tokens = self.container_runtime.get_join_tokens()
         cluster_info = self.needs_cluster_commission()
 
         # initialize the commissioning payload
