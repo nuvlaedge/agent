@@ -82,17 +82,10 @@ class ContainerRuntimeClient(ABC):
         """
         Parses a set of key value pairs in a dict, into a list of strings
         :param key_value_dict: something like {'key': value, 'novalue': None, ...}
-        :return: ["key=value", "novalue", ...]
+        :return: [{key: value}, {key: ""}, ...]
         """
 
-        final_list = []
-        for label, value in key_value_dict.items():
-            if value:
-                final_list.append("{}={}".format(label, value))
-            else:
-                final_list.append(label)
-
-        return final_list
+        return [{label: value} for label, value in key_value_dict.items()]
 
     @abstractmethod
     def is_vpn_client_running(self):

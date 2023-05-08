@@ -84,6 +84,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_node_id.return_value = None
         test_monitor.client_runtime.get_cluster_id.return_value = None
         test_monitor.client_runtime.get_cluster_managers.return_value = None
+        test_monitor.client_runtime.get_node_labels.return_value = None
         test_monitor.update_cluster_data()
         self.assertTrue(
             all(x not in test_monitor.data
@@ -125,7 +126,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
 
         test_monitor.update_cluster_data()
         all_fields = ["node-id", "orchestrator", "cluster-node-role", "cluster-id",
-                      "cluster-join-address", "cluster-managers", "cluster-nodes"]
+                      "cluster-join-address", "cluster-managers", "cluster-nodes", "labels"]
         self.assertEqual(sorted(all_fields),
                          sorted(test_monitor.data.cluster_data.dict(by_alias=True).keys()),
                          'Unable to set cluster status')
@@ -209,12 +210,6 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.data.cluster_data.dict.return_value = {'some_Data': 1}
         test_monitor.populate_nb_report(nb_report)
         self.assertIn('some_Data', nb_report)
-
-        container_data = Mock()
-        container_data.name = 'container_name'
-        test_monitor.data.containers = {'container': container_data}
-        test_monitor.populate_nb_report(nb_report)
-        self.assertIn('components', nb_report)
 
         test_monitor: ContainerStatsMonitor = self.get_base_monitor()
         test_monitor.data = Mock()

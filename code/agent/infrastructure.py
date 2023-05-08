@@ -510,13 +510,6 @@ class Infrastructure(NuvlaEdgeCommon):
         my_vpn_ip = self.telemetry_instance.get_vpn_ip()
         api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
 
-        commission_payload["tags"] = self.container_runtime.get_node_labels()
-        self.commissioning_attr_has_changed(
-            commission_payload,
-            old_commission_payload,
-            "tags",
-            minimum_commission_payload)
-
         infra_service = {}
         if self.compute_api_is_running(container_api_port):
             infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, *self.get_tls_keys())

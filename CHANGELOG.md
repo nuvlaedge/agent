@@ -1,4 +1,8 @@
 # Changelog
+## Unreleased
+### Added
+### Changed
+ - Removed tag push from commissioning process
 
 ## [2.11.0] - 2023-04-27
 ### Added
