@@ -6,8 +6,27 @@ from typing import Dict, List
 from kubernetes import client, config
 
 from agent.common import util
-from agent.orchestrator import ContainerRuntimeClient
 
+
+def init_logger(level=logging.INFO, handler=logging.StreamHandler()) \
+        -> logging.Logger:
+    logger = logging.getLogger('KubernetesClient')
+    logger.setLevel(level)
+    handler.setLevel(level)
+    logger.addHandler(handler)
+    logger.info('Logging initialised.')
+    return logger
+
+
+log = init_logger()
+
+
+JOB_TTL_SECONDS_AFTER_FINISHED = 60 * 2
+JOB_BACKOFF_LIMIT = 0
+
+
+class TimeoutException(Exception):
+    ...
 
 class KubernetesClient(ContainerRuntimeClient):
     """
