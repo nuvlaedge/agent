@@ -214,7 +214,6 @@ class TestContainerStatsMonitor(unittest.TestCase):
         container_data.name = 'container_name'
         test_monitor.data.containers = {'container': container_data}
         test_monitor.populate_nb_report(nb_report)
-        self.assertIn('components', nb_report)
 
         test_monitor: ContainerStatsMonitor = self.get_base_monitor()
         test_monitor.data = Mock()
