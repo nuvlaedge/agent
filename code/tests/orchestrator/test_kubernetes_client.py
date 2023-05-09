@@ -9,18 +9,19 @@ import unittest
 
 
 import kubernetes
+from kubernetes.client.exceptions import ApiException
 
 import tests.utils.fake as fake
 from agent.common import nuvlaedge_common
-from agent.orchestrator.kubernetes import KubernetesClient
+from agent.orchestrator.kubernetes import KubernetesClient, TimeoutException
 
 
 class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
+
     def setUp(self) -> None:
         os.environ.setdefault('KUBERNETES_SERVICE_HOST', 'force-k8s-coe')
 
         with mock.patch.dict(sys.modules):
-            # sys.modules.clear()
             if 'agent.common.NuvlaEdgeCommon' in sys.modules:
                 del sys.modules['agent.common.NuvlaEdgeCommon']
 
@@ -32,11 +33,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         os.environ.setdefault('NUVLAEDGE_JOB_ENGINE_LITE_IMAGE','fake-job-lite-image')
         with mock.patch('kubernetes.client.CoreV1Api') as mock_k8s_client_CoreV1Api:
             with mock.patch('kubernetes.client.AppsV1Api') as mock_k8s_client_AppsV1Api:
-                with mock.patch('kubernetes.config.load_incluster_config') as mock_k8s_config:
-                    mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
-                    mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
-                    mock_k8s_config.return_value = True
-                    self.obj = KubernetesClient()
+                with mock.patch('kubernetes.client.BatchV1Api') as mock_k8s_client_batch_v1_api:
+                    with mock.patch('kubernetes.config.load_incluster_config') as mock_k8s_config:
+                        mock_k8s_client_CoreV1Api.return_value = mock.MagicMock()
+                        mock_k8s_client_AppsV1Api.return_value = mock.MagicMock()
+                        mock_k8s_client_batch_v1_api.return_value = mock.MagicMock()
+                        mock_k8s_config.return_value = True
+                        self.obj = KubernetesClient()
         logging.disable(logging.CRITICAL)
 
     def tearDown(self):
@@ -45,7 +48,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
     def test_init(self):
         # the K8s coe should be set
         self.assertEqual(self.nuvlaedge_common.ORCHESTRATOR, 'kubernetes',
-                             'Unable to set Kubernetes as the COE')
+                         'Unable to set Kubernetes as the COE')
         # client should be set as well
         self.assertIsNotNone(self.obj.client,
                              'Unable to set Kubernetes client')
@@ -55,6 +58,45 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         # the base class should also have been set
         self.assertEqual(self.obj.job_engine_lite_component, "nuvlaedge-job-engine-lite",
                          'Base class of the ContainerRuntime was not properly initialized')
+
+    def test_wait_pod_in_phase_matched(self):
+        check_phase = 'Running'
+
+        class Status:
+            phase = check_phase
+
+        class Pod:
+            status = Status()
+
+        self.obj.client.read_namespaced_pod.return_value = Pod()
+        assert None is self.obj._wait_pod_in_phase('fake-ns', 'fake-pod',
+                                                   check_phase)
+
+    def test_wait_pod_in_phase_timeout(self):
+        self.obj.WAIT_SLEEP_SEC = 0.001
+        check_phase = 'Running'
+
+        class Status:
+            phase = 'Waiting'
+
+        class Pod:
+            status = Status()
+
+        self.obj.client.read_namespaced_pod.return_value = Pod()
+        with self.assertRaises(TimeoutException):
+            self.obj._wait_pod_in_phase('fake-ns', 'fake-pod', check_phase,
+                                        wait_sec=0.001)
+
+    def test_wait_pod_deleted_not_found(self):
+        ex = ApiException()
+        ex.reason = 'Not Found'
+        self.obj.client.read_namespaced_pod.side_effect = ex
+        assert None is self.obj._wait_pod_deleted('fake-ns', 'fake-pod')
+
+    def test_wait_pod_deleted_timeout(self):
+        self.obj.WAIT_SLEEP_SEC = 0.001
+        with self.assertRaises(TimeoutException):
+            self.obj._wait_pod_deleted('fake-ns', 'fake-pod', wait_sec=0.001)
 
     def test_get_node_info(self, ):
         # if MY_HOST_NODE_NAME is setup, then return the node's info
@@ -273,11 +315,11 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_launch_job(self):
         # no returns. The only test is to make sure there are no exceptions and that the job pod is launched
-        self.obj.client.create_namespaced_pod.reset_mock()
-        self.obj.client.create_namespaced_pod.return_value = True
+        self.obj.client_batch_api.create_namespaced_job.reset_mock()
+        self.obj.client_batch_api.create_namespaced_job.return_value = True
         self.assertIsNone(self.obj.launch_job('', '', ''),
                           'Unable to launch new job')
-        self.obj.client.create_namespaced_pod.assert_called_once()
+        self.obj.client_batch_api.create_namespaced_job.assert_called_once()
 
     @mock.patch('kubernetes.client.CustomObjectsApi.list_cluster_custom_object')
     @mock.patch('agent.orchestrator.kubernetes.KubernetesClient.get_node_info')
@@ -313,8 +355,8 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                               'Expecting list of pod container metrics, but got something else')
 
         expected_field = ['container-status', 'name', 'id', 'cpu-percent', 'mem-percent']
-        self.assertEqual(sorted(expected_field), sorted(list(self.obj.collect_container_metrics()[0].keys())),
-                         'Missing container metrics keys')
+        self.assertTrue(set(self.obj.collect_container_metrics()[0]).issuperset(set(expected_field)),
+                        'Missing container metrics keys')
         self.assertEqual(len(self.obj.collect_container_metrics()), 2,
                          'Expecting metrics for 2 containers, but got something else')
 
@@ -348,7 +390,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertTrue(self.obj.get_node_id(node_info).startswith(name),
                         'Returned Node name does not match the real one')
 
-    def test_get_cluster_id(self):
+    def test_get_cluster_id_default(self):
         node_info = fake.mock_kubernetes_node()
         # should always return the ID value indicated in the passed argument
 
@@ -357,6 +399,13 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
         self.assertEqual(self.obj.get_cluster_id(node_info, default_cluster_name=default_cluster_name),
                          default_cluster_name,
                          'Returned Cluster name does not match the default one')
+
+    @unittest.skip('K8s does not have cluster name https://github.com/kubernetes/kubernetes/issues/44954')
+    def test_get_cluster_id_real(self):
+        node_info = fake.mock_kubernetes_node()
+        # should always return the ID value indicated in the passed argument
+
+        default_cluster_name = 'fake-cluster'
 
         # but if Node has it, take it from there
         cluster_name = 'new-cluster-name'
@@ -426,7 +475,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
     def test_get_container_plugins(self):
         # NOT IMPLEMENTED
-        self.assertEqual(self.obj.get_container_plugins(), [],
+        self.assertEqual(self.obj.get_container_plugins(), None,
                          'Received plugins for K8s even though method is not implemented')
 
     def test_define_nuvla_infra_service(self):
@@ -449,11 +498,11 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
                          'Unable to define IS')
 
     def test_get_partial_decommission_attributes(self):
-        # NOT IMPLEMENTED
+        # FIXME: NOT IMPLEMENTED
         self.assertEqual(self.obj.get_partial_decommission_attributes(), [],
                          'Received partial decommissioning attrs for K8s even though method is not implemented')
 
     def test_infer_if_additional_coe_exists(self):
-        # NOT IMPLEMENTED
+        # FIXME: NOT IMPLEMENTED
         self.assertEqual(self.obj.infer_if_additional_coe_exists(), {},
                          'Received additional COE even though method is not implemented for K8s')

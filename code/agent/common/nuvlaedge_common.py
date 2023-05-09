@@ -6,7 +6,6 @@ List of common attributes for all classes
 """
 
 import json
-import time
 import logging
 import os
 import string
