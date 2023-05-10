@@ -6,6 +6,8 @@ from subprocess import run, PIPE, TimeoutExpired
 from typing import List, Optional
 
 import docker
+from docker import errors as docker_err
+from docker.models.containers import Container
 import requests
 import yaml
 
@@ -52,7 +54,7 @@ class DockerClient(ContainerRuntimeClient):
             if self.client.swarm.attrs:
                 return self.client.swarm.attrs['JoinTokens']['Manager'], \
                        self.client.swarm.attrs['JoinTokens']['Worker']
-        except docker.errors.APIError as e:
+        except docker_err.APIError as e:
             if self.lost_quorum_hint in str(e):
                 # quorum is lost
                 logging.warning(f'Quorum is lost. This node will no longer support '
@@ -123,7 +125,7 @@ class DockerClient(ContainerRuntimeClient):
     def has_pull_job_capability(self):
         try:
             container = self.client.containers.get(self.job_engine_lite_component)
-        except docker.errors.NotFound:
+        except docker_err.NotFound:
             logging.warning(f"Container {self.job_engine_lite_component} not found. Reason: {str(e)}")
             return False
         except Exception as e:
@@ -145,7 +147,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             node_id = self.get_node_info()["Swarm"]["NodeID"]
             node_labels = self.client.api.inspect_node(node_id)["Spec"]["Labels"]
-        except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
+        except (KeyError, docker_err.APIError, docker_err.NullResource) as e:
             if "node is not a swarm manager" not in str(e).lower():
                 logging.debug(f"Cannot get node labels: {str(e)}")
             return []
@@ -177,7 +179,7 @@ class DockerClient(ContainerRuntimeClient):
     def is_nuvla_job_running(self, job_id, job_execution_id):
         try:
             job_container = self.client.containers.get(job_execution_id)
-        except docker.errors.NotFound:
+        except docker_err.NotFound:
             return False
         except Exception as e:
             logging.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
@@ -199,7 +201,7 @@ class DockerClient(ContainerRuntimeClient):
         except AttributeError:
             # assume it is running so we don't mess anything
             return True
-        except docker.errors.NotFound:
+        except docker_err.NotFound:
             # then it stopped by itself...maybe it ran already and just finished
             # let's not do anything just in case this is a late coming job. In the next
             # telemetry cycle, if job is there again, then we run it because this
@@ -216,7 +218,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             compute_api = self.client.containers.get(util.compose_project_name + '-compute-api')
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
-        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
+        except (docker_err.NotFound, docker_err.APIError, IndexError, KeyError, TimeoutError) as e:
             logging.error(f'Cannot infer compute-api network for local job {job_id}: {e}')
             return
 
@@ -235,7 +237,7 @@ class DockerClient(ContainerRuntimeClient):
             environment = job_engine_lite.attrs['Config']['Env']
             volumes = []
             volumes_from = [job_engine_lite_container_name]
-        except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
+        except (docker_err.NotFound, docker_err.APIError, IndexError, KeyError, TimeoutError) as e:
             logging.warning(f'Cannot get env and volumes from job-engine-lite ({job_id}): {e}')
 
         cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
@@ -265,7 +267,7 @@ class DockerClient(ContainerRuntimeClient):
             # in the default bridge network, so it doesn't get affected by network changes
             # in the NuvlaEdge
             self.client.api.connect_container_to_network(job_execution_id, 'bridge')
-        except docker.errors.APIError as e:
+        except docker_err.APIError as e:
             logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
 
     @staticmethod
@@ -738,3 +740,34 @@ class DockerClient(ContainerRuntimeClient):
 
     def get_all_nuvlaedge_components(self) -> list:
         return [c.name for c in self.get_all_nuvlaedge_containers()]
+
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              **kwargs) -> str:
+        if not command:
+            command = args
+        try:
+            output: bytes = self.client.containers.run(
+                image,
+                command=command,
+                name=name,
+                remove=remove,
+                network=network)
+            return output.decode('utf-8')
+        except (docker_err.ImageNotFound,
+                docker_err.ContainerError,
+                docker_err.APIError) as ex:
+            self.logger.error("Failed running container '%s' from '%s': %s",
+                              name, image, ex.explanation)
+
+    def container_remove(self, name: str, **kwargs):
+        try:
+            cont: Container = self.client.containers.get(name)
+            if cont.status == 'running':
+                cont.stop()
+            cont.remove()
+        except docker_err.NotFound:
+            pass
+        except Exception as ex:
+            self.logger.warning('Failed removing %s container.', exc_info=ex)
