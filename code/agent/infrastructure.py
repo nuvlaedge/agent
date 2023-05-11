@@ -425,15 +425,15 @@ class Infrastructure(NuvlaEdgeCommon):
 
         :returns tuple (api_endpoint, port)
         """
-        container_api_ip, container_api_port = self.container_runtime.get_api_ip_port()
+        coe_api_ip, coe_api_port = self.container_runtime.get_api_ip_port()
 
         api_endpoint = None
         if vpn_ip:
-            api_endpoint = f"https://{vpn_ip}:{container_api_port}"
-        elif container_api_ip and container_api_port:
-            api_endpoint = f"https://{container_api_ip}:{container_api_port}"
+            api_endpoint = f"https://{vpn_ip}:{coe_api_port}"
+        elif coe_api_ip and coe_api_port:
+            api_endpoint = f"https://{coe_api_ip}:{coe_api_port}"
 
-        return api_endpoint, container_api_port
+        return api_endpoint, coe_api_port
 
     def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict,
                                    old_payload: dict):
@@ -507,9 +507,6 @@ class Infrastructure(NuvlaEdgeCommon):
         minimum_commission_payload = {} if cluster_info.items() <= old_commission_payload.items() \
                                      else cluster_info.copy()
 
-        my_vpn_ip = self.telemetry_instance.get_vpn_ip()
-        api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
-
         commission_payload["tags"] = self.container_runtime.get_node_labels()
         self.commissioning_attr_has_changed(
             commission_payload,
@@ -517,9 +514,10 @@ class Infrastructure(NuvlaEdgeCommon):
             "tags",
             minimum_commission_payload)
 
-        infra_service = {}
-        if self.compute_api_is_running(container_api_port):
-            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, *self.get_tls_keys())
+        api_endpoint, _ = \
+            self.get_compute_endpoint(self.telemetry_instance.get_vpn_ip())
+        infra_service = self.container_runtime.define_nuvla_infra_service(
+            api_endpoint, *self.get_tls_keys())
 
         # 1st time commissioning the IS, so we need to also pass the keys, even if they
         # haven't changed

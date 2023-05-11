@@ -286,7 +286,7 @@ class KubernetesClient(ContainerRuntimeClient):
         try:
             pods_here = self.client \
                 .list_pod_for_all_namespaces(
-                field_selector=f'spec.nodeName={self.host_node_name}')
+                    field_selector=f'spec.nodeName={self.host_node_name}')
         except ApiException as ex:
             log.error('Failed listing pods for all namespaces on %s: %s',
                       self.host_node_name, ex, exc_info=ex)
@@ -354,8 +354,9 @@ class KubernetesClient(ContainerRuntimeClient):
         return metrics
 
     def get_installation_parameters(self):
-        nuvlaedge_deployments = self.client_apps.list_namespaced_deployment(namespace=self.namespace,
-                                                                            label_selector=util.base_label).items
+        nuvlaedge_deployments = \
+            self.client_apps.list_namespaced_deployment(
+                namespace=self.namespace, label_selector=util.base_label).items
 
         environment = []
         for dep in nuvlaedge_deployments:
@@ -436,8 +437,8 @@ class KubernetesClient(ContainerRuntimeClient):
         # doesn't seem to be available from the API
         return None
 
-    def define_nuvla_infra_service(self, api_endpoint: str,
-                                   client_ca=None, client_cert=None, client_key=None) -> dict:
+    def define_nuvla_infra_service(self, api_endpoint: str, client_ca=None,
+                                   client_cert=None, client_key=None) -> dict:
         if api_endpoint:
             infra_service = {
                 "kubernetes-endpoint": api_endpoint

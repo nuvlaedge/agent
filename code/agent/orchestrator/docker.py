@@ -589,6 +589,8 @@ class DockerClient(ContainerRuntimeClient):
 
     def define_nuvla_infra_service(self, api_endpoint: str,
                                    client_ca=None, client_cert=None, client_key=None) -> dict:
+        if not self.compute_api_is_running(util.compute_api_port):
+            return {}
         try:
             fallback_address = api_endpoint.replace('https://', '').split(':')[0]
             infra_service = self.infer_if_additional_coe_exists(fallback_address=fallback_address)
@@ -771,3 +773,32 @@ class DockerClient(ContainerRuntimeClient):
             pass
         except Exception as ex:
             self.logger.warning('Failed removing %s container.', exc_info=ex)
+
+    def compute_api_is_running(self, container_api_port) -> bool:
+        """
+        Pokes at the compute-api endpoint to see if it is up and running
+
+        Only valid for Docker installations
+
+        :return: True or False
+        """
+
+        compute_api_url = f'https://{util.compute_api}:{container_api_port}'
+
+        try:
+            if self.client.containers.get(self.compute_api).status \
+                    != 'running':
+                return False
+
+            requests.get(compute_api_url, timeout=3)
+        except requests.exceptions.SSLError:
+            # this is expected. It means it is up, we just weren't authorized
+            pass
+        except (docker_err.NotFound, docker_err.APIError, TimeoutError):
+            return False
+        except requests.exceptions.ConnectionError:
+            # Can happen if the Compute API takes longer than normal on start
+            self.logger.info('Too many requests... Compute API not ready yet')
+            return False
+
+        return True
