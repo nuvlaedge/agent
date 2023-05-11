@@ -2,16 +2,14 @@
 Implementation of the Monitor and BaseDataStructure to be extended by every
 component and data structure
 """
-import json
 import os
 import time
 import logging
-from datetime import datetime
 from threading import Thread
 from abc import ABC, abstractmethod
-from typing import Type, Dict, Optional
+from typing import Type, Dict
 
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel
 
 
 class Monitor(ABC, Thread):
