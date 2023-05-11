@@ -397,7 +397,7 @@ class NetworkMonitor(Monitor):
         it_traffic: List = [x.dict(by_alias=True, exclude={'ips', 'default_gw'})
                             for _, x in self.data.interfaces.items()]
 
-        it_report = self.data.dict(by_alias=True, exclude={'interfaces'}, exclude_none=True)
+        it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
         it_report['interfaces'] = [{'interface': name,
                                     'ips': [ip.dict() for ip in obj.ips]}
                                    for name, obj in self.data.interfaces.items()]
