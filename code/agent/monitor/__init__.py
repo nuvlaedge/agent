@@ -2,6 +2,7 @@
 Implementation of the Monitor and BaseDataStructure to be extended by every
 component and data structure
 """
+
 import json
 import os
 import time
@@ -104,6 +105,8 @@ class BaseDataStructure(BaseModel):
     Base data structure for providing a common configuration for all the
     structures.
     """
+    def dict(self, exclude_none: bool = True, **kwargs):
+        return super().dict(exclude_none=exclude_none, **kwargs)
 
     class Config:
         """ Configuration class for base telemetry data """
