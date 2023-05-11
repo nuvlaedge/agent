@@ -30,7 +30,7 @@ class NuvlaEdgeCommon:
     nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
 
     ssh_pub_key = os.getenv('NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY')
-    vpn_interface_name = 'tun'
+    vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'tun')
     nuvlaedge_engine_version = util.str_if_value_or_none(
         os.getenv('NUVLAEDGE_ENGINE_VERSION'))
 
