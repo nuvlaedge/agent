@@ -102,7 +102,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             return cont.ports['5000/tcp'][0]['HostPort']
 
-        except KeyError as ex:
+        except (KeyError, IndexError) as ex:
             self.logger.warning(f'Cannot infer ComputeAPI external port, container attributes '
                                 f'not properly formatted', exc_info=ex)
         return ""
