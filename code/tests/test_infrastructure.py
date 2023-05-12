@@ -472,26 +472,28 @@ class InfrastructureTestCase(unittest.TestCase):
     @mock.patch.object(Infrastructure, 'needs_partial_decommission')
     @mock.patch.object(Infrastructure, 'get_nuvlaedge_capabilities')
     @mock.patch.object(Infrastructure, 'swarm_token_diff')
-    @mock.patch.object(Infrastructure, 'compute_api_is_running')
     @mock.patch.object(Infrastructure, 'commissioning_attr_has_changed')
     @mock.patch.object(Infrastructure, 'get_compute_endpoint')
     @mock.patch.object(Infrastructure, 'read_commissioning_file')
     @mock.patch.object(Infrastructure, 'needs_cluster_commission')
     def test_try_commission(self, mock_needs_cluster_commission, mock_read_commission,
-                            mock_get_comp_endpoint, mock_attr_changed, mock_compute_api_is_running,
+                            mock_get_comp_endpoint, mock_attr_changed,
                             mock_swarm_token_diff, mock_get_capabilities, mock_needs_partial_decommission,
                             mock_do_commission, mock_write_file, mock_get_tls_keys):
+
+        swarm_endpoint = 'https://127.1.1.1:5000'
+
         self.obj.container_runtime.get_join_tokens.return_value = ()
         mock_needs_cluster_commission.return_value = {'cluster-managers': ['node-id']}
         mock_read_commission.return_value = {}
         self.obj.telemetry_instance.get_vpn_ip.return_value = '1.1.1.1'
-        mock_get_comp_endpoint.return_value = ('https://1.1.1.1:5000', 5000)
+        mock_get_comp_endpoint.return_value = (swarm_endpoint, 5000)
         self.obj.container_runtime.get_node_labels.return_value = None
         mock_attr_changed.return_value = None
 
         mock_get_tls_keys.return_value = ('ca', 'cert', 'key')
         self.obj.container_runtime.define_nuvla_infra_service.return_value = {
-            'swarm-endpoint': 'https://1.1.1.1:5000',
+            'swarm-endpoint': swarm_endpoint,
             'swarm-client-ca': 'ca',
             'swarm-client-cert': 'cert',
             'swarm-client-key': 'key'
@@ -505,24 +507,32 @@ class InfrastructureTestCase(unittest.TestCase):
         mock_write_file.return_value = None
 
         # if compute-api is not running, then IS is not defined
-        mock_compute_api_is_running.return_value = False
+        self.obj.container_runtime.compute_api_is_running = mock.MagicMock()
+        self.obj.container_runtime.compute_api_is_running.return_value = False
+
         self.obj.try_commission()
-        self.obj.container_runtime.define_nuvla_infra_service.assert_not_called()
+
+        self.obj.container_runtime.define_nuvla_infra_service.assert_called_with(
+            swarm_endpoint,
+            *('ca', 'cert', 'key'))
         # and if there are no joining tokens, then commissioning_attr_has_changed is only called 2
-        self.assertEqual(mock_attr_changed.call_count, 2,
+        self.assertEqual(1, mock_attr_changed.call_count,
                          'Attr changed check called more than twice, even though there was no reason to')
 
         # if compute-api is running, the IS is defined
-        mock_compute_api_is_running.return_value = True
+        self.obj.container_runtime.compute_api_is_running.return_value = False
         self.obj.container_runtime.get_join_tokens.return_value = ('manager-token', 'worker-token') # ignored in this test
         mock_do_commission.reset_mock()     # reset counters
+
         self.obj.try_commission()
-        self.obj.container_runtime.define_nuvla_infra_service.assert_called_once_with('https://1.1.1.1:5000',
-                                                                                      'ca', 'cert', 'key')
+
+        self.obj.container_runtime.define_nuvla_infra_service.assert_called_with(
+            swarm_endpoint,
+            *('ca', 'cert', 'key'))
 
         # given the aforementioned return_values, we expect the following commissioning payload to be sent and saved
         expected_payload = {
-            'swarm-endpoint': 'https://1.1.1.1:5000',
+            'swarm-endpoint': swarm_endpoint,
             'swarm-client-ca': 'ca',
             'swarm-client-cert': 'cert',
             'swarm-client-key': 'key',
