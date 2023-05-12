@@ -786,7 +786,7 @@ class DockerClient(ContainerRuntimeClient):
         compute_api_url = f'https://{util.compute_api}:{container_api_port}'
 
         try:
-            if self.client.containers.get(self.compute_api).status \
+            if self.client.containers.get(util.compute_api).status \
                     != 'running':
                 return False
 

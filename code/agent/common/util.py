@@ -15,6 +15,7 @@ from subprocess import (Popen, run, PIPE, TimeoutExpired,
 
 base_label = 'nuvlaedge.component=True'
 compose_project_name = os.getenv('COMPOSE_PROJECT_NAME', 'nuvlaedge')
+compute_api = compose_project_name + '-compute-api'
 compute_api_port = os.getenv('COMPUTE_API_PORT', '5000')
 default_project_name = 'nuvlaedge'
 
