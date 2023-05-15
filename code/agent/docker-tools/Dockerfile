@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=python:3.8-alpine3.12
+ARG BASE_IMAGE=nuvladev/nuvlaedge-base:latest
 FROM ${BASE_IMAGE}
 
 RUN apk --no-cache add iproute2
