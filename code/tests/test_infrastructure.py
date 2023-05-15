@@ -509,8 +509,8 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.try_commission()
         self.obj.container_runtime.define_nuvla_infra_service.assert_not_called()
         # and if there are no joining tokens, then commissioning_attr_has_changed is only called 2
-        self.assertEqual(mock_attr_changed.call_count, 2,
-                         'Attr changed check called more than twice, even though there was no reason to')
+        self.assertEqual(mock_attr_changed.call_count, 1,
+                         'Attr changed check called more than once, even though there was no reason to')
 
         # if compute-api is running, the IS is defined
         mock_compute_api_is_running.return_value = True

@@ -1,4 +1,8 @@
 # Changelog
+## Unreleased
+### Added
+### Changed
+ - Removed tag push from commissioning process
 
 ## Unreleased
 ### Added
