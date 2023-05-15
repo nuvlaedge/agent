@@ -113,7 +113,7 @@ class ContainerStatsMonitor(Monitor):
                     self.data.cluster_data.cluster_join_address = join_addr
 
         if labels:
-            self.data.cluster_data.labels = labels
+            self.data.cluster_data.cluster_node_labels = labels
 
         is_manager, cluster_nodes = self.get_cluster_manager_attrs(cluster_managers,
                                                                    node_id)
@@ -174,7 +174,8 @@ class ContainerStatsMonitor(Monitor):
             nuvla_report['kubelet-version'] = self.data.kubelet_version
 
         if self.data.cluster_data:
-            nuvla_report.update(self.data.cluster_data.dict(by_alias=True, exclude_none=True, exclue={'labels'}))
+            nuvla_report.update(self.data.cluster_data.dict(by_alias=True,
+                                                            exclude_none=True))
 
         if self.data.swarm_node_cert_expiry_date:
             nuvla_report.update(self.data.dict(

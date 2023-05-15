@@ -33,7 +33,7 @@ class ClusterStatusData(BaseDataStructure):
     cluster_managers: Union[List, None]
     cluster_join_address: Union[str, None]
     cluster_nodes: Union[List, None]
-    labels: Union[List, None]
+    cluster_node_labels: Union[List, None]
 
 
 class DeploymentData(BaseDataStructure):
