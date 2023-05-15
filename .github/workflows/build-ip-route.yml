@@ -1,9 +1,8 @@
 name: "Build IPRoute2 container"
 on:
-  branches:
-    - 'main'
-  files:
-    - 'code/agent/docker-tools/Dockerfile'
+  push:
+    branches:
+      - 'main'
 
 jobs:
   build-iproute:
