@@ -123,7 +123,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_cluster_managers.return_value = ['node-id']
         mock_get_cluster_manager_attrs.return_value = (True, ['node-id'])
         test_monitor.client_runtime.get_cluster_join_address.return_value = 'addr:port'
-        test_monitor.client_runtime.get_node_labels.return_value = ['coe-label']
+        test_monitor.client_runtime.get_node_labels.return_value = [{'name': 'coe-label', 'value': 'coe-value'}]
 
         test_monitor.update_cluster_data()
         all_fields = ["node-id", "orchestrator", "cluster-node-role", "cluster-id",

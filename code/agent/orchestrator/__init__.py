@@ -85,7 +85,7 @@ class ContainerRuntimeClient(ABC):
         :return: [{key: value}, {key: ""}, ...]
         """
 
-        return [{label: value} for label, value in key_value_dict.items()]
+        return [{'name': label, 'value': value} for label, value in key_value_dict.items()]
 
     @abstractmethod
     def is_vpn_client_running(self):
