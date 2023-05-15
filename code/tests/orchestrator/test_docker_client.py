@@ -145,8 +145,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
         self.assertEqual(len(self.obj.get_cluster_info()['cluster-workers']), 1,
                          'Expecting 1 worker in cluster info, but got something else')
 
+    @mock.patch('agent.orchestrator.docker.DockerClient.find_compute_api_external_port')
     @mock.patch('agent.orchestrator.docker.DockerClient.get_node_info')
-    def test_get_api_ip_port(self, mock_get_nodes_info):
+    def test_get_api_ip_port(self, mock_get_nodes_info, mock_get_port):
         # if Swarm info has an address, we should just get that back with port 5000
         node_addr = '1.2.3.4'
         mock_get_nodes_info.return_value = {
@@ -154,8 +155,9 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
                 'NodeAddr': node_addr
             }
         }
-
-        self.assertEqual(self.obj.get_api_ip_port(), (node_addr, '5000'),
+        mocked_port = '12345'
+        mock_get_port.return_value = mocked_port
+        self.assertEqual(self.obj.get_api_ip_port(), (node_addr, mocked_port),
                          'Expected default Swarm NodeAddr with port 5000, but got something else instead')
 
         # otherwise, we try to read the machine IP from the disk
@@ -168,7 +170,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
    9: 0100007F:ECA0 0100007F:13D8 06 00000000:00000000 03:00000577 00000000     0        0 0 3 ffffffc0d1887ef0
    '''
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=tcp_file)):
-            self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', '5000'),
+            self.assertEqual(self.obj.get_api_ip_port(), ('192.168.40.45', mocked_port),
                              'Could not get valid IP from filesystem')
 
         # if there's no valid IP in this file, then we return 127.0.0.1
@@ -177,7 +179,7 @@ class ContainerRuntimeDockerTestCase(unittest.TestCase):
    1: 00000000:1388 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 46922 1 ffffffc1c9be1740 100 0 0 10 0
    '''
         with mock.patch(self.agent_nuvlaedge_common_open, mock.mock_open(read_data=tcp_file)):
-            self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', '5000'),
+            self.assertEqual(self.obj.get_api_ip_port(), ('127.0.0.1', mocked_port),
                              'Could not get default IP from filesystem')
 
     @mock.patch('docker.models.containers.ContainerCollection.get')

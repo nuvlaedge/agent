@@ -6,7 +6,6 @@ List of common attributes for all classes
 """
 
 import json
-import time
 import logging
 import os
 import string
@@ -30,7 +29,7 @@ class NuvlaEdgeCommon:
     nuvla_timestamp_format = "%Y-%m-%dT%H:%M:%SZ"
 
     ssh_pub_key = os.getenv('NUVLAEDGE_IMMUTABLE_SSH_PUB_KEY')
-    vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'vpn')
+    vpn_interface_name = os.getenv('VPN_INTERFACE_NAME', 'tun')
     nuvlaedge_engine_version = util.str_if_value_or_none(
         os.getenv('NUVLAEDGE_ENGINE_VERSION'))
 
@@ -41,7 +40,7 @@ class NuvlaEdgeCommon:
     mqtt_broker_keep_alive = 90
 
     def __init__(self, container_runtime: ContainerRuntimeClient,
-                 shared_data_volume: str="/srv/nuvlaedge/shared"):
+                 shared_data_volume: str = "/srv/nuvlaedge/shared"):
         """
         Constructs an Infrastructure object, with a status placeholder
 
@@ -139,7 +138,8 @@ class NuvlaEdgeCommon:
         :return: clean Nuvla endpoint and whether it is insecure or not -> (str, bool)
         """
         nuvla_endpoint_raw = os.environ["NUVLA_ENDPOINT"] if "NUVLA_ENDPOINT" in os.environ else "nuvla.io"
-        nuvla_endpoint_insecure_raw = os.environ["NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
+        nuvla_endpoint_insecure_raw = os.environ[
+            "NUVLA_ENDPOINT_INSECURE"] if "NUVLA_ENDPOINT_INSECURE" in os.environ else False
         try:
             with open(FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION) as nuvla_conf:
                 local_nuvla_conf = nuvla_conf.read().split()
@@ -153,9 +153,11 @@ class NuvlaEdgeCommon:
             if nuvla_endpoint_insecure_line:
                 nuvla_endpoint_insecure_raw = nuvla_endpoint_insecure_line[0].split('=')[-1]
         except FileNotFoundError:
-            self.logger.debug('Local Nuvla configuration does not exist yet - first time running the NuvlaEdge Engine...')
+            self.logger.debug(
+                'Local Nuvla configuration does not exist yet - first time running the NuvlaEdge Engine...')
         except IndexError as e:
-            self.logger.debug(f'Unable to read Nuvla configuration from {FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION}: {str(e)}')
+            self.logger.debug(
+                f'Unable to read Nuvla configuration from {FILE_NAMES.NUVLAEDGE_NUVLA_CONFIGURATION}: {str(e)}')
 
         while nuvla_endpoint_raw[-1] == "/":
             nuvla_endpoint_raw = nuvla_endpoint_raw[:-1]
@@ -394,7 +396,8 @@ class NuvlaEdgeCommon:
         """
         util.atomic_write(FILE_NAMES.STATUS_FILE, operational_status)
 
-    def write_vpn_conf(self, values):
+    @staticmethod
+    def write_vpn_conf(values):
         """ Write VPN configuration into a file
 
         :param values: map of values for the VPN conf template
@@ -448,4 +451,3 @@ ${vpn_extra_config}
 """)
 
         util.atomic_write(FILE_NAMES.VPN_CLIENT_CONF_FILE, tpl.substitute(values))
-
