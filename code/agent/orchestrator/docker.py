@@ -606,7 +606,7 @@ class DockerClient(ContainerRuntimeClient):
 
     def define_nuvla_infra_service(self, api_endpoint: str,
                                    client_ca=None, client_cert=None, client_key=None) -> dict:
-        if not self.compute_api_is_running(util.compute_api_port):
+        if not self.compute_api_is_running():
             return {}
         try:
             fallback_address = api_endpoint.replace('https://', '').split(':')[0]
