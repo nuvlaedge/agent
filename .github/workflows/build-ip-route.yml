@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - 'main'
+      - 'fix-iproute-build'
 
 jobs:
   build-iproute:
@@ -39,7 +40,8 @@ jobs:
             PROJECT_URL=${{ github.server_url }}/${{ github.repository }}
             PACKAGE_NAME=${{ env.PACKAGE_NAME }}
           push: true
-          tags: |
-            sixsq/iproute2:latest
+          tags: >
+            nuvlaedge/iproute2:${{ github.head_ref || github.ref_name }},
+            nuvlaedge/iproute2:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
