@@ -510,7 +510,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             myself = self.get_current_container()
         except RuntimeError:
-            message = f'Failed to find the current container by id. Cannot proceed'
+            message = 'Failed to find the current container by id. Cannot proceed'
             logging.error(message)
             raise
 
@@ -606,6 +606,8 @@ class DockerClient(ContainerRuntimeClient):
 
     def define_nuvla_infra_service(self, api_endpoint: str,
                                    client_ca=None, client_cert=None, client_key=None) -> dict:
+        if not self.compute_api_is_running():
+            return {}
         try:
             fallback_address = api_endpoint.replace('https://', '').split(':')[0]
             infra_service = self.infer_if_additional_coe_exists(fallback_address=fallback_address)
@@ -757,3 +759,63 @@ class DockerClient(ContainerRuntimeClient):
 
     def get_all_nuvlaedge_components(self) -> list:
         return [c.name for c in self.get_all_nuvlaedge_containers()]
+
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              **kwargs) -> str:
+        if not command:
+            command = args
+        try:
+            output: bytes = self.client.containers.run(
+                image,
+                command=command,
+                name=name,
+                remove=remove,
+                network=network)
+            return output.decode('utf-8')
+        except (docker.errors.ImageNotFound,
+                docker.errors.ContainerError,
+                docker.errors.APIError) as ex:
+            self.logger.error("Failed running container '%s' from '%s': %s",
+                              name, image, ex.explanation)
+
+    def container_remove(self, name: str, **kwargs):
+        try:
+            cont: Container = self.client.containers.get(name)
+            if cont.status == 'running':
+                cont.stop()
+            cont.remove()
+        except docker.errors.NotFound:
+            pass
+        except Exception as ex:
+            self.logger.warning('Failed removing %s container.', exc_info=ex)
+
+    def compute_api_is_running(self) -> bool:
+        """
+        Check if the compute-api endpoint is up and running
+
+        :return: True or False
+        """
+
+        compute_api_url = f'https://{util.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
+        self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
+
+        try:
+            if self.client.containers.get(util.compute_api).status != 'running':
+                return False
+        except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
+            self.logger.debug(f"Compute API container not found {ex}")
+            return False
+
+        try:
+            requests.get(compute_api_url, timeout=3)
+        except requests.exceptions.SSLError:
+            # this is expected. It means it is up, we just weren't authorized
+            self.logger.debug("Compute API up and running with security")
+        except (requests.exceptions.ConnectionError, TimeoutError) as ex:
+            # Can happen if the Compute API takes longer than normal on start
+            self.logger.info(f'Compute API not ready yet: {ex}')
+            return False
+
+        return True

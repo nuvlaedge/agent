@@ -266,3 +266,26 @@ class ContainerRuntimeClient(ABC):
 
         :return: NuvlaEdge project name
         """
+
+    @abstractmethod
+    def container_run_command(self, image, name, command: str = None,
+                              args: str = None,
+                              network: str = None, remove: bool = True,
+                              **kwargs) -> str:
+        """
+        Runs `command` with `args` in a container started from `image` and
+        returns output.
+
+        :return: output of running default entrypoint or `command` with
+                 optional `args`.
+        """
+
+    @abstractmethod
+    def container_remove(self, name: str, **kwargs):
+        """
+        Removes "container" by `name`. Notion of the "container" is COE
+        dependent. It is container for Docker and pod (with all the containers
+        in it) for K8s.
+
+        :param name:
+        """
