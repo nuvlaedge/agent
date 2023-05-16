@@ -216,7 +216,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
     def test_cast_dict_to_list(self):
         # 1st level casting only
         ref = {'a': 1.1, 'b': None, 'c': 'string'}
-        exp_out = ['a=1.1', 'b', 'c=string']
+        exp_out = [{'name': 'a', 'value': 1.1}, {'name': 'b', 'value': None}, {'name': 'c', 'value': 'string'}]
         self.assertEqual(self.obj.cast_dict_to_list(ref), exp_out,
                          'Unable to convert dict to list')
 
@@ -230,7 +230,7 @@ class ContainerRuntimeKubernetesTestCase(unittest.TestCase):
 
         node.metadata.labels = {'fake-label': 'fake-value'}
         mock_get_node_info.return_value = node
-        self.assertEqual(self.obj.get_node_labels(), ['fake-label=fake-value'],
+        self.assertEqual(self.obj.get_node_labels(), [{'name': 'fake-label', 'value': 'fake-value'}],
                          'Unable to get k8s node labels')
 
     def test_is_vpn_client_running(self):

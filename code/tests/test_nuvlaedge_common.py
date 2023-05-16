@@ -55,7 +55,7 @@ class NuvlaEdgeCommonTestCase(unittest.TestCase):
                          'data-gateway host name was not set')
 
         # VPN iface name should be vpn by default
-        self.assertEqual(self.obj.vpn_interface_name, 'vpn',
+        self.assertEqual(self.obj.vpn_interface_name, 'tun',
                          'VPN interface name was not set correctly')
 
     def test_set_vpn_config_extra(self):

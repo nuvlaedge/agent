@@ -84,6 +84,7 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_node_id.return_value = None
         test_monitor.client_runtime.get_cluster_id.return_value = None
         test_monitor.client_runtime.get_cluster_managers.return_value = None
+        test_monitor.client_runtime.get_node_labels.return_value = None
         test_monitor.update_cluster_data()
         self.assertTrue(
             all(x not in test_monitor.data
@@ -122,12 +123,13 @@ class TestContainerStatsMonitor(unittest.TestCase):
         test_monitor.client_runtime.get_cluster_managers.return_value = ['node-id']
         mock_get_cluster_manager_attrs.return_value = (True, ['node-id'])
         test_monitor.client_runtime.get_cluster_join_address.return_value = 'addr:port'
+        test_monitor.client_runtime.get_node_labels.return_value = [{'name': 'coe-label', 'value': 'coe-value'}]
 
         test_monitor.update_cluster_data()
         all_fields = ["node-id", "orchestrator", "cluster-node-role", "cluster-id",
-                      "cluster-join-address", "cluster-managers", "cluster-nodes"]
+                      "cluster-join-address", "cluster-managers", "cluster-nodes", "cluster-node-labels"]
         self.assertEqual(sorted(all_fields),
-                         sorted(test_monitor.data.cluster_data.dict(by_alias=True).keys()),
+                         sorted(test_monitor.data.cluster_data.dict(by_alias=True, exclude_none=True).keys()),
                          'Unable to set cluster status')
 
     @patch('agent.monitor.components.container_stats.execute_cmd')
