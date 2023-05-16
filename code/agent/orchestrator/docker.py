@@ -510,7 +510,7 @@ class DockerClient(ContainerRuntimeClient):
         try:
             myself = self.get_current_container()
         except RuntimeError:
-            message = f'Failed to find the current container by id. Cannot proceed'
+            message = 'Failed to find the current container by id. Cannot proceed'
             logging.error(message)
             raise
 
