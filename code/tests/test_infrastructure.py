@@ -511,13 +511,11 @@ class InfrastructureTestCase(unittest.TestCase):
         self.obj.container_runtime.compute_api_is_running.return_value = False
 
         self.obj.try_commission()
-
         self.obj.container_runtime.define_nuvla_infra_service.assert_called_with(
-            swarm_endpoint,
-            *('ca', 'cert', 'key'))
-        # and if there are no joining tokens, then commissioning_attr_has_changed is only called 2
-        self.assertEqual(mock_attr_changed.call_count, 1,
-                         'Attr changed check called more than once, even though there was no reason to')
+            swarm_endpoint, 'ca', 'cert', 'key')
+        # and if there are no joining tokens, then commissioning_attr_has_changed is not called
+        self.assertEqual(mock_attr_changed.call_count, 0,
+                         'commissioning_attr_has_changed called when no join tokens are available')
 
         # if compute-api is running, the IS is defined
         self.obj.container_runtime.compute_api_is_running.return_value = False

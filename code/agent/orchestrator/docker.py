@@ -791,31 +791,31 @@ class DockerClient(ContainerRuntimeClient):
         except Exception as ex:
             self.logger.warning('Failed removing %s container.', exc_info=ex)
 
-    def compute_api_is_running(self, container_api_port) -> bool:
+    def compute_api_is_running(self) -> bool:
         """
-        Pokes at the compute-api endpoint to see if it is up and running
-
-        Only valid for Docker installations
+        Check if the compute-api endpoint is up and running
 
         :return: True or False
         """
 
-        compute_api_url = f'https://{util.compute_api}:{container_api_port}'
+        compute_api_url = f'https://{util.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
+        self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
 
         try:
-            if self.client.containers.get(util.compute_api).status \
-                    != 'running':
+            if self.client.containers.get(util.compute_api).status != 'running':
                 return False
+        except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
+            self.logger.debug(f"Compute API container not found {ex}")
+            return False
 
+        try:
             requests.get(compute_api_url, timeout=3)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
-            pass
-        except (docker.errors.NotFound, docker.errors.APIError, TimeoutError):
-            return False
-        except requests.exceptions.ConnectionError:
+            self.logger.debug("Compute API up and running with security")
+        except (requests.exceptions.ConnectionError, TimeoutError) as ex:
             # Can happen if the Compute API takes longer than normal on start
-            self.logger.info('Too many requests... Compute API not ready yet')
+            self.logger.info(f'Compute API not ready yet: {ex}')
             return False
 
         return True

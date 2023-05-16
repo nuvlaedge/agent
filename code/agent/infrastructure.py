@@ -50,7 +50,6 @@ class Infrastructure(NuvlaEdgeCommon):
 
         self.telemetry_instance = telemetry
 
-        self.compute_api = util.compose_project_name + '-compute-api'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -312,7 +311,7 @@ class Infrastructure(NuvlaEdgeCommon):
         if self.container_runtime.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
-        compute_api_url = f'https://{self.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
+        compute_api_url = f'https://{util.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
         self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
             if self.container_runtime.client.containers.get(util.compute_api).status != 'running':
