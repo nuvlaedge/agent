@@ -28,7 +28,7 @@ class NetworkMonitor(Monitor):
     Handles the retrieval of IP networking data.
     """
     _REMOTE_IPV4_API: str = "https://api.ipify.org?format=json"
-    _AUXILIARY_DOCKER_IMAGE: str = "sixsq/iproute2:latest"
+    _AUXILIARY_DOCKER_IMAGE: str = "nuvlaedge/iproute2:latest"
     _IP_COMMAND: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
     _NUVLAEDGE_COMPONENT_LABEL_KEY: str = util.base_label
