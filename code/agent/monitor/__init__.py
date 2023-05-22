@@ -3,16 +3,14 @@ Implementation of the Monitor and BaseDataStructure to be extended by every
 component and data structure
 """
 
-import json
 import os
 import time
 import logging
-from datetime import datetime
 from threading import Thread
 from abc import ABC, abstractmethod
-from typing import Type, Dict, Optional
+from typing import Type, Dict
 
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel
 
 
 class Monitor(ABC, Thread):
@@ -28,7 +26,7 @@ class Monitor(ABC, Thread):
         self.thread_period: int = thread_period
 
         # TODO: FUTURE: Standardize system conf propagation
-        if os.environ.get('NE_THREAD_MONITORS', 'False') == 'False':
+        if os.environ.get('NUVLAEDGE_THREAD_MONITORS', 'False') == 'False':
             self.is_thread: bool = False
         else:
             self.is_thread: bool = True

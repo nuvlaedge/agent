@@ -1,14 +1,15 @@
 # Changelog
-## Unreleased
-### Added
-### Changed
- - Removed tag push from commissioning process
 
 ## Unreleased
 ### Added
+### Changed
+
+## [2.12.0] - 2023-05-22
+### Added
  - NuvlaEdge Docker client, now reads the port from the container configuration 
 ### Changed
- - Compute API Connectivity check only performed in local network using container-name and internal port. 
+ - Compute API Connectivity check only performed in local network using container-name and internal port
+ - Removed tag push from commissioning process
 
 ## [2.11.0] - 2023-04-27
 ### Added

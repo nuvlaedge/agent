@@ -12,14 +12,14 @@ import logging
 import os
 import time
 from datetime import datetime
-from os import path, remove
+from os import path
 
 import docker
 import docker.errors as docker_err
 import requests
 from nuvlaedge.common.constant_files import FILE_NAMES
 
-from agent.common import nuvlaedge_common, util
+from agent.common import util
 from agent.common.nuvlaedge_common import NuvlaEdgeCommon
 from agent.orchestrator import ContainerRuntimeClient
 from agent.telemetry import Telemetry
@@ -50,7 +50,6 @@ class Infrastructure(NuvlaEdgeCommon):
 
         self.telemetry_instance = telemetry
 
-        self.compute_api = util.compose_project_name + '-compute-api'
         self.ssh_flag = f"{data_volume}/.ssh"
         self.refresh_period = refresh_period
 
@@ -312,10 +311,10 @@ class Infrastructure(NuvlaEdgeCommon):
         if self.container_runtime.ORCHESTRATOR not in ['docker', 'swarm']:
             return False
 
-        compute_api_url = f'https://{self.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
+        compute_api_url = f'https://{util.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
         self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
         try:
-            if self.container_runtime.client.containers.get(self.compute_api).status != 'running':
+            if self.container_runtime.client.containers.get(util.compute_api).status != 'running':
                 return False
         except (docker_err.NotFound, docker_err.APIError, TimeoutError) as ex:
             self.logger.debug(f"Compute API container not found {ex}")
@@ -415,15 +414,15 @@ class Infrastructure(NuvlaEdgeCommon):
 
         :returns tuple (api_endpoint, port)
         """
-        container_api_ip, external_api_port = self.container_runtime.get_api_ip_port()
+        coe_api_ip, coe_api_port = self.container_runtime.get_api_ip_port()
 
         api_endpoint = None
         if vpn_ip:
-            api_endpoint = f"https://{vpn_ip}:{external_api_port}"
-        elif container_api_ip and external_api_port:
-            api_endpoint = f"https://{container_api_ip}:{external_api_port}"
+            api_endpoint = f"https://{vpn_ip}:{coe_api_port}"
+        elif coe_api_ip and coe_api_port:
+            api_endpoint = f"https://{coe_api_ip}:{coe_api_port}"
 
-        return api_endpoint, external_api_port
+        return api_endpoint, coe_api_port
 
     def needs_partial_decommission(self, minimum_payload: dict, full_payload: dict,
                                    old_payload: dict):
@@ -499,11 +498,9 @@ class Infrastructure(NuvlaEdgeCommon):
                                      else cluster_info.copy()
 
         my_vpn_ip = self.telemetry_instance.get_vpn_ip()
-        api_endpoint, container_api_port = self.get_compute_endpoint(my_vpn_ip)
-
-        infra_service = {}
-        if self.compute_api_is_running():
-            infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint, *self.get_tls_keys())
+        api_endpoint, _ = self.get_compute_endpoint(my_vpn_ip)
+        infra_service = self.container_runtime.define_nuvla_infra_service(api_endpoint,
+                                                                          *self.get_tls_keys())
 
         # 1st time commissioning the IS, so we need to also pass the keys, even if they
         # haven't changed

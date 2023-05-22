@@ -256,7 +256,7 @@ class NuvlaEdgeCommon:
             self.logger.info(f'Using NuvlaEdge uuid from api session: {session_nuvlaedge_id}')
             nuvlaedge_id = session_nuvlaedge_id
         else:
-            raise RuntimeError(f'NUVLAEDGE_UUID not provided')
+            raise RuntimeError('NUVLAEDGE_UUID not provided')
 
         if not nuvlaedge_id.startswith("nuvlaedge/") and not nuvlaedge_id.startswith("nuvlabox/"):
             nuvlaedge_id = 'nuvlabox/{}'.format(nuvlaedge_id)

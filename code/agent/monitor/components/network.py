@@ -29,7 +29,7 @@ class NetworkMonitor(Monitor):
     """
     _REMOTE_IPV4_API: str = "https://api.ipify.org?format=json"
     _AUXILIARY_DOCKER_IMAGE: str = "nuvlaedge/iproute2:latest"
-    _IP_COMMAND: str = '-j route'
+    _IP_COMMAND_ARGS: str = '-j route'
     _PUBLIC_IP_UPDATE_RATE: int = 3600
     _NUVLAEDGE_COMPONENT_LABEL_KEY: str = util.base_label
 
@@ -126,44 +126,19 @@ class NetworkMonitor(Monitor):
 
         return is_loop or is_already_registered or not_complete
 
-    def gather_host_ip_route(self) -> Union[str, None]:
+    def _gather_host_ip_route(self) -> str:
         """
         Gathers a json type string containing the host local network routing if
         the container run is run successfully
         Returns:
-            str if succeeds. None otherwise
+            str as the output of the command (can be empty).
         """
-        try:
-            old_cont: Container = \
-                self.runtime_client.client.containers.get(self.iproute_container_name)
-            if old_cont.status == 'running':
-                old_cont.stop()
-            old_cont.remove()
-
-        except docker_err.NotFound:
-            pass
-
-        except Exception as ex:
-            self.logger.warning('Failed to cleanup iproute container.',
-                                ex,
-                                exc_info=True)
-
-        try:
-            it_route = self.runtime_client.client.containers.run(
-                self._AUXILIARY_DOCKER_IMAGE,
-                command=self._IP_COMMAND,
-                name=self.iproute_container_name,
-                remove=True,
-                network="host")
-
-            return it_route.decode("utf-8")
-
-        except (docker_err.ImageNotFound,
-                docker_err.ContainerError,
-                docker_err.APIError) as ex:
-            self.logger.error(f'Local interface data auxiliary container '
-                              f'not run: {ex.explanation}')
-            return None
+        self.runtime_client.container_remove(self.iproute_container_name)
+        return self.runtime_client \
+            .container_run_command(self._AUXILIARY_DOCKER_IMAGE,
+                                   self.iproute_container_name,
+                                   args=self._IP_COMMAND_ARGS,
+                                   network='host')
 
     def read_traffic_data(self) -> List:
         """ Gets the list of net ifaces and corresponding rxbytes and txbytes
@@ -279,7 +254,7 @@ class NetworkMonitor(Monitor):
         Runs the auxiliary container that reads the host network interfaces and parses the
         output return
         """
-        ip_route: str = self.gather_host_ip_route()
+        ip_route: str = self._gather_host_ip_route()
 
         if not ip_route:
             return
@@ -397,7 +372,7 @@ class NetworkMonitor(Monitor):
         it_traffic: List = [x.dict(by_alias=True, exclude={'ips', 'default_gw'})
                             for _, x in self.data.interfaces.items()]
 
-        it_report = self.data.dict(by_alias=True, exclude={'interfaces'})
+        it_report = self.data.dict(by_alias=True, exclude={'interfaces'}, exclude_none=True)
         it_report['interfaces'] = [{'interface': name,
                                     'ips': [ip.dict() for ip in obj.ips]}
                                    for name, obj in self.data.interfaces.items()]

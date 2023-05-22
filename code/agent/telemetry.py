@@ -12,7 +12,6 @@ import json
 import logging
 import os
 from typing import Dict, NoReturn, List
-from os import path, stat
 import socket
 import time
 
@@ -381,8 +380,8 @@ class Telemetry(NuvlaEdgeCommon):
 
         # write all status into the shared volume for the other
         # components to re-use if necessary
-        util.atomic_write(FILE_NAMES.STATUS_FILE, json.dumps(all_status),
-                          encoding='UTF-8')
+        util.atomic_write(FILE_NAMES.NUVLAEDGE_STATUS_FILE,
+                          json.dumps(all_status), encoding='UTF-8')
 
         self.status.update(new_status)
 
