@@ -592,6 +592,7 @@ class KubernetesClient(ContainerRuntimeClient):
             log.warning(ex)
             return ''
         output = self.client.read_namespaced_pod_log(name, namespace, timestamps=False)
+        log.info('JSW: pod log output: %s', output)
         if remove:
             self.container_remove(name, **kwargs)
         return output
