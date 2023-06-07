@@ -93,18 +93,16 @@ class DockerClient(ContainerRuntimeClient):
 
     def find_compute_api_external_port(self) -> str:
         try:
-            cont: Container = self.client.containers.get(util.compose_project_name + '-compute-api')
-
+            container = self._get_component_container(util.compute_api_service_name)
         except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
             self.logger.debug(f"Compute API container not found {ex}")
             return ''
 
         try:
-            return cont.ports['5000/tcp'][0]['HostPort']
-
+            return container.ports['5000/tcp'][0]['HostPort']
         except (KeyError, IndexError) as ex:
-            self.logger.warning(f'Cannot infer ComputeAPI external port, container attributes '
-                                f'not properly formatted', exc_info=ex)
+            self.logger.warning('Cannot infer ComputeAPI external port, container attributes '
+                                'not properly formatted', exc_info=ex)
         return ""
 
     def get_api_ip_port(self):
@@ -141,7 +139,7 @@ class DockerClient(ContainerRuntimeClient):
 
     def has_pull_job_capability(self):
         try:
-            container = self.client.containers.get(self.job_engine_lite_component)
+            container = self._get_component_container(util.job_engine_service_name)
         except docker.errors.NotFound as e:
             logging.warning(f"Container {self.job_engine_lite_component} not found. Reason: {str(e)}")
             return False
@@ -154,10 +152,10 @@ class DockerClient(ContainerRuntimeClient):
                 self.job_engine_lite_image = container.attrs['Config']['Image']
                 return True
         except (AttributeError, KeyError):
-            logging.exception(f'Failed to get job-engine-lite image')
+            logging.exception('Failed to get job-engine-lite image')
             return False
 
-        logging.info(f'job-engine-lite not paused')
+        logging.info('job-engine-lite not paused')
         return False
 
     def get_node_labels(self):
@@ -172,7 +170,7 @@ class DockerClient(ContainerRuntimeClient):
         return self.cast_dict_to_list(node_labels)
 
     def is_vpn_client_running(self):
-        it_vpn_container = self.client.containers.get(util.compose_project_name + "-vpn-client")
+        it_vpn_container = self._get_component_container(util.vpn_client_service_name)
         vpn_client_running = it_vpn_container.status == 'running'
         return vpn_client_running
 
@@ -227,17 +225,47 @@ class DockerClient(ContainerRuntimeClient):
 
         return False
 
+    def _get_component_container_by_service_name(self, service_name):
+        project_name = self.get_nuvlaedge_project_name()
+        labels = [util.base_label,
+                  f'com.docker.compose.service={service_name}',
+                  f'com.docker.compose.project={project_name}']
+        filters = {'label': labels}
+        containers = self.list_containers(filters=filters, all=True)
+        containers_count = len(containers)
+        if containers_count < 1:
+            raise docker.errors.NotFound(f'Container with the following labels not found: {labels}')
+        elif containers_count > 1:
+            logger.warning(f'More than one component container found for '
+                           f'service name "{service_name}" and project name "{project_name}": {containers}')
+        return containers[0]
+
+    def _get_component_container(self, service_name, container_name=None):
+        if not container_name:
+            container_name = util.compose_project_name + '-' + service_name
+
+        try:
+            return self.client.containers.get(container_name)
+        except (docker.errors.NotFound, docker.errors.APIError) as e:
+            logging.debug(f'Failed to find {service_name} container by name ({container_name}). '
+                          f'Trying by project and service name: {e}')
+
+        try:
+            return self._get_component_container_by_service_name(service_name)
+        except (docker.errors.NotFound, docker.errors.APIError) as e:
+            logging.debug(f'Failed to find {service_name} container by project and service name: {e}')
+            raise
+
     def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
                    nuvla_endpoint_insecure=False, api_key=None, api_secret=None,
                    docker_image=None):
         # Get the compute-api network
         local_net = None
         try:
-            compute_api = self.client.containers.get(util.compose_project_name + '-compute-api')
+            compute_api = self._get_component_container(util.compute_api_service_name)
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
-            logging.error(f'Cannot infer compute-api network for local job {job_id}: {e}')
-            return
+            logging.info(f'Cannot infer compute-api network for local job {job_id}: {e}')
 
         # Get environment variables and volumes from job-engine-lite container
         volumes = {
@@ -248,12 +276,11 @@ class DockerClient(ContainerRuntimeClient):
         }
         volumes_from = []
         environment = []
-        job_engine_lite_container_name = util.compose_project_name + '-job-engine-lite'
         try:
-            job_engine_lite = self.client.containers.get(job_engine_lite_container_name)
+            job_engine_lite = self._get_component_container(util.job_engine_service_name)
             environment = job_engine_lite.attrs['Config']['Env']
             volumes = []
-            volumes_from = [job_engine_lite_container_name]
+            volumes_from = [job_engine_lite.name]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
             logging.warning(f'Cannot get env and volumes from job-engine-lite ({job_id}): {e}')
 
@@ -802,7 +829,7 @@ class DockerClient(ContainerRuntimeClient):
         self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
 
         try:
-            if self.client.containers.get(util.compute_api).status != 'running':
+            if self._get_component_container(util.compute_api_service_name).status != 'running':
                 return False
         except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
             self.logger.debug(f"Compute API container not found {ex}")
