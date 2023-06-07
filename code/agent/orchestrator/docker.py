@@ -16,6 +16,9 @@ from agent.common import util
 from agent.orchestrator import ContainerRuntimeClient
 
 
+logger = logging.getLogger(__name__)
+
+
 class InferIPError(Exception):
     ...
 
@@ -35,7 +38,6 @@ class DockerClient(ContainerRuntimeClient):
 
     def __init__(self):
         super().__init__()
-        self.logger: logging.Logger = logging.getLogger(__name__)
         self.client = docker.from_env()
         self.lost_quorum_hint = 'possible that too few managers are online'
         self.data_gateway_name = "data-gateway"
@@ -58,8 +60,8 @@ class DockerClient(ContainerRuntimeClient):
         except docker.errors.APIError as e:
             if self.lost_quorum_hint in str(e):
                 # quorum is lost
-                logging.warning(f'Quorum is lost. This node will no longer support '
-                                f'Service and Cluster management')
+                logger.warning('Quorum is lost. This node will no longer support '
+                               'Service and Cluster management')
 
         return ()
 
@@ -95,15 +97,15 @@ class DockerClient(ContainerRuntimeClient):
         try:
             container = self._get_component_container(util.compute_api_service_name)
         except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
-            self.logger.debug(f"Compute API container not found {ex}")
+            logger.debug(f"Compute API container not found {ex}")
             return ''
 
         try:
             return container.ports['5000/tcp'][0]['HostPort']
         except (KeyError, IndexError) as ex:
-            self.logger.warning('Cannot infer ComputeAPI external port, container attributes '
-                                'not properly formatted', exc_info=ex)
-        return ""
+            logger.warning('Cannot infer ComputeAPI external port, container attributes '
+                           'not properly formatted', exc_info=ex)
+        return ''
 
     def get_api_ip_port(self):
         node_info = self.get_node_info()
@@ -132,7 +134,7 @@ class DockerClient(ContainerRuntimeClient):
             else:
                 # Double check - we should never get here
                 if not ip:
-                    logging.warning("Cannot infer the NuvlaEdge API IP!")
+                    logger.warning("Cannot infer the NuvlaEdge API IP!")
                     return None, compute_api_external_port
 
         return ip, compute_api_external_port
@@ -141,10 +143,10 @@ class DockerClient(ContainerRuntimeClient):
         try:
             container = self._get_component_container(util.job_engine_service_name)
         except docker.errors.NotFound as e:
-            logging.warning(f"Container {self.job_engine_lite_component} not found. Reason: {str(e)}")
+            logger.warning(f"Container {self.job_engine_lite_component} not found. Reason: {str(e)}")
             return False
         except Exception as e:
-            logging.error(f"Unable to search for container {self.job_engine_lite_component}. Reason: {str(e)}")
+            logger.error(f"Unable to search for container {self.job_engine_lite_component}. Reason: {str(e)}")
             return False
 
         try:
@@ -152,10 +154,10 @@ class DockerClient(ContainerRuntimeClient):
                 self.job_engine_lite_image = container.attrs['Config']['Image']
                 return True
         except (AttributeError, KeyError):
-            logging.exception('Failed to get job-engine-lite image')
+            logger.exception('Failed to get job-engine-lite image')
             return False
 
-        logging.info('job-engine-lite not paused')
+        logger.info('job-engine-lite not paused')
         return False
 
     def get_node_labels(self):
@@ -164,7 +166,7 @@ class DockerClient(ContainerRuntimeClient):
             node_labels = self.client.api.inspect_node(node_id)["Spec"]["Labels"]
         except (KeyError, docker.errors.APIError, docker.errors.NullResource) as e:
             if "node is not a swarm manager" not in str(e).lower():
-                logging.debug(f"Cannot get node labels: {str(e)}")
+                logger.debug(f"Cannot get node labels: {str(e)}")
             return []
 
         return self.cast_dict_to_list(node_labels)
@@ -197,18 +199,18 @@ class DockerClient(ContainerRuntimeClient):
         except docker.errors.NotFound:
             return False
         except Exception as e:
-            logging.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
+            logger.error(f'Cannot handle job {job_id}. Reason: {str(e)}')
             # assume it is running so we don't mess anything
             return True
 
         try:
             if job_container.status.lower() in ['running', 'restarting']:
-                logging.info(f'Job {job_id} is already running in container '
-                             f'{job_container.name}')
+                logger.info(f'Job {job_id} is already running in container '
+                            f'{job_container.name}')
                 return True
             elif job_container.status.lower() in ['created']:
-                logging.warning(f'Job {job_id} was created by not started. Removing it '
-                                f'and starting a new one')
+                logger.warning(f'Job {job_id} was created by not started. '
+                               f'Removing it and starting a new one')
                 job_container.remove()
             else:
                 # then it is stopped or dead. force kill it and re-initiate
@@ -247,13 +249,13 @@ class DockerClient(ContainerRuntimeClient):
         try:
             return self.client.containers.get(container_name)
         except (docker.errors.NotFound, docker.errors.APIError) as e:
-            logging.debug(f'Failed to find {service_name} container by name ({container_name}). '
-                          f'Trying by project and service name: {e}')
+            logger.debug(f'Failed to find {service_name} container by name ({container_name}). '
+                         f'Trying by project and service name: {e}')
 
         try:
             return self._get_component_container_by_service_name(service_name)
         except (docker.errors.NotFound, docker.errors.APIError) as e:
-            logging.debug(f'Failed to find {service_name} container by project and service name: {e}')
+            logger.debug(f'Failed to find {service_name} container by project and service name: {e}')
             raise
 
     def launch_job(self, job_id, job_execution_id, nuvla_endpoint,
@@ -265,7 +267,7 @@ class DockerClient(ContainerRuntimeClient):
             compute_api = self._get_component_container(util.compute_api_service_name)
             local_net = list(compute_api.attrs['NetworkSettings']['Networks'].keys())[0]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
-            logging.info(f'Cannot infer compute-api network for local job {job_id}: {e}')
+            logger.info(f'Cannot infer compute-api network for local job {job_id}: {e}')
 
         # Get environment variables and volumes from job-engine-lite container
         volumes = {
@@ -282,7 +284,7 @@ class DockerClient(ContainerRuntimeClient):
             volumes = []
             volumes_from = [job_engine_lite.name]
         except (docker.errors.NotFound, docker.errors.APIError, IndexError, KeyError, TimeoutError) as e:
-            logging.warning(f'Cannot get env and volumes from job-engine-lite ({job_id}): {e}')
+            logger.warning(f'Cannot get env and volumes from job-engine-lite ({job_id}): {e}')
 
         cmd = f'-- /app/job_executor.py --api-url https://{nuvla_endpoint} ' \
               f'--api-key {api_key} ' \
@@ -292,7 +294,7 @@ class DockerClient(ContainerRuntimeClient):
         if nuvla_endpoint_insecure:
             cmd = f'{cmd} --api-insecure'
 
-        logging.info(f'Starting job {job_id} on {self.job_engine_lite_image} image, with command: "{cmd}"')
+        logger.info(f'Starting job {job_id} on {self.job_engine_lite_image} image, with command: "{cmd}"')
 
         img = docker_image if docker_image else self.job_engine_lite_image
         self.client.containers.run(img,
@@ -312,7 +314,7 @@ class DockerClient(ContainerRuntimeClient):
             # in the NuvlaEdge
             self.client.api.connect_container_to_network(job_execution_id, 'bridge')
         except docker.errors.APIError as e:
-            logging.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
+            logger.warning(f'Could not attach {job_execution_id} to bridge network: {str(e)}')
 
     @staticmethod
     def collect_container_metrics_cpu(container_stats: dict) -> float:
@@ -336,8 +338,8 @@ class DockerClient(ContainerRuntimeClient):
             if system_delta > 0.0 and online_cpus > 0:
                 cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
         except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
-            logging.warning('Failed to get CPU usage for container '
-                            f'{cs.get("id","?")[:12]} ({cs.get("name")}): {e}')
+            logger.warning('Failed to get CPU usage for container '
+                           f'{cs.get("id","?")[:12]} ({cs.get("name")}): {e}')
 
         return cpu_percent
 
@@ -363,8 +365,8 @@ class DockerClient(ContainerRuntimeClient):
                 mem_percent = round(float(mem_usage / mem_limit) * 100, 2)
         except (IndexError, KeyError, ValueError, ZeroDivisionError) as e:
             mem_percent = mem_usage = mem_limit = 0.00
-            logging.warning('Failed to get Memory consumption for container '
-                            f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
+            logger.warning('Failed to get Memory consumption for container '
+                           f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
 
         return mem_percent, mem_usage, mem_limit
 
@@ -384,8 +386,8 @@ class DockerClient(ContainerRuntimeClient):
                 net_out = sum(cstats["networks"][iface]["tx_bytes"]
                               for iface in cstats["networks"]) / 1000 / 1000
         except (IndexError, KeyError, ValueError) as e:
-            logging.warning('Failed to get Network consumption for container '
-                            f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
+            logger.warning('Failed to get Network consumption for container '
+                           f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
 
         return net_in, net_out
 
@@ -404,13 +406,13 @@ class DockerClient(ContainerRuntimeClient):
             try:
                 blk_in = float(io_bytes_recursive[0]["value"] / 1000 / 1000)
             except (IndexError, KeyError, TypeError) as e:
-                logging.warning('Failed to get block usage (In) for container '
-                                f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
+                logger.warning('Failed to get block usage (In) for container '
+                               f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
             try:
                 blk_out = float(io_bytes_recursive[1]["value"] / 1000 / 1000)
             except (IndexError, KeyError, TypeError):
-                logging.warning('Failed to get block usage (Out) for container '
-                                f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
+                logger.warning('Failed to get block usage (Out) for container '
+                               f'{cstats.get("id","?")[:12]} ({cstats.get("name")}): {e}')
 
         return blk_out, blk_in
 
@@ -433,7 +435,7 @@ class DockerClient(ContainerRuntimeClient):
                 return self.client.containers.list(*args, **kwargs)
             except requests.exceptions.HTTPError:
                 tries += 1
-                logging.warning(f'Failed to list containers. Try {tries}/{max_tries}.')
+                logger.warning(f'Failed to list containers. Try {tries}/{max_tries}.')
                 if tries >= max_tries:
                     raise
 
@@ -443,8 +445,8 @@ class DockerClient(ContainerRuntimeClient):
             try:
                 containers_stats.append((container, container.stats(stream=False)))
             except Exception as e:
-                logging.warning('Failed to get stats for container '
-                                f'{container.short_id} ({container.name}): {e}')
+                logger.warning('Failed to get stats for container '
+                               f'{container.short_id} ({container.name}): {e}')
         return containers_stats
 
     def collect_container_metrics(self):
@@ -486,7 +488,7 @@ class DockerClient(ContainerRuntimeClient):
             with open('/proc/self/cgroup', 'r') as f:
                 return f.read().split('/')[-1].strip()
         except Exception as e:
-            logging.debug(f'Failed to get container id from cgroup: {e}')
+            logger.debug(f'Failed to get container id from cgroup: {e}')
 
     @staticmethod
     def _get_container_id_from_cpuset():
@@ -494,14 +496,14 @@ class DockerClient(ContainerRuntimeClient):
             with open('/proc/1/cpuset', 'r') as f:
                 return f.read().split('/')[-1].strip()
         except Exception as e:
-            logging.debug(f'Failed to get container id from cpuset: {e}')
+            logger.debug(f'Failed to get container id from cpuset: {e}')
 
     @staticmethod
     def _get_container_id_from_hostname():
         try:
             return socket.gethostname().strip()
         except Exception as e:
-            logging.debug(f'Failed to get container id from hostname: {e}')
+            logger.debug(f'Failed to get container id from hostname: {e}')
 
     def get_current_container(self):
         get_id_functions = [self._get_container_id_from_hostname,
@@ -513,9 +515,9 @@ class DockerClient(ContainerRuntimeClient):
                 try:
                     return self.client.containers.get(container_id)
                 except Exception as e:
-                    logging.debug(f'Failed to get container with id "{container_id}": {e}')
+                    logger.debug(f'Failed to get container with id "{container_id}": {e}')
             else:
-                logging.debug(f'No container id found for "{get_id_function.__name__}"')
+                logger.debug(f'No container id found for "{get_id_function.__name__}"')
         raise RuntimeError('Failed to get current container')
 
     def get_current_container_id(self) -> str:
@@ -538,7 +540,7 @@ class DockerClient(ContainerRuntimeClient):
             myself = self.get_current_container()
         except RuntimeError:
             message = 'Failed to find the current container by id. Cannot proceed'
-            logging.error(message)
+            logger.error(message)
             raise
 
         last_update = myself.attrs.get('Created', '')
@@ -611,7 +613,7 @@ class DockerClient(ContainerRuntimeClient):
                 try:
                     return manager['Addr']
                 except KeyError:
-                    logging.warning(f'Unable to infer cluster-join-address attribute: {manager}')
+                    logger.warning(f'Unable to infer cluster-join-address attribute: {manager}')
 
         return None
 
@@ -688,7 +690,7 @@ class DockerClient(ContainerRuntimeClient):
             k3s_cluster_info['kubernetes-client-cert'] = base64.b64decode(cert).decode()
             k3s_cluster_info['kubernetes-client-key'] = base64.b64decode(key).decode()
         except Exception as e:
-            logging.warning(f'Unable to lookup k3s certificates: {str(e)}')
+            logger.warning(f'Unable to lookup k3s certificates: {str(e)}')
             return {}
 
         return k3s_cluster_info
@@ -704,8 +706,8 @@ class DockerClient(ContainerRuntimeClient):
             result = run(cmd, stdout=PIPE, stderr=PIPE, timeout=5,
                          encoding='UTF-8', shell=True).stdout
         except TimeoutExpired as e:
-            logging.warning(f'Could not infer if Kubernetes is also installed on '
-                            f'the host: {str(e)}')
+            logger.warning(f'Could not infer if Kubernetes is also installed on '
+                           f'the host: {str(e)}')
             return k8s_cluster_info
 
         if not result:
@@ -731,7 +733,7 @@ class DockerClient(ContainerRuntimeClient):
             args = { args_list[i].split('=')[0]: args_list[i].split('=')[-1] for i in range(0, len(args_list)) }
         except IndexError:
             # should never get into this exception, but keep it anyway, just to be safe
-            logging.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
+            logger.warning(f'Unable to infer k8s cluster info from apiserver arguments {args_list}')
             return k8s_cluster_info
 
         arg_address = "advertise-address"
@@ -760,7 +762,7 @@ class DockerClient(ContainerRuntimeClient):
                 'kubernetes-client-key': k8s_client_key
             })
         except (KeyError, FileNotFoundError) as e:
-            logging.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
+            logger.warning(f'Cannot destructure or access certificates from k8s apiserver arguments {args}. {str(e)}')
             return {}
 
         return k8s_cluster_info
@@ -770,7 +772,7 @@ class DockerClient(ContainerRuntimeClient):
             current_container = self.get_current_container()
             return self.get_compose_project_name_from_labels(current_container.labels, None)
         except Exception as e:
-            self.logger.warning(f'Failed to get docker compose project name: {e}')
+            logger.warning(f'Failed to get docker compose project name: {e}')
         return default_project_name
 
     def get_all_nuvlaedge_containers(self):
@@ -804,8 +806,7 @@ class DockerClient(ContainerRuntimeClient):
         except (docker.errors.ImageNotFound,
                 docker.errors.ContainerError,
                 docker.errors.APIError) as ex:
-            self.logger.error("Failed running container '%s' from '%s': %s",
-                              name, image, ex.explanation)
+            logger.error("Failed running container '%s' from '%s': %s", name, image, ex.explanation)
 
     def container_remove(self, name: str, **kwargs):
         try:
@@ -816,7 +817,7 @@ class DockerClient(ContainerRuntimeClient):
         except docker.errors.NotFound:
             pass
         except Exception as ex:
-            self.logger.warning('Failed removing %s container.', exc_info=ex)
+            logger.warning(f'Failed removing "{name}" container.', exc_info=ex)
 
     def compute_api_is_running(self) -> bool:
         """
@@ -826,23 +827,23 @@ class DockerClient(ContainerRuntimeClient):
         """
 
         compute_api_url = f'https://{util.compute_api}:{util.COMPUTE_API_INTERNAL_PORT}'
-        self.logger.debug(f'Trying to reach compute API using {compute_api_url} address')
+        logger.debug(f'Trying to reach compute API using {compute_api_url} address')
 
         try:
             if self._get_component_container(util.compute_api_service_name).status != 'running':
                 return False
         except (docker.errors.NotFound, docker.errors.APIError, TimeoutError) as ex:
-            self.logger.debug(f"Compute API container not found {ex}")
+            logger.debug(f"Compute API container not found {ex}")
             return False
 
         try:
             requests.get(compute_api_url, timeout=3)
         except requests.exceptions.SSLError:
             # this is expected. It means it is up, we just weren't authorized
-            self.logger.debug("Compute API up and running with security")
+            logger.debug("Compute API up and running with security")
         except (requests.exceptions.ConnectionError, TimeoutError) as ex:
             # Can happen if the Compute API takes longer than normal on start
-            self.logger.info(f'Compute API not ready yet: {ex}')
+            logger.info(f'Compute API not ready yet: {ex}')
             return False
 
         return True
